@@ -1,299 +1,215 @@
 # TAG
 
-This is a code generator based on [Pyrotic](https://github.com/code-gorilla-au/pyrotic) but a few perks and features added.
+A powerful code generation and project scaffolding CLI for developers.
 
-## Motivation
+TAG combines the project bootstrapping capabilities of [Cookiecutter](https://cookiecutter.readthedocs.io/) with incremental code generation, supporting both full project scaffolding from templates and adding code to existing projects.
 
-Pyrotic is cool. I like it. But, it is incomplete and insufficient for the uses I need.  
-So, I took it upon myself to modify it and improve it to have a much better template generation system.
+## Features
 
-## Install
+- **Project Scaffolding** - Create complete projects from local or remote templates
+- **Incremental Generation** - Add files, append content, or inject code into existing files
+- **Remote Templates** - Fetch templates from GitHub, GitLab, Bitbucket, or any Git repository
+- **Jinja2 Syntax** - Familiar template syntax via [Gonja](https://github.com/noirbizarre/gonja)
+- **Cookiecutter Compatible** - Convert and use existing Cookiecutter templates
+- **Interactive Prompts** - Guided variable input with defaults and choices
+- **Replay System** - Save and reuse scaffold inputs for reproducibility
+- **Hooks** - Run commands before and after scaffolding
+- **Single Binary** - Pure Go, no external dependencies
 
-```
+## Quick Start
+
+### Install
+
+```bash
 go install github.com/kaikenlabs/tag@latest
 ```
 
-## Initialise the templates directory
+### Scaffold a Project
 
-The initial setup creates a `_templates` directory at the root of the project to hold the generators:
+```bash
+# From a GitHub template
+tag scaffold gh:user/awesome-template
 
+# From a local template
+tag scaffold ./my-template
+
+# With a project name
+tag scaffold gh:user/go-api my-new-api
 ```
+
+### Generate Code in Existing Projects
+
+```bash
+# Initialize TAG in your project
 tag init
+
+# Create a generator
+tag new handler
+
+# Generate code
+tag generate handler UserAuth
 ```
 
-## Work with generators
+## Documentation
 
-Now you can create your first generator:
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](docs/getting-started.md) | Installation and first steps |
+| [Scaffold Command](docs/commands/scaffold.md) | Project scaffolding reference |
+| [Generate Command](docs/commands/generate.md) | Code generation reference |
+| [Convert Command](docs/commands/convert.md) | Cookiecutter migration |
+| [Template Authoring](docs/templates/authoring.md) | Creating templates |
+| [Template Syntax](docs/templates/syntax.md) | Jinja2/Gonja syntax guide |
+| [Filter Reference](docs/templates/filters.md) | Available template filters |
+| [Hooks Guide](docs/templates/hooks.md) | Pre and post hooks |
+| [Migration Guide](docs/migration/v1-to-v2.md) | Migrating from TAG v1 |
+| [tag.template.json](docs/reference/tag.template.json.md) | Configuration reference |
+| [Remote References](docs/reference/remote-refs.md) | Remote template formats |
 
-```
-tag new my_generator
-```
+## Template Sources
 
-A generator is a template or a collection of templates that can be created or added to existing files.  
-To edit your generator, go to the `_templates` directory created and edit it.  
-_TAG_ uses [Go's template language](https://pkg.go.dev/text/template#pkg-overview) so you can build your templates with
-ease.
+TAG supports multiple template sources:
 
-Go [here](#data-exposed-to-each-template) to understand what data is exposed to each template.
+| Format | Example |
+|--------|---------|
+| GitHub | `gh:user/repo`, `gh:user/repo@v1.0.0` |
+| GitLab | `gl:user/repo` |
+| Bitbucket | `bb:user/repo` |
+| Git URL | `https://github.com/user/repo.git` |
+| Zip URL | `https://example.com/template.zip` |
+| Local | `./my-template`, `/path/to/template` |
 
-## Run your generator
+## Template Syntax
 
-Default template path is `_templates` and default file extension is `.tmpl`
+TAG uses Jinja2-compatible syntax:
 
-```sh
-tag generate <name of generator> <name-to-pass-in> <args>
-```
+~~~jinja2
+# {{ vars.project_name }}
 
-As in our example:
+Author: {{ vars.author }}
 
-```sh
-tag generate my_generator myObject
-```
+{% if vars.use_docker %}
+## Docker
 
-## Hooks
+    docker build -t {{ vars.project_name|kebab }} .
 
-`tag` offers the ability of adding pre- and post- hooks for both generators and bundles.
+{% endif %}
 
-As an example, for Go it could be useful to run:
+## Features
+
+{% for feature in vars.features %}
+- {{ feature|title }}
+{% endfor %}
+~~~
+
+### Available Filters
+
+**Case transformations:** `snake`, `pascal`, `camel`, `kebab`, `lower`, `upper`, `title`
+
+**Inflections:** `plural`, `singular`, `ordinalize`, `titleize`, `humanize`
+
+**String operations:** `split`, `join`, `contains`, `hasprefix`, `hassuffix`, `replace`, `trim`, `default`, `truncate`
+
+## Template Configuration
+
+Templates are configured via `tag.template.json`:
 
 ```json
 {
-  "env":{
-    "TAG_PATH": "_templates",
-    "TAG_EXTENSION": ".tmpl",
-    "TAG_SHARED_PATH": "_shared",
-    "TAG_BUNDLE_PATH": "_bundles"
+  "name": "Go API Template",
+  "version": "1.0.0",
+  "vars": {
+    "project_name": "my-api",
+    "author": {
+      "type": "string",
+      "prompt": "Author name",
+      "default": "Your Name"
+    },
+    "license": {
+      "type": "choice",
+      "options": ["MIT", "Apache-2.0", "BSD-3"],
+      "default": "MIT"
+    },
+    "use_docker": {
+      "type": "boolean",
+      "default": true
+    }
   },
   "hooks": {
-    "pre": [],
-    "post":[
-      ["./bin/goimports","-w", "-l","."],
-      ["./bin/gofumpt", "-w", "-l", "."],
-      ["./bin/golangci-lint", "run"]
-    ]
+    "post_scaffold": ["go mod tidy", "git init"]
   }
 }
 ```
 
-**IMPORTANT**: all the hooks will run from the directory that `tag` is being called in, so make sure you add the relative path.
+## Generator Templates
 
-## Tips & Tricks
-
-### Data exposed to each template
-
-_TAG_ will expose the following data to each template:
-
-| Property | Description                                                                                            | Type                | Default | Example                           |
-|----------|--------------------------------------------------------------------------------------------------------|---------------------|---------|-----------------------------------|
-| Name     | The name you passed in the command line                                                                | `string`            | ""      | `my_generator`                    |
-| Args     | The arguments you passed in the command line. It is free form so you can manipulate it in the template | `string`            | nil     | `age:int,name:string`             |
-| Meta     | Additional arguments you can pass from the command line with the `--meta` flag                         | `map[string]string` | nil     | `map[string]string{"foo": "bar"}` |
-
-A quick example:
-
-`tag -d generante myGenerator myName name:string,age:int`
-
-with the following template:
+For incremental code generation, create templates in `_templates/`:
 
 ```
-My generator with name {{ .Name }}.
-I can use now the args:
+---
+to: internal/handlers/{{ name | snake }}_handler.go
+---
+package handlers
 
-{{ $argList := splitByDelimiter .Args "," }}
+type {{ n.pascal_case }}Handler struct {}
 
-{{- range $i, $item := $argList }}
-    {{- $fieldDef := splitByDelimiter $item ":" }}
-    {{ index $fieldDef 0 | casePascal }} {{ index $fieldDef 1 }} `json:"{{ $name_lower }}"`
-{{- end }}
+func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
+    return &{{ n.pascal_case }}Handler{}
+}
 ```
 
-Will result in:
+Generators support three actions:
+- **Create** - Write new files (default)
+- **Append** - Add to existing files (`append: true`)
+- **Inject** - Insert before/after markers (`inject: true` + `before:`/`after:`)
 
-```
-My generator with name myGenerator.
-I can use now the args:
+## Cookiecutter Migration
 
-Name string `json:"name"`
-Age int `json:"age"`
-```
-
-In addition to this, _TAG_ provides a special object `N`.\
-This object facilitates getting the `name` you pass in the command line in different formats:
-
-* PascalCase // `MyGenerator`
-* CamelCase  // `myGenerator`
-* SnakeCase  // `my_generator`
-* KebabCase  // `my-generator`
-* LowerCase  // `mygenerator`
-* UpperCase  // `MYGENERATOR`
-
-So, in your template you can use. `{{ .N.PascalCase }}` to make things easier. :)
-
-### Use different directory
-
-```
-tag --path example/_templates generate cmd --name setup
-tag -p example/_templates generate cmd --name setup
-```
-
-### Use different file extension
-
-The default file extension is `.tmpl`
-
-```
-tag --extension ".template" generate cmd --name setup
-tag -x ".template" generate cmd --name setup
-```
-
-### Dry run mode
-
-Dry run will log to console rather than write to file
-
-```
-tag -d generate cmd --name setup
-tag --dry-run generate cmd --name setup
-```
-
-### Different shared folder
-
-Default shared templates path is `_templates/shared`
-
-```
-tag --shared foo/bar generate cmd --name setup
-tag -s foo/bar generate cmd --name setup
-```
-
-### Dev mode
-
-provides the short file name with logging
+Convert existing Cookiecutter templates:
 
 ```bash
-ENV=DEV tag -p example/_templates generate fakr --meta foo=bar,bin=baz
+tag convert cookiecutter gh:user/cookiecutter-django ./django-tag
 ```
 
-### Using shared templates
+The converter:
+- Transforms `cookiecutter.json` to `tag.template.json`
+- Renames path placeholders (`{{ cookiecutter.var }}` → `__var__`)
+- Reports Jinja2/Gonja syntax differences
+- Copies and analyzes hooks
 
-In some instances you will want to reuse some templates across multiple generators. This can be done by having a
-`shared` directory within the `_templates` directory.\
-Any templates that are declared in the [shared](example/_templates/shared/config.tmpl) directory will be loading along
-with the generator.\
-[Reference](example/_templates/fakr/shared_config.tmpl) the shared template within your generator directory in order to
-inject / append / create file.
+## Commands
 
-## Bundles
+| Command | Description |
+|---------|-------------|
+| `tag scaffold <template>` | Create project from template |
+| `tag generate <generator> <name>` | Run a generator |
+| `tag convert cookiecutter <source>` | Convert Cookiecutter template |
+| `tag init` | Initialize TAG in a project |
+| `tag new <name>` | Create a new generator |
+| `tag new-bundle <name>` | Create a new bundle |
 
-A bundle is a collection of templates you can run all in one go.
+## Global Flags
 
-### Creating bundles
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--dry-run` | `-d` | false | Preview without writing |
+| `--path` | `-tp` | `_templates` | Templates directory |
+| `--shared` | `-sp` | `_shared` | Shared templates directory |
+| `--extension` | `-x` | `.tmpl` | Template file extension |
 
-You can create a bundle like this:
+## Development
 
-`tag new-bundle myBundle`
+```bash
+# Build
+make build
 
-By default, bundles are located in the directory `_bundles` inside of the templates directory.\
+# Test
+go test ./...
 
-If you open the generate file, you can see is a simple `JSON` object in which you can add generators.
-
-### Running bundles
-
-To run a bundle you can use the following command:
-
-`tag generate -b myBundle myName myArgs`
-
-See that the command is very similar to the one we use to run a single generator, but with the addition of the `-b` flag.
-
-This command will run all the generators inside of the bundle file.
-
-## Formatter properties
-
-Formatter will pick up any of these variables within the `---` block and hydrate the metadata for the template.\
-Any properties matching the signature will be added to the Meta property, for example `foo: bar` will be accessible by
-`{{ Meta.foo }}`. View more [examples](example/_templates).
-
-| Property | Type          | Default | Example                 |
-|----------|---------------|---------|-------------------------|
-| to:      | string (path) | ""      | src/lib/utils/readme.md |
-| append:  | bool          | false   | false                   |
-| inject:  | bool          | false   | false                   |
-| before:  | string        | ""      | type config struct      |
-| after:   | string        | ""      | // commands             |
-
-## Built-in template functions and inflectors
-
-ships with some already built in template functions, some [examples](example/_templates/fakr/farkr_case.tmpl)
-
-| func name           | description                         | code example                                | result                        |
-|---------------------|-------------------------------------|---------------------------------------------|-------------------------------| 
-| caseSnake           | convert to snake case               | {{ MetaData \| caseSnake }}                 | meta_data                     |
-| caseKebab           | convert to kebab case               | {{ MetaData \| caseKebab }}                 | meta-data                     |
-| casePascal          | convert to pascal case              | {{ meta_data \| casePascal }}               | MetaData                      |
-| caseLower           | convert to lower case               | {{ MetaData \| caseLower }}                 | metadata                      |
-| caseTitle           | convert to title case               | {{ MetaData \| caseTitle }}                 | METADATA                      |
-| caseCamel           | convert to camel case               | {{ MetaData \| caseCamel }}                 | metaData                      |
-| splitByDelimiter    | splits string by delimiter          | {{ splitByDelimiter "long,list" "," }}      | []string{"long" "list"}       |
-| splitAfterDelimiter | splits string after delimiter       | {{ splitAfterDelimiter "a,long,list" "," }} | []string{"a," "long," "list"} |
-| contains            | checks if string contains substring | {{ contains "foobarbin" "bar" }}            | true                          |
-| hasPrefix           | checks if string has the prefix     | {{ contains "foobarbin" "foo" }}            | true                          |
-| hasSuffix           | checks if string has the suffix     | {{ contains "foobarbin" "bin" }}            | true                          |
-
-`tag` also provide some Inflections using [flect](https://github.com/gobuffalo/flect)
-
-- pluralise
-- singularise
-- ordinalize
-- titleize
-- humanize
-
-## Pass in meta via the command line
-
-you can pass in meta data via the `--meta` or `-m` flag, which takes in a comma (`,`) delimited list, and overrides the
-`{{ .Meta.<your-property> }}` within the template.
-
-```
-tag generate fakr --meta foo=bar,bin=baz
-tag generate fakr -m foo=bar,bin=baz
+# Lint
+make lint
 ```
 
-## Sample output
+## License
 
-```sh
-$ bin/tag generate -b scaffold UserSetting "settings:types.MessagePack"
-[11:55:01.772] tag info: running bundle bundle="scaffold" target="UserSetting"
-[11:55:01.775] tag info: created file="internal/adapters/user_setting.go"
-[11:55:01.776] tag info: created file="internal/models/user_setting.go"
-[11:55:01.778] tag info: created file="internal/controllers/user_setting_controller.go"
-[11:55:01.780] tag info: created file="internal/services/user_setting_service.go"
-[11:55:01.781] tag info: modified file="internal/persistence/repository.go"
-[11:55:01.782] tag info: modified file="internal/persistence/interfaces.go"
-[11:55:01.784] tag info: created file="internal/persistence/postgres/user_setting_repository.go"
-[11:55:01.791] tag info: modified file="internal/persistence/postgres/repository.go"
-[11:55:01.797] tag info: modified file="internal/persistence/postgres/repository.go"
-[11:55:01.798] tag info: modified file="internal/persistence/postgres/helpers.go"
-[11:55:01.799] tag info: created file="tests/component/user_setting_stage_test.go"
-[11:55:01.799] tag info: created file="tests/component/user_setting_test.go"
-[11:55:01.800] tag info: modified file="tests/component/common.go"
-[11:55:01.800] tag info: modified file="internal/server/router.go"
-[11:55:01.808] tag info: modified file="internal/server/router.go"
-[11:55:01.808] tag info: modified file="db/migrate.go"
-[11:55:01.808] tag info: running hook hook="./bin/goimports -w -l ."
-db/migrate.go
-internal/adapters/user_setting.go
-internal/controllers/user_setting_controller.go
-internal/models/user_setting.go
-internal/persistence/interfaces.go
-internal/persistence/postgres/helpers.go
-internal/persistence/postgres/repository.go
-internal/persistence/postgres/user_setting_repository.go
-internal/persistence/repository.go
-internal/server/router.go
-internal/services/user_setting_service.go
-tests/component/common.go
-tests/component/user_setting_stage_test.go
-tests/component/user_setting_test.go
-
-[11:55:04.012] tag info: running hook hook="./bin/gofumpt -w -l ."
-internal/adapters/user_setting.go
-tests/component/user_setting_stage_test.go
-
-[11:55:04.292] tag info: running hook hook="./bin/golangci-lint run"
-```
+MIT
