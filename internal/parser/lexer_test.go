@@ -1,13 +1,12 @@
 package parser
 
 import (
-	"encoding/json"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/code-gorilla-au/odize"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_hydrateData(t *testing.T) {
@@ -226,13 +225,9 @@ func Test_hydrateData(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := hydrateData(tt.args.meta, tt.args.data)
 			if tt.wantErr {
-				odize.AssertTrue(t, errors.Is(err, tt.err))
+				assert.True(t, errors.Is(err, tt.err))
 			}
-			gotJSON, err := json.Marshal(&got)
-			odize.AssertNoError(t, err)
-			wantJSON, err := json.Marshal(tt.want)
-			odize.AssertNoError(t, err)
-			odize.AssertEqual(t, string(wantJSON), string(gotJSON))
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -284,12 +279,8 @@ func Test_extractMeta(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, got1 := extractMetaDataFromTemplate(tt.args.output)
-			if !reflect.DeepEqual(got, tt.meta) {
-				t.Errorf("extractMeta() got = %v, want %v", got, tt.meta)
-			}
-			if strings.TrimSpace(got1) != tt.output {
-				t.Errorf("extractMeta() got1 = %v, want %v", got1, tt.output)
-			}
+			require.Equal(t, tt.meta, got)
+			assert.Equal(t, tt.output, strings.TrimSpace(got1))
 		})
 	}
 }

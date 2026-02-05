@@ -34,40 +34,44 @@ func BundleCommand(cfg *config.Config) *cli.Command {
 }
 
 func bundleAction(c *cli.Context, cfg *config.Config) error {
-	config.CheckConfig(cfg)
+	if err := config.CheckConfig(cfg); err != nil {
+		return err
+	}
 
 	if c.Args().Len() == 0 {
-		app.Terminate("please provide the bundle name")
+		return app.Errorf("please provide the bundle name")
 	}
 	bundleName := c.Args().Get(0)
 
-	slog.Info(chalk.Green("creating new bundle"), cfg.Env.Path)
+	slog.Info(chalk.Green("creating new bundle"), "path", cfg.Env.Path)
 	dirPath := path.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, BundleExtension))
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
-		app.Terminate("error creating %s: %s", dirPath, err)
-		return nil
+		return app.Errorf("error creating %s: %w", dirPath, err)
 	}
 
 	file, err := os.Create(filepath.Clean(dirPath))
 	if err != nil {
-		app.Terminate("error creating base template ", err)
-		return nil
+		return app.Errorf("error creating base template: %w", err)
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			slog.Info("error closing file", err)
+			slog.Info("error closing file", "error", err.Error())
 		}
 	}()
 
-	if _, err := file.Write(getBundleTemplate(bundleName)); err != nil {
-		app.Terminate("error creating file %s: %s", file.Name(), err)
-		return nil
+	bundleTemplate, err := getBundleTemplate(bundleName)
+	if err != nil {
+		return err
+	}
+
+	if _, err := file.Write(bundleTemplate); err != nil {
+		return app.Errorf("error creating file %s: %w", file.Name(), err)
 	}
 
 	return nil
 }
 
-func getBundleTemplate(name string) []byte {
+func getBundleTemplate(name string) ([]byte, error) {
 	newBundle := engine.Bundle{
 		Name: name,
 		Generators: []engine.Generators{
@@ -78,8 +82,8 @@ func getBundleTemplate(name string) []byte {
 	}
 	jsonBytes, err := json.Marshal(newBundle)
 	if err != nil {
-		app.Terminate("cannot create bundle template: %s", err)
+		return nil, app.Errorf("cannot create bundle template: %w", err)
 	}
 
-	return jsonBytes
+	return jsonBytes, nil
 }

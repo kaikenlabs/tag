@@ -48,10 +48,12 @@ func GenerateCommand(cfg *config.Config) *cli.Command {
 }
 
 func generateAction(c *cli.Context, cfg *config.Config) error {
-	config.CheckConfig(cfg)
+	if err := config.CheckConfig(cfg); err != nil {
+		return err
+	}
 
 	if c.Args().Len() < 2 {
-		app.Terminate("please provide the generator/bundle and the name")
+		return app.Errorf("please provide the generator/bundle and the name")
 	}
 
 	generatorOrBundleName := c.Args().Get(0)
@@ -62,46 +64,50 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if c.Bool("bundle") {
-		generateBundle(c, cfg, generatorOrBundleName, targetName, args)
-	} else {
-		generateTemplate(c, cfg, generatorOrBundleName, targetName, args, false)
+		return generateBundle(c, cfg, generatorOrBundleName, targetName, args)
 	}
-	return nil
+	return generateTemplate(c, cfg, generatorOrBundleName, targetName, args, false)
 }
 
-func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) {
-	runHooks(cfg.Hooks.Pre)
+func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
+	if err := runHooks(cfg.Hooks.Pre); err != nil {
+		return err
+	}
 
 	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), generatorName, generatorName+BundleExtension)
 
 	data, err := os.ReadFile(dirPath)
 	if err != nil {
-		app.Terminate("cannot open bundle file: %s", err.Error())
+		return app.Errorf("cannot open bundle file: %w", err)
 	}
 
 	var bundle engine.Bundle
 	err = json.Unmarshal(data, &bundle)
 	if err != nil {
-		app.Terminate("cannot decode bundle file: %s", err.Error())
+		return app.Errorf("cannot decode bundle file: %w", err)
 	}
 
 	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
 	for _, generator := range bundle.Generators {
-		generateTemplate(c, cfg, generator.Name, targetName, args, true)
+		if err := generateTemplate(c, cfg, generator.Name, targetName, args, true); err != nil {
+			return err
+		}
 	}
 
-	runHooks(cfg.Hooks.Post)
+	return runHooks(cfg.Hooks.Post)
 }
 
-func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args string, inBundle bool) {
+func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args string, inBundle bool) error {
 	if !inBundle {
-		runHooks(cfg.Hooks.Pre)
+		if err := runHooks(cfg.Hooks.Pre); err != nil {
+			return err
+		}
 	}
 
 	dirPath := filepath.Join(cfg.Env.Path, generatorName)
 	_, err := os.ReadDir(dirPath)
 	if err != nil {
-		app.Terminate("generator %s not found in: %s", generatorName, cfg.Env.Path)
+		return app.Errorf("generator %s not found in: %s", generatorName, cfg.Env.Path)
 	}
 	sharedPath := filepath.Join(cfg.Env.Path, c.Path(flags.SharedPathFlag))
 
@@ -111,27 +117,29 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 
 	e, err := engine.New(c.Bool(flags.DryRunFlag), dirPath, sharedPath, cfg.Env.Extension)
 	if err != nil {
-		app.Terminate("error creating engine: %s", err.Error())
+		return app.Errorf("error creating engine: %w", err)
 	}
 
 	err = e.Generate(engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)})
 	if err != nil {
-		app.Terminate("error when generating template: %s", err.Error())
+		return app.Errorf("error when generating template: %w", err)
 	}
 
 	if !inBundle {
-		runHooks(cfg.Hooks.Post)
+		return runHooks(cfg.Hooks.Post)
 	}
+	return nil
 }
 
-func runHooks(hooks [][]string) {
+func runHooks(hooks [][]string) error {
 	for _, hook := range hooks {
 		hookString := strings.Join(hook, " ")
 		slog.Info("running hook", "hook", hookString)
 		if err := runCommand(hook); err != nil {
-			app.Terminate("failed to run hook %s: %s", hookString, err.Error())
+			return app.Errorf("failed to run hook %s: %w", hookString, err)
 		}
 	}
+	return nil
 }
 
 func runCommand(hook []string) error {

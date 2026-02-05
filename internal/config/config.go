@@ -28,27 +28,31 @@ type Hooks struct {
 	Post [][]string `json:"post"`
 }
 
-func CheckConfig(cfg *Config) {
+// CheckConfig validates that a config exists and returns an error if not.
+func CheckConfig(cfg *Config) error {
 	var emptyConfig *Config
 	if cfg == emptyConfig {
-		app.Terminate("please run the 'init' command first or run this command from where the '%s' file is located", File)
+		return app.Errorf("please run the 'init' command first or run this command from where the '%s' file is located", File)
 	}
+	return nil
 }
 
-func LoadConfigFile() *Config {
+// LoadConfigFile loads the configuration from the config file.
+// Returns an empty config if the file doesn't exist, or an error if parsing fails.
+func LoadConfigFile() (*Config, error) {
 	if _, err := os.Stat(File); err != nil {
-		return &Config{}
+		return &Config{}, nil
 	}
 	data, err := os.ReadFile(File)
 	if err != nil {
-		app.Terminate("cannot load config file: %s", err.Error())
+		return nil, app.Errorf("cannot load config file: %w", err)
 	}
 	var config Config
 	err = json.Unmarshal(data, &config)
 	if err != nil {
-		app.Terminate("cannot parse config file: %s", err.Error())
+		return nil, app.Errorf("cannot parse config file: %w", err)
 	}
-	return &config
+	return &config, nil
 }
 
 func CreateConfigFile(c *cli.Context) error {

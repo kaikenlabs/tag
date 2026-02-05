@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"os"
 
-	"gitlab.com/Vitrifi/tag/pkg/app"
 	"gitlab.com/Vitrifi/tag/pkg/prettylog"
 
 	"gitlab.com/Vitrifi/tag/internal/types/flags"
@@ -29,9 +28,14 @@ func main() {
 		Version = "dev"
 	}
 
-	cfg := config.LoadConfigFile()
-
 	setLogger()
+
+	cfg, err := config.LoadConfigFile()
+	if err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+
 	tag := &cli.App{
 		Version: Version,
 		Name:    AppName,
@@ -77,7 +81,8 @@ func main() {
 		},
 	}
 	if err := tag.Run(os.Args); err != nil {
-		app.Terminate(err.Error())
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 }
 

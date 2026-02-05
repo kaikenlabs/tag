@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/code-gorilla-au/odize"
+	"github.com/stretchr/testify/assert"
 )
 
 var emptyMap = map[string]string{}
@@ -134,7 +134,7 @@ func Test_generateMeta(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := generateMeta(tt.input)
-			odize.AssertEqual(t, tt.expected, result)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

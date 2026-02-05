@@ -35,34 +35,33 @@ func NewCommand(cfg *config.Config) *cli.Command {
 }
 
 func newAction(c *cli.Context, cfg *config.Config) error {
-	config.CheckConfig(cfg)
+	if err := config.CheckConfig(cfg); err != nil {
+		return err
+	}
 
 	generator := c.Args().Get(0)
 	if generator == "" {
-		app.Terminate("please provide the generator name")
+		return app.Errorf("please provide the generator name")
 	}
 
-	slog.Info(chalk.Green("creating new generator"), cfg.Env.Path)
+	slog.Info(chalk.Green("creating new generator"), "path", cfg.Env.Path)
 	dirPath := path.Join(cfg.Env.Path, generator, fmt.Sprintf("%s%s", generator, cfg.Env.Extension))
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
-		app.Terminate("error creating %s: %s", dirPath, err)
-		return nil
+		return app.Errorf("error creating %s: %w", dirPath, err)
 	}
 
 	file, err := os.Create(filepath.Clean(dirPath))
 	if err != nil {
-		app.Terminate("error creating base template: %s", err)
-		return nil
+		return app.Errorf("error creating base template: %w", err)
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			slog.Info("error closing file", err)
+			slog.Info("error closing file", "error", err.Error())
 		}
 	}()
 
 	if _, err := file.Write([]byte(fmt.Sprintf(newGeneratorTemplate, c.String("package"), c.String("package")))); err != nil {
-		app.Terminate("error creating file %s: %s", file.Name(), err)
-		return nil
+		return app.Errorf("error creating file %s: %w", file.Name(), err)
 	}
 
 	return nil
