@@ -1,0 +1,12 @@
+{
+    "project_name": "My Awesome Project",
+    "project_slug": "{{ cookiecutter.project_name|lower|replace(' ', '_') }}",
+    "author": "Your Name",
+    "email": "your.email@example.com",
+    "description": "A short description",
+    "version": "0.1.0",
+    "use_docker": false,
+    "open_source_license": ["MIT", "BSD-3-Clause", "Apache-2.0", "None"],
+    "python_version": ["3.11", "3.10", "3.9"],
+    "_private_var": "internal"
+}
