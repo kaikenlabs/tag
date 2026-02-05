@@ -4,7 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TAG is a Go-based code generation CLI tool that uses Go's `text/template` engine to generate files from templates. It supports creating new files, appending to existing files, and injecting content before/after specific markers.
+TAG is a Go-based code generation CLI tool that supports creating new files, appending to existing files, and injecting content before/after specific markers. It is evolving into a complete project scaffolding solution (similar to Cookiecutter) with remote template support.
+
+## Planned Changes (v2)
+
+See `claudedocs/tag_scaffold_specification.md` for the full specification.
+
+**Key changes:**
+- **Template engine**: Gonja (Jinja2-compatible) replacing Go `text/template`
+- **New commands**:
+  - `tag scaffold <template>` - Project scaffolding from local/remote templates
+  - `tag convert cookiecutter` - Migration tool for Cookiecutter templates
+- **Remote templates**: Support for `gh:`, `gl:`, `bb:`, Git URLs, and zip files
+- **Variable namespace**: `{{ vars.* }}` (aliased as `{{ cookiecutter.* }}` for compatibility)
+- **Path placeholders**: `__var__` and `__var | filter__` syntax in file/directory names
+- **Template config**: `tag.template.json` with JSON Schema validation
+- **Replay system**: Auto-save inputs for reproducible scaffolding
+
+**Jinja2 template syntax (upcoming):**
+```jinja2
+{{ vars.project_name|snake }}
+{% if vars.use_docker %}...{% endif %}
+{% for item in vars.features %}...{% endfor %}
+```
 
 ## Commands
 
@@ -36,7 +58,9 @@ make scan               # Security scanning (gosec + govulncheck)
 make tools              # Install golangci-lint, gofumpt, gotest, gosec, govulncheck
 ```
 
-## Architecture
+## Architecture (Current)
+
+> Note: This reflects the current implementation. See the v2 specification for planned changes.
 
 ```
 main.go                     CLI entry point (urfave/cli/v2)
@@ -71,7 +95,9 @@ main.go                     CLI entry point (urfave/cli/v2)
             └── errors.go   CommandError type with Errorf() helper
 ```
 
-## Key Concepts
+## Key Concepts (Current)
+
+> Note: Template syntax will change to Jinja2 (Gonja) in v2. See specification for details.
 
 ### Template Metadata Block
 Templates use a YAML-like header between `---` markers:
@@ -110,3 +136,10 @@ if err != nil {
 - Use testify (`assert`/`require`) for assertions
 - Table-driven tests preferred
 - Test naming: `TestUT_*` for unit tests
+- Unit tests: Use mock interfaces (e.g., `fileReadWriteMock`) to avoid real filesystem
+- Integration tests: Use `t.TempDir()` for isolated filesystem testing with auto-cleanup
+
+## Documentation
+
+- `claudedocs/tag_scaffold_specification.md` - Full v2 specification
+- `claudedocs/research_cookiecutter_vs_tag.md` - Cookiecutter comparison and analysis
