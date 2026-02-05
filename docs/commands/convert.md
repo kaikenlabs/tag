@@ -1,0 +1,172 @@
+# tag convert cookiecutter
+
+Convert a Cookiecutter template to TAG format.
+
+## Synopsis
+
+```bash
+tag convert cookiecutter <source> [destination] [flags]
+```
+
+## Description
+
+The `convert cookiecutter` command converts existing [Cookiecutter](https://cookiecutter.readthedocs.io/) templates to TAG format. This enables migration of the large ecosystem of Cookiecutter templates to work with TAG.
+
+The conversion process:
+1. Converts `cookiecutter.json` to `tag.template.json`
+2. Renames path placeholders from `{{ cookiecutter.var }}` to `__var__` syntax
+3. Copies and analyzes hook scripts
+4. Reports any content incompatibilities between Jinja2 and Gonja
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `source` | Yes | Path or remote reference to the Cookiecutter template |
+| `destination` | No | Output directory (default: `<source-name>-tag`) |
+
+## Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--output <path>` | `-o` | Output directory (alternative to destination argument) |
+| `--dry-run` | | Preview conversion without writing files |
+| `--force` | `-f` | Overwrite output directory if it exists |
+
+## Examples
+
+### Basic Conversion
+
+```bash
+# Convert a local Cookiecutter template
+tag convert cookiecutter ./cookiecutter-myproject ./myproject-tag
+
+# Convert a remote template
+tag convert cookiecutter gh:user/cookiecutter-django ./django-tag
+```
+
+### Preview Mode
+
+```bash
+# See what would be converted without writing files
+tag convert cookiecutter ./cookiecutter-myproject --dry-run
+```
+
+### Force Overwrite
+
+```bash
+# Overwrite existing output directory
+tag convert cookiecutter ./cookiecutter-myproject --force
+```
+
+### Using Output Flag
+
+```bash
+# Alternative to destination argument
+tag convert cookiecutter ./cookiecutter-myproject -o ./output-dir
+```
+
+## Output
+
+The converter displays a detailed summary:
+
+```
+Converted template: ./myproject-tag
+
+✓ Variables: 8 converted
+✓ Directories renamed: 3
+✓ Files renamed: 12
+✓ Files processed: 25
+⚠ Hooks: 2 files copied (review required)
+⚠ Content incompatibilities found: 1
+  Minor adjustments may be needed:
+  - setup.py.tmpl:8 - default_filter_syntax
+    Found: {{ author|default('Anonymous') }}
+    Gonja: {{ author|default:"Anonymous" }}
+
+See: https://tag.kaikenlabs.com/docs/migration
+```
+
+## What Gets Converted
+
+### Configuration
+
+| Cookiecutter | TAG |
+|--------------|-----|
+| `cookiecutter.json` | `tag.template.json` |
+| Variable definitions | Converted with types inferred |
+| Private variables (`_name`) | Preserved as computed variables |
+
+### Directory Structure
+
+| Before | After |
+|--------|-------|
+| `{{ cookiecutter.project_name }}/` | `__project_name__/` |
+| `{{ cookiecutter.var | lower }}/` | `__var | lower__/` |
+
+### Template Content
+
+Template content (Jinja2 syntax) is **mostly compatible**. The converter will:
+- Leave content unchanged (Gonja supports Jinja2)
+- Report incompatibilities that need manual adjustment
+- Document filter syntax differences
+
+## Compatibility Notes
+
+### Fully Compatible Features
+
+- Variable interpolation: `{{ cookiecutter.var }}`
+- Control flow: `{% if %}`, `{% for %}`, `{% endif %}`, `{% endfor %}`
+- Comments: `{# comment #}`
+- Template inheritance: `{% extends %}`, `{% block %}`
+- Macros: `{% macro %}`
+- Filters: Most common filters work identically
+
+### Syntax Differences (Gonja vs Jinja2)
+
+| Feature | Jinja2 | Gonja |
+|---------|--------|-------|
+| Filter with argument | `{{ x\|default('val') }}` | `{{ x\|default:"val" }}` |
+| Format filter | `{{ x\|format('%s') }}` | `{{ x\|format:"%s" }}` |
+| Dict iteration | `{% for k, v in dict.items() %}` | `{% for k, v in dict %}` |
+
+The converter detects and reports these differences automatically.
+
+### Hooks
+
+Cookiecutter hooks (Python scripts in `hooks/`) are copied but require manual review:
+- Shell scripts usually work as-is
+- Python hooks may need adaptation to work without Cookiecutter's environment
+- Environment variables are provided differently (see [Hooks Guide](../templates/hooks.md))
+
+## Post-Conversion Steps
+
+1. **Review incompatibilities**: Fix any reported syntax differences
+2. **Test hooks**: Ensure hook scripts work with TAG's environment
+3. **Verify variables**: Check `tag.template.json` for correct types
+4. **Test scaffold**: Run `tag scaffold` on the converted template
+5. **Update documentation**: Modify any README references to Cookiecutter
+
+## Variable Type Mapping
+
+| Cookiecutter Value | Inferred TAG Type |
+|--------------------|-------------------|
+| `"string value"` | `string` |
+| `true` / `false` | `boolean` |
+| `123` / `45.67` | `number` |
+| `["opt1", "opt2"]` | `choice` with options |
+| `"{{ computed }}"` | Computed variable (string) |
+
+## Error Handling
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "source template is required" | Missing source argument | Provide a template path |
+| "failed to initialize converter" | Invalid template structure | Verify it's a valid Cookiecutter template |
+| "cookiecutter.json not found" | Missing config file | Ensure `cookiecutter.json` exists in template root |
+
+## See Also
+
+- [Template Authoring](../templates/authoring.md) - TAG template structure
+- [Migration Guide](../migration/v1-to-v2.md) - Detailed migration information
+- [tag.template.json Reference](../reference/tag.template.json.md) - Configuration format
