@@ -1,6 +1,9 @@
 package commands
 
 import (
+	"context"
+
+	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/pkg/app"
 	"github.com/urfave/cli/v2"
@@ -12,26 +15,44 @@ func ScaffoldCommand() *cli.Command {
 		Name:      "scaffold",
 		Usage:     "Create a new project from a template",
 		ArgsUsage: "<template> [project-name]",
-		Description: `Scaffold a new project from a local template directory.
+		Description: `Scaffold a new project from a local or remote template.
 
-The template directory must contain a tag.template.json file that defines
+The template must contain a tag.template.json file that defines
 the template configuration and variables.
+
+TEMPLATE FORMATS:
+  Local:    ./my-template, /path/to/template
+  GitHub:   gh:user/repo, gh:user/repo@v1.0.0, gh:user/repo/subdir
+  GitLab:   gl:user/repo, gl:user/repo@v1.0.0
+  Bitbucket: bb:user/repo
+  Git URL:  https://github.com/user/repo.git
+  Zip URL:  https://example.com/template.zip
+  Local Zip: ./template.zip
 
 Examples:
   # Scaffold from a local template
   tag scaffold ./my-template
 
+  # Scaffold from a GitHub template
+  tag scaffold gh:user/awesome-template
+
+  # Scaffold a specific version
+  tag scaffold gh:user/awesome-template@v1.0.0
+
+  # Scaffold from a subdirectory
+  tag scaffold gh:user/templates/go-api
+
   # Scaffold with a project name
-  tag scaffold ./my-template my-awesome-project
+  tag scaffold gh:user/template my-awesome-project
 
   # Scaffold with variable overrides
-  tag scaffold ./my-template -m author="John Doe" -m license=MIT
+  tag scaffold gh:user/template -m author="John Doe" -m license=MIT
 
-  # Scaffold with a values file
-  tag scaffold ./my-template --values config.json
+  # Force refresh of cached template
+  tag scaffold gh:user/template --update
 
   # Scaffold non-interactively (use defaults)
-  tag scaffold ./my-template --no-input`,
+  tag scaffold gh:user/template --no-input`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "output",
@@ -56,6 +77,11 @@ Examples:
 				Aliases: []string{"f"},
 				Usage:   "Overwrite output directory if it exists",
 			},
+			&cli.BoolFlag{
+				Name:    "update",
+				Aliases: []string{"u"},
+				Usage:   "Force refresh of cached remote templates",
+			},
 		},
 		Action: scaffoldAction,
 	}
@@ -67,8 +93,22 @@ func scaffoldAction(c *cli.Context) error {
 		return app.Errorf("template path is required\n\nUsage: tag scaffold <template> [project-name]")
 	}
 
-	templateDir := c.Args().Get(0)
+	templateRef := c.Args().Get(0)
 	projectName := c.Args().Get(1) // May be empty
+
+	// Resolve template reference (handles both local and remote)
+	resolver, err := remote.NewResolver()
+	if err != nil {
+		return app.Errorf("failed to create resolver: %w", err)
+	}
+
+	ctx := context.Background()
+	templateDir, err := resolver.Resolve(ctx, templateRef, remote.ResolveOptions{
+		ForceUpdate: c.Bool("update"),
+	})
+	if err != nil {
+		return app.Errorf("failed to resolve template: %w", err)
+	}
 
 	// Parse meta flags
 	metaSlice := c.StringSlice("meta")
