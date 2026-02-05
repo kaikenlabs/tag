@@ -13,9 +13,7 @@ type Write struct {
 	fs fileReadWrite
 }
 
-type fileWrite struct {
-	DryRun bool
-}
+type fileWrite struct{}
 
 var _ fileReadWrite = (*fileWrite)(nil)
 

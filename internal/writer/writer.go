@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	FileModeOwnerRWX = 0o644
+	// FileModeDefault is the default file permission (rw-r--r--).
+	FileModeDefault = 0o644
 )
 
 // New - create a new writer
@@ -30,7 +31,7 @@ func (w *Write) WriteFile(name string, data []byte, perm fs.FileMode) error {
 func (w *Write) AppendFile(name string, data []byte) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
-	file, err := w.fs.OpenFile(name, os.O_APPEND|os.O_WRONLY, FileModeOwnerRWX)
+	file, err := w.fs.OpenFile(name, os.O_APPEND|os.O_WRONLY, FileModeDefault)
 	if err != nil {
 		slog.Error("cannot open file", "file", name, "error", err)
 		return err
@@ -57,7 +58,7 @@ func (w *Write) InjectIntoFile(name string, data []byte, inject Inject) error {
 		slog.Error("cannot inject via matcher", "error", err, "file", name, "matcher", inject.Matcher, "clause", inject.Clause)
 		return err
 	}
-	if err := w.fs.WriteFile(name, formatedOutput, FileModeOwnerRWX); err != nil {
+	if err := w.fs.WriteFile(name, formatedOutput, FileModeDefault); err != nil {
 		slog.Error("cannot write to file", "file", name, "error", err)
 		return err
 	}
