@@ -1,83 +1,225 @@
 package parser
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 
-	"github.com/gobuffalo/flect"
-	"github.com/kaikenlabs/tag/internal/formats"
+	"github.com/kaikenlabs/tag/internal/template"
 )
 
-const (
-	caseSnake           = "caseSnake"
-	caseKebab           = "caseKebab"
-	casePascal          = "casePascal"
-	caseLower           = "caseLower"
-	caseTitle           = "caseTitle"
-	caseCamel           = "caseCamel"
-	pluralise           = "pluralise"
-	singularise         = "singularise"
-	ordinalize          = "ordinalize"
-	titleize            = "titleize"
-	humanize            = "humanize"
-	splitByDelimiter    = "splitByDelimiter"
-	splitAfterDelimiter = "splitAfterDelimiter"
-	contains            = "contains"
-	hasPrefix           = "hasPrefix"
-	hasSuffix           = "hasSuffix"
-)
-
-var defaultFuncs = template.FuncMap{
-	caseSnake:  formats.CaseSnake,
-	caseKebab:  formats.CaseKebab,
-	casePascal: formats.CasePascal,
-	caseLower:  strings.ToLower,
-	caseTitle:  strings.ToTitle,
-	caseCamel:  formats.CaseCamel,
-	// Inflections
-	pluralise:   flect.Pluralize,
-	singularise: flect.Singularize,
-	ordinalize:  flect.Ordinalize,
-	titleize:    flect.Titleize,
-	humanize:    flect.Humanize,
-	// String manipulations
-	splitByDelimiter:    formats.SplitByDelimiter,
-	splitAfterDelimiter: formats.SplitAfterDelimiter,
-	contains:            formats.Contains,
-	hasPrefix:           formats.HasPrefix,
-	hasSuffix:           formats.HasSuffix,
-}
-
+// New creates a new TemplateEngine that uses Gonja for template processing.
 func New(dirPath string, sharedPath string, fileSuffix string) (TemplateEngine, error) {
-	tmp, err := withTemplates(dirPath, fileSuffix)
+	// Initialize Gonja engine
+	gonjaEngine, err := template.NewEngine()
+	if err != nil {
+		slog.Error("cannot create template engine", "error", err)
+		return TemplateEngine{}, err
+	}
+
+	// Load primary templates
+	templates, err := withTemplates(dirPath, fileSuffix)
 	if err != nil {
 		slog.Error("cannot load templates", "error", err)
 		return TemplateEngine{}, err
 	}
-	sharedTmp, _ := withTemplates(sharedPath, fileSuffix)
+
+	// Load shared templates (errors are non-fatal but logged)
+	sharedTemplates, sharedErr := withTemplates(sharedPath, fileSuffix)
+	if sharedErr != nil {
+		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
+	}
+
+	// Wire shared templates into Gonja's loader if any were loaded
+	if len(sharedTemplates) > 0 {
+		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
+		gonjaEngine.SetLoader(loader)
+		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
+	}
+
 	return TemplateEngine{
-		templates:       tmp,
-		sharedTemplates: sharedTmp,
-		funcs:           defaultFuncs,
+		gonjaEngine:     gonjaEngine,
+		templates:       templates,
+		sharedTemplates: sharedTemplates,
 	}, nil
 }
 
-func (te *TemplateEngine) Parse(data TemplateData) ([]TemplateData, error) {
+// Parse processes all loaded templates with the given input data.
+// It returns a slice of TemplateData sorted by action (Create, Inject, Append).
+func (te *TemplateEngine) Parse(input InputData) ([]TemplateData, error) {
 	result := []TemplateData{}
-	for name, tmpl := range te.templates {
-		newData, err := parse(name, tmpl, data, te.funcs, te.sharedTemplates)
+
+	for name, tmplContent := range te.templates {
+		data, err := te.parseTemplate(name, tmplContent, input)
 		if err != nil {
 			return result, err
 		}
-		result = append(result, newData)
+		result = append(result, data)
 	}
+
 	return orderTemplateData(result), nil
 }
 
-// withTemplates - load templates by file path
+// parseTemplate processes a single template using Gonja.
+// Stage 1: Extract and render metadata
+// Stage 2: Parse metadata into TemplateData
+// Stage 3: Render the template body
+func (te *TemplateEngine) parseTemplate(tmplName, tmplContent string, input InputData) (TemplateData, error) {
+	// Stage 1: Extract metadata block and body
+	metaRaw, bodyRaw, err := template.ExtractMetadata(tmplContent)
+	if err != nil {
+		// If no metadata block, treat entire content as body with default metadata
+		metaRaw = ""
+		bodyRaw = tmplContent
+	}
+
+	// Build the initial Gonja context
+	ctx := buildContext(input)
+
+	// Stage 2: Render and parse metadata (if present)
+	var metadata *template.Metadata
+	if metaRaw != "" {
+		metadata, err = te.gonjaEngine.RenderAndParseMetadata(metaRaw, ctx)
+		if err != nil {
+			slog.Error("cannot parse metadata", "template", tmplName, "error", err)
+			return TemplateData{}, err
+		}
+	} else {
+		// Default metadata for templates without metadata block
+		metadata = &template.Metadata{
+			Action: template.ActionCreate,
+			Extra:  make(map[string]string),
+		}
+	}
+
+	// Validate required fields
+	if metadata.To == "" {
+		slog.Error("template missing required 'to' field", "template", tmplName)
+		return TemplateData{}, fmt.Errorf("template %q: %w", tmplName, template.ErrMissingToField)
+	}
+
+	// Merge extra metadata into context vars for body rendering
+	enrichContextWithMetadata(ctx, metadata)
+
+	// Stage 3: Render the template body
+	parsedBody, err := te.renderBody(tmplName, bodyRaw, ctx)
+	if err != nil {
+		slog.Error("cannot render template body", "template", tmplName, "error", err)
+		return TemplateData{}, err
+	}
+
+	// Convert template.Metadata to parser.TemplateData
+	return TemplateData{
+		Name:   tmplName,
+		To:     metadata.To,
+		Output: parsedBody,
+		ParseData: ParseData{
+			Action:        convertAction(metadata.Action),
+			InjectClause:  convertInjectClause(metadata.InjectClause),
+			InjectMatcher: metadata.InjectMatcher,
+			Notes:         metadata.Notes,
+			Meta:          mergeMetadata(input.Meta, metadata.Extra),
+		},
+	}, nil
+}
+
+// renderBody renders the template body using Gonja.
+func (te *TemplateEngine) renderBody(tmplName, body string, ctx template.Context) ([]byte, error) {
+	// Create base template
+	tmpl, err := te.gonjaEngine.ParseStringNamed(body, tmplName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Execute the template
+	result, err := tmpl.Execute(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(result), nil
+}
+
+// buildContext creates a Gonja context from the input data.
+func buildContext(input InputData) template.Context {
+	// Convert string metadata to any for vars
+	vars := make(map[string]any)
+	for k, v := range input.Meta {
+		vars[k] = v
+	}
+
+	// Create context with name, vars, and computed name options
+	return template.NewContext(input.Name, vars, nil)
+}
+
+// enrichContextWithMetadata adds extra metadata fields to the vars namespace.
+func enrichContextWithMetadata(ctx template.Context, metadata *template.Metadata) {
+	if metadata == nil || len(metadata.Extra) == 0 {
+		return
+	}
+
+	vars, ok := ctx["vars"].(map[string]any)
+	if !ok {
+		vars = make(map[string]any)
+		ctx["vars"] = vars
+		ctx["cookiecutter"] = vars // Keep alias in sync
+	}
+
+	// Add extra metadata to vars (template-defined values)
+	// These can be used in the body, e.g., {{ vars.custom_key }}
+	for k, v := range metadata.Extra {
+		// Only add if not already set (CLI values take precedence)
+		if _, exists := vars[k]; !exists {
+			vars[k] = v
+		}
+	}
+}
+
+// mergeMetadata combines CLI metadata with template-defined metadata.
+// CLI values take precedence over template-defined values.
+func mergeMetadata(cliMeta map[string]string, templateMeta map[string]string) map[string]string {
+	result := make(map[string]string)
+
+	// Add template-defined metadata first
+	for k, v := range templateMeta {
+		result[k] = v
+	}
+
+	// Override with CLI metadata
+	for k, v := range cliMeta {
+		result[k] = v
+	}
+
+	return result
+}
+
+// convertAction converts template.Action to parser.ParseActions.
+func convertAction(action template.Action) ParseActions {
+	switch action {
+	case template.ActionAppend:
+		return ActionAppend
+	case template.ActionInject:
+		return ActionInject
+	default:
+		return ActionCreate
+	}
+}
+
+// convertInjectClause converts template.InjectClause to parser.InjectClause.
+func convertInjectClause(clause template.InjectClause) InjectClause {
+	switch clause {
+	case template.InjectBefore:
+		return InjectBefore
+	case template.InjectAfter:
+		return InjectAfter
+	default:
+		return ""
+	}
+}
+
+// withTemplates loads templates from a directory.
 func withTemplates(dirPath string, fileSuffix string) (map[string]string, error) {
 	rootTemplates := map[string]string{}
 	files, err := os.ReadDir(dirPath)
@@ -100,6 +242,7 @@ func withTemplates(dirPath string, fileSuffix string) (map[string]string, error)
 	return rootTemplates, nil
 }
 
+// orderTemplateData sorts templates by action: Create first, then Inject, then Append.
 func orderTemplateData(data []TemplateData) []TemplateData {
 	create := []TemplateData{}
 	inject := []TemplateData{}
@@ -115,6 +258,7 @@ func orderTemplateData(data []TemplateData) []TemplateData {
 			app = append(app, tmp)
 		}
 	}
+
 	result := []TemplateData{}
 	result = append(result, create...)
 	result = append(result, inject...)

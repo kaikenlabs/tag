@@ -1,5 +1,5 @@
 
 type Config struct {
     Foo string
-    {{ .Meta.foo }} string
+    {{ vars.foo|default:"DefaultField" }} string
 }

@@ -1,15 +1,15 @@
 ---
-to: example/fakr/{{ .Name }}.go
+to: example/fakr/{{ name }}.go
 zip: this will be added to the meta block
 ---
 
-package {{ .Name }}
+package {{ name }}
 
 import "fmt"
 
 func main() {
     fmt.PrintLn("hello world")
-    fmt.PrintLn("{{ .Meta.zip }}")
-    fmt.PrintLn("{{ .Meta.foo }}") // passed in cmd args
-    fmt.PrintLn("{{ .Meta.bin }}") // passed in cmd args
+    fmt.PrintLn("{{ vars.zip }}")
+    fmt.PrintLn("{{ vars.foo }}") // passed in cmd args
+    fmt.PrintLn("{{ vars.bin }}") // passed in cmd args
 }

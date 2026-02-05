@@ -1,18 +1,18 @@
 ---
-to: example/fakr/{{ .Name | caseKebab }}.go
+to: example/fakr/{{ name|kebab }}.go
 bar: randomText
 ---
 
-package {{ .Name }}
+package {{ name }}
 
 import "fmt"
 
 func main() {
     fmt.Println("hello world")
-    fmt.Println("{{ .Meta.bar | caseSnake }}")
-    fmt.Println("{{ .Meta.bar | caseKebab }}")
-    fmt.Println("{{ .Meta.bar | casePascal }}")
-    fmt.Println("{{ .Meta.bar | caseLower }}")
-    fmt.Println("{{ .Meta.bar | caseTitle }}")
-    fmt.Println("{{ "flashGordon" | caseSnake | caseTitle }}")
+    fmt.Println("{{ vars.bar|snake }}")
+    fmt.Println("{{ vars.bar|kebab }}")
+    fmt.Println("{{ vars.bar|pascal }}")
+    fmt.Println("{{ vars.bar|lower }}")
+    fmt.Println("{{ vars.bar|title }}")
+    fmt.Println("{{ "flashGordon"|snake|title }}")
 }

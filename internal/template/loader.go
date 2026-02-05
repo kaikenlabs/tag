@@ -157,6 +157,22 @@ func CreateFileSystemLoader(baseDir string) (loaders.Loader, error) {
 	return loaders.MustNewFileSystemLoader(baseDir), nil
 }
 
+// CreateMemoryLoaderFromMap creates a Gonja MemoryLoader from a map of template contents.
+// The keys should be template names (paths), values are template contents.
+// This is useful for loading shared templates into memory.
+func CreateMemoryLoaderFromMap(templates map[string]string) loaders.Loader {
+	// Ensure keys start with "/" for Gonja's memory loader
+	normalized := make(map[string]string, len(templates))
+	for name, content := range templates {
+		key := name
+		if len(key) > 0 && key[0] != '/' {
+			key = "/" + key
+		}
+		normalized[key] = content
+	}
+	return loaders.MustNewMemoryLoader(normalized)
+}
+
 // LoadTemplateFiles loads all template files from a directory.
 // This is useful for batch processing templates.
 func LoadTemplateFiles(dir string, suffix string) (map[string]string, error) {

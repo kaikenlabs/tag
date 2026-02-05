@@ -1,5 +1,9 @@
 ---
-to: example/fakr/{{ .Name }}.go
+to: example/fakr/{{ name }}_config.go
 append: true
 ---
-    {{ template "example/_templates/shared/config.tmpl" . }} // you need to pass the data down
+
+type Config struct {
+    Foo string
+    {{ vars.foo|default:"DefaultField" }} string
+}

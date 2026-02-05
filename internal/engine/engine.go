@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kaikenlabs/tag/internal/formats"
-
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/parser"
 	"github.com/kaikenlabs/tag/internal/writer"
@@ -33,32 +31,26 @@ func New(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (Cor
 	}, nil
 }
 
-// Generate - generates code from
+// Generate generates code from templates using the new Gonja-based engine.
 func (c *Core) Generate(data Data) error {
-	parserConfig := parser.TemplateData{
+	// Build input data for the parser
+	input := parser.InputData{
 		Name: data.Name,
-		ParseData: parser.ParseData{
-			Args: data.Args,
-			Meta: generateMeta(data.MetaArgs),
-			N: parser.NameOptions{
-				PascalCase: formats.CasePascal(data.Name),
-				CamelCase:  formats.CaseCamel(data.Name),
-				SnakeCase:  formats.CaseSnake(data.Name),
-				KebabCase:  formats.CaseKebab(data.Name),
-				LowerCase:  strings.ToLower(data.Name),
-				UpperCase:  strings.ToUpper(data.Name),
-			},
-		},
+		Args: data.Args,
+		Meta: generateMeta(data.MetaArgs),
 	}
-	parsedOutput, err := c.parser.Parse(parserConfig)
+
+	// Parse all templates
+	parsedOutput, err := c.parser.Parse(input)
 	if err != nil {
 		slog.Error("cannot parse input data", "error", err)
 		return err
 	}
 
+	// Write files
 	for _, item := range parsedOutput {
 		var action string
-		switch item.ParseData.Action {
+		switch item.Action {
 		case parser.ActionAppend:
 			if err := c.fwr.AppendFile(item.To, item.Output); err != nil {
 				slog.Error("cannot appending to file", "file", item.To, "error", err)
@@ -101,7 +93,9 @@ func generateMeta(meta []string) (result map[string]string) {
 	for _, part := range meta {
 		key, value, ok := parseKeyValue(part)
 		if !ok {
-			return make(map[string]string)
+			// Log warning for malformed entry but continue with valid entries
+			slog.Warn("skipping malformed --meta entry", "entry", part)
+			continue
 		}
 		result[key] = value
 	}
