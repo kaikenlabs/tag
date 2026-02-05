@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tag.kaikenlabs.com/schemas/tag.template.schema.json",
+  "title": "TAG Template Configuration",
+  "description": "Configuration schema for TAG scaffold templates (tag.template.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Template name for display purposes"
+    },
+    "description": {
+      "type": "string",
+      "description": "Template description"
+    },
+    "version": {
+      "type": "string",
+      "description": "Template version",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?(\\+[a-zA-Z0-9.-]+)?$"
+    },
+    "vars": {
+      "type": "object",
+      "description": "Variable definitions",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Short form: default string value"
+          },
+          {
+            "type": "boolean",
+            "description": "Short form: default boolean value"
+          },
+          {
+            "type": "number",
+            "description": "Short form: default number value"
+          },
+          {
+            "$ref": "#/$defs/variableDefinition"
+          }
+        ]
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Pre and post scaffold hooks",
+      "additionalProperties": false,
+      "properties": {
+        "pre_scaffold": {
+          "type": "array",
+          "description": "Commands to run before scaffolding",
+          "items": {
+            "type": "string"
+          }
+        },
+        "post_scaffold": {
+          "type": "array",
+          "description": "Commands to run after scaffolding",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "variableDefinition": {
+      "type": "object",
+      "description": "Long form variable definition",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Variable type",
+          "enum": ["string", "boolean", "number", "choice"]
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Prompt message for interactive input"
+        },
+        "default": {
+          "description": "Default value for the variable"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the variable is required",
+          "default": false
+        },
+        "options": {
+          "type": "array",
+          "description": "Options for choice type variables",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "secret": {
+          "type": "boolean",
+          "description": "Whether to hide input (for passwords)",
+          "default": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "choice"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["options"]
+          }
+        }
+      ]
+    }
+  }
+}

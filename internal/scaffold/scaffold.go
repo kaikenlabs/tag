@@ -1,0 +1,274 @@
+package scaffold
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/kaikenlabs/tag/internal/schema"
+	"github.com/kaikenlabs/tag/internal/template"
+)
+
+// Scaffold orchestrates the scaffolding process.
+type Scaffold struct {
+	Validator   *schema.Validator
+	Collector   VariableCollector
+	Processor   PathProcessor
+	Writer      OutputWriter
+	Engine      *template.Engine
+	Prompter    Prompter
+	DryRun      bool
+	Verbose     bool
+	ProjectName string // Override for project_name variable
+}
+
+// NewScaffold creates a new scaffold instance with default dependencies.
+func NewScaffold(opts Options) (*Scaffold, error) {
+	// Create template engine
+	engine, err := template.NewEngine()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create template engine: %w", err)
+	}
+
+	// Create schema validator
+	validator, err := schema.NewValidator()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create schema validator: %w", err)
+	}
+
+	// Create prompter based on TTY status and --no-input flag
+	prompter := GetPrompter(opts.NoInput)
+
+	// Create other components
+	collector := NewVariableCollector(prompter)
+	processor := NewPathProcessor()
+	writer := NewOutputWriter(engine, processor)
+
+	return &Scaffold{
+		Validator:   validator,
+		Collector:   collector,
+		Processor:   processor,
+		Writer:      writer,
+		Engine:      engine,
+		Prompter:    prompter,
+		ProjectName: opts.ProjectName,
+	}, nil
+}
+
+// Run executes the scaffolding process.
+func (s *Scaffold) Run(opts Options) error {
+	// Step 1: Validate template directory exists
+	if _, err := os.Stat(opts.TemplateDir); os.IsNotExist(err) {
+		return fmt.Errorf("%w: %s", ErrTemplateNotFound, opts.TemplateDir)
+	}
+
+	// Step 2: Load and validate tag.template.json
+	config, err := s.loadAndValidateConfig(opts.TemplateDir)
+	if err != nil {
+		return err
+	}
+
+	// Step 3: Collect variables
+	collectOpts := CollectOptions{
+		ValuesFile: opts.ValuesFile,
+		Meta:       opts.Meta,
+		NoPrompt:   opts.NoInput,
+		IsTTY:      IsTTY(),
+	}
+
+	// Add project name to meta if provided
+	if opts.ProjectName != "" {
+		if collectOpts.Meta == nil {
+			collectOpts.Meta = make(map[string]string)
+		}
+		collectOpts.Meta["project_name"] = opts.ProjectName
+	}
+
+	vars, err := s.Collector.Collect(config, collectOpts)
+	if err != nil {
+		return fmt.Errorf("failed to collect variables: %w", err)
+	}
+
+	// Step 4: Determine output directory
+	outputDir := opts.OutputDir
+	if outputDir == "" {
+		// Use project_name as output directory
+		if projectName, ok := vars["project_name"].(string); ok && projectName != "" {
+			outputDir = projectName
+		} else {
+			return fmt.Errorf("output directory not specified and project_name variable not set")
+		}
+	}
+
+	// Make output directory absolute
+	if !filepath.IsAbs(outputDir) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+		outputDir = filepath.Join(cwd, outputDir)
+	}
+
+	// Step 5: Safety check for dangerous paths when using --force
+	if opts.Force {
+		if err := validateSafeOutputDir(outputDir); err != nil {
+			return fmt.Errorf("refusing to use --force with unsafe path: %w", err)
+		}
+	}
+
+	// Check output directory doesn't exist (unless --force)
+	if _, err := os.Stat(outputDir); err == nil {
+		if !opts.Force {
+			return fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, outputDir)
+		}
+		// Remove existing directory
+		if err := os.RemoveAll(outputDir); err != nil {
+			return fmt.Errorf("failed to remove existing output: %w", err)
+		}
+	}
+
+	// Step 6: Create output directory (renumbered after safety check)
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Step 7: Process template files
+	if err := s.Writer.Write(opts.TemplateDir, outputDir, vars); err != nil {
+		// Clean up on error
+		_ = os.RemoveAll(outputDir)
+		return fmt.Errorf("failed to process template: %w", err)
+	}
+
+	// Step 8: Copy _generators to _templates
+	if err := CopyGenerators(opts.TemplateDir, outputDir); err != nil {
+		// Clean up on error
+		_ = os.RemoveAll(outputDir)
+		return fmt.Errorf("failed to copy generators: %w", err)
+	}
+
+	// Step 9: Generate .tagconfig.json
+	if err := GenerateTagConfig(outputDir); err != nil {
+		return fmt.Errorf("failed to generate tagconfig: %w", err)
+	}
+
+	// Step 10: Display summary
+	s.displaySummary(outputDir, vars)
+
+	return nil
+}
+
+// loadAndValidateConfig loads tag.template.json and validates it against the schema.
+func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, error) {
+	configPath := filepath.Join(templateDir, "tag.template.json")
+
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("%w: %s", ErrConfigNotFound, configPath)
+	}
+
+	// Read config file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	// Validate against schema
+	if err := s.Validator.Validate(data); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	// Parse config
+	config, err := ParseTemplateConfig(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	return config, nil
+}
+
+// displaySummary prints a summary of the scaffolding operation.
+func (s *Scaffold) displaySummary(outputDir string, vars map[string]any) {
+	fmt.Println()
+	fmt.Println("Scaffolding complete!")
+	fmt.Printf("  Output: %s\n", outputDir)
+
+	// Show key variables
+	if projectName, ok := vars["project_name"].(string); ok {
+		fmt.Printf("  Project: %s\n", projectName)
+	}
+
+	fmt.Println()
+	fmt.Println("Next steps:")
+	fmt.Printf("  cd %s\n", outputDir)
+	fmt.Println()
+}
+
+// Result contains the result of a scaffolding operation.
+type Result struct {
+	OutputDir      string
+	Variables      map[string]any
+	FilesCount     int
+	DirsCount      int
+	TemplatesCount int
+}
+
+// validateSafeOutputDir checks that the output directory is safe for deletion with --force.
+// This prevents accidentally deleting critical system directories.
+func validateSafeOutputDir(outputDir string) error {
+	// Get absolute, cleaned path
+	absPath, err := filepath.Abs(filepath.Clean(outputDir))
+	if err != nil {
+		return fmt.Errorf("failed to resolve path: %w", err)
+	}
+
+	// Reject root directories
+	if absPath == "/" || absPath == filepath.VolumeName(absPath)+string(filepath.Separator) {
+		return fmt.Errorf("cannot use root directory as output")
+	}
+
+	// Reject common dangerous paths
+	homeDir, _ := os.UserHomeDir()
+	dangerousPaths := []string{
+		"/",
+		"/usr",
+		"/etc",
+		"/var",
+		"/bin",
+		"/sbin",
+		"/lib",
+		"/opt",
+		"/tmp",
+		"/home",
+		"/root",
+		homeDir, // User's home directory
+	}
+
+	for _, dangerous := range dangerousPaths {
+		if dangerous == "" {
+			continue
+		}
+		absDangerous, err := filepath.Abs(dangerous)
+		if err != nil {
+			continue
+		}
+		if absPath == absDangerous {
+			return fmt.Errorf("cannot use %s as output directory", dangerous)
+		}
+	}
+
+	// Reject paths that are too short (e.g., /a, /ab) as they're likely mistakes
+	parts := strings.Split(strings.TrimPrefix(absPath, filepath.VolumeName(absPath)), string(filepath.Separator))
+	// Filter empty parts
+	nonEmpty := make([]string, 0)
+	for _, p := range parts {
+		if p != "" {
+			nonEmpty = append(nonEmpty, p)
+		}
+	}
+	if len(nonEmpty) < 2 {
+		return fmt.Errorf("output path %s is too shallow (must be at least 2 levels deep)", outputDir)
+	}
+
+	return nil
+}

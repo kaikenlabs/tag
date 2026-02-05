@@ -44,6 +44,7 @@ func main() {
 			commands.NewCommand(cfg),
 			commands.BundleCommand(cfg),
 			commands.GenerateCommand(cfg),
+			commands.ScaffoldCommand(),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
