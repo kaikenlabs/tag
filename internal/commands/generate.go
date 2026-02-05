@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.com/Vitrifi/tag/internal/types/flags"
-	"gitlab.com/Vitrifi/tag/pkg/app"
+	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
 
+	"github.com/kaikenlabs/tag/internal/chalk"
+	"github.com/kaikenlabs/tag/internal/config"
+	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/urfave/cli/v2"
-	"gitlab.com/Vitrifi/tag/internal/chalk"
-	"gitlab.com/Vitrifi/tag/internal/config"
-	"gitlab.com/Vitrifi/tag/internal/engine"
 )
 
 func GenerateCommand(cfg *config.Config) *cli.Command {

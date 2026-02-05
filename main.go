@@ -4,12 +4,12 @@ import (
 	"log/slog"
 	"os"
 
-	"gitlab.com/Vitrifi/tag/pkg/prettylog"
+	"github.com/kaikenlabs/tag/pkg/prettylog"
 
-	"gitlab.com/Vitrifi/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 
-	"gitlab.com/Vitrifi/tag/internal/commands"
-	"gitlab.com/Vitrifi/tag/internal/config"
+	"github.com/kaikenlabs/tag/internal/commands"
+	"github.com/kaikenlabs/tag/internal/config"
 
 	"github.com/urfave/cli/v2"
 )

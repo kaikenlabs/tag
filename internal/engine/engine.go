@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"strings"
 
-	"gitlab.com/Vitrifi/tag/internal/formats"
+	"github.com/kaikenlabs/tag/internal/formats"
 
-	"gitlab.com/Vitrifi/tag/internal/chalk"
-	"gitlab.com/Vitrifi/tag/internal/parser"
-	"gitlab.com/Vitrifi/tag/internal/writer"
+	"github.com/kaikenlabs/tag/internal/chalk"
+	"github.com/kaikenlabs/tag/internal/parser"
+	"github.com/kaikenlabs/tag/internal/writer"
 )
 
 const (

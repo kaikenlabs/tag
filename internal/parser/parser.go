@@ -8,7 +8,7 @@ import (
 	"text/template"
 
 	"github.com/gobuffalo/flect"
-	"gitlab.com/Vitrifi/tag/internal/formats"
+	"github.com/kaikenlabs/tag/internal/formats"
 )
 
 const (

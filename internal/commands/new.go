@@ -7,11 +7,11 @@ import (
 	"path"
 	"path/filepath"
 
-	"gitlab.com/Vitrifi/tag/pkg/app"
+	"github.com/kaikenlabs/tag/pkg/app"
 
+	"github.com/kaikenlabs/tag/internal/chalk"
+	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/urfave/cli/v2"
-	"gitlab.com/Vitrifi/tag/internal/chalk"
-	"gitlab.com/Vitrifi/tag/internal/config"
 )
 
 func NewCommand(cfg *config.Config) *cli.Command {

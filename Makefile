@@ -21,7 +21,7 @@ MAKE_LIB:=$(PROJECT_ROOT)/scripts
 -include $(MAKE_LIB)/generator.mk
 
 
-GO_BUILD_FLAGS=-ldflags="-X 'gitlab.com/Vitrifi/team-automation/tag/internal/commands.version=dev-$(BRANCH)-$(COMMIT)'"
+GO_BUILD_FLAGS=-ldflags="-X 'github.com/kaikenlabs/tag/internal/commands.version=dev-$(BRANCH)-$(COMMIT)'"
 
 #####################
 ##@ Main   

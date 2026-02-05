@@ -1,17 +1,16 @@
-# Team Automation Generator (a.k.a. TAG)
+# TAG
 
-This is a code generator based on [Pyrotic](https://github.com/code-gorilla-au/pyrotic) to use by the Automation team (and
-anyone who likes it!)
+This is a code generator based on [Pyrotic](https://github.com/code-gorilla-au/pyrotic) but a few perks and features added.
 
 ## Motivation
 
-Pyrotic is cool. I like it. But, it is incomplete and insufficient for the uses we need.\
+Pyrotic is cool. I like it. But, it is incomplete and insufficient for the uses I need.  
 So, I took it upon myself to modify it and improve it to have a much better template generation system.
 
 ## Install
 
 ```
-go install gitlab.com/Vitrifi/team-automation/tag@latest
+go install github.com/kaikenlabs/tag@latest
 ```
 
 ## Initialise the templates directory
@@ -30,8 +29,8 @@ Now you can create your first generator:
 tag new my_generator
 ```
 
-A generator is a template or a collection of templates that can be create or added to existing files.\
-To edit your generator, go to the `_templates` directory created and edit it.\
+A generator is a template or a collection of templates that can be created or added to existing files.  
+To edit your generator, go to the `_templates` directory created and edit it.  
 _TAG_ uses [Go's template language](https://pkg.go.dev/text/template#pkg-overview) so you can build your templates with
 ease.
 
@@ -53,7 +52,7 @@ tag generate my_generator myObject
 
 ## Hooks
 
-`tag` offers the ability of adding pre and post hooks for both generators and bundles.
+`tag` offers the ability of adding pre- and post- hooks for both generators and bundles.
 
 As an example, for Go it could be useful to run:
 
@@ -84,11 +83,11 @@ As an example, for Go it could be useful to run:
 
 _TAG_ will expose the following data to each template:
 
-| Property | Description                                                                                            | Type              | Default | Example                         |
-|----------|--------------------------------------------------------------------------------------------------------|-------------------|---------|---------------------------------|
-| Name     | The name you passed in the command line                                                                | string            | ""      | my_generator                    |
-| Args     | The arguments you passed in the command line. It is free form so you can manipulate it in the template | string            | nil     | age:int,name:string             |
-| Meta     | Additional arguments you can pass from the command line with the `--meta` flag                         | map[string]string | nil     | map[string]string{"foo": "bar"} |
+| Property | Description                                                                                            | Type                | Default | Example                           |
+|----------|--------------------------------------------------------------------------------------------------------|---------------------|---------|-----------------------------------|
+| Name     | The name you passed in the command line                                                                | `string`            | ""      | `my_generator`                    |
+| Args     | The arguments you passed in the command line. It is free form so you can manipulate it in the template | `string`            | nil     | `age:int,name:string`             |
+| Meta     | Additional arguments you can pass from the command line with the `--meta` flag                         | `map[string]string` | nil     | `map[string]string{"foo": "bar"}` |
 
 A quick example:
 

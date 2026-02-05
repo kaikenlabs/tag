@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kaikenlabs/tag/pkg/app"
 	"github.com/urfave/cli/v2"
-	"gitlab.com/Vitrifi/tag/pkg/app"
 
-	"gitlab.com/Vitrifi/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 )
 
 const File = ".tagconfig.json"

@@ -8,14 +8,14 @@ import (
 	"path"
 	"path/filepath"
 
-	"gitlab.com/Vitrifi/tag/pkg/app"
+	"github.com/kaikenlabs/tag/pkg/app"
 
-	"gitlab.com/Vitrifi/tag/internal/engine"
-	"gitlab.com/Vitrifi/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 
+	"github.com/kaikenlabs/tag/internal/chalk"
+	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/urfave/cli/v2"
-	"gitlab.com/Vitrifi/tag/internal/chalk"
-	"gitlab.com/Vitrifi/tag/internal/config"
 )
 
 const BundleExtension = ".json"

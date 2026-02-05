@@ -28,3 +28,9 @@ go.work.sum
 .idea
 bin
 .tagconfig.json
+
+# AI related files
+.mcp.json
+.serena
+.claude
+claudedocs

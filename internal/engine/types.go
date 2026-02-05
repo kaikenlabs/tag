@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"gitlab.com/Vitrifi/tag/internal/parser"
-	"gitlab.com/Vitrifi/tag/internal/writer"
+	"github.com/kaikenlabs/tag/internal/parser"
+	"github.com/kaikenlabs/tag/internal/writer"
 )
 
 type Core struct {
