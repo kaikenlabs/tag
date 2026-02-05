@@ -1,0 +1,253 @@
+package remote
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+)
+
+// GitFetcher fetches templates from Git repositories.
+type GitFetcher struct {
+	auth AuthProvider
+}
+
+// NewGitFetcher creates a new Git fetcher with the given auth provider.
+func NewGitFetcher(auth AuthProvider) *GitFetcher {
+	if auth == nil {
+		auth = NewEnvAuthProvider()
+	}
+	return &GitFetcher{auth: auth}
+}
+
+// Fetch clones the repository and returns the path to the template.
+// If ref.SubPath is set, returns the path to that subdirectory.
+func (f *GitFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) {
+	if ref.Type != ReferenceTypeGit {
+		return "", &FetchError{Ref: ref, Message: "not a Git reference"}
+	}
+
+	// Create temporary directory for clone
+	tmpDir, err := os.MkdirTemp("", "tag-git-*")
+	if err != nil {
+		return "", &FetchError{Ref: ref, Message: "cannot create temp directory", Err: err}
+	}
+
+	// Clean up on error
+	success := false
+	defer func() {
+		if !success {
+			os.RemoveAll(tmpDir)
+		}
+	}()
+
+	// Clone the repository
+	repo, err := f.clone(ctx, ref, tmpDir)
+	if err != nil {
+		return "", err
+	}
+
+	// Checkout specific version if requested
+	if ref.Version != "" {
+		if err := f.checkout(repo, ref); err != nil {
+			return "", err
+		}
+	}
+
+	// Determine the result path
+	resultPath := tmpDir
+	if ref.SubPath != "" {
+		resultPath = filepath.Join(tmpDir, ref.SubPath)
+		// Verify subpath exists
+		info, err := os.Stat(resultPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return "", &FetchError{
+					Ref:     ref,
+					Message: fmt.Sprintf("subpath %q not found in repository", ref.SubPath),
+					Err:     ErrSubPathNotFound,
+				}
+			}
+			return "", &FetchError{Ref: ref, Message: "cannot access subpath", Err: err}
+		}
+		if !info.IsDir() {
+			return "", &FetchError{
+				Ref:     ref,
+				Message: fmt.Sprintf("subpath %q is not a directory", ref.SubPath),
+			}
+		}
+	}
+
+	success = true
+	return resultPath, nil
+}
+
+// clone performs the Git clone operation.
+func (f *GitFetcher) clone(ctx context.Context, ref *Reference, destDir string) (*git.Repository, error) {
+	// Get auth if available
+	auth, err := f.auth.GitAuth(ref)
+	if err != nil {
+		return nil, &FetchError{Ref: ref, Message: "auth setup failed", Err: err}
+	}
+
+	opts := &git.CloneOptions{
+		URL:   ref.URL,
+		Depth: 1, // Shallow clone for efficiency
+		Auth:  auth,
+	}
+
+	// If we have a specific version, we might need to fetch it
+	// For tags/branches, we can set the reference name
+	if ref.Version != "" {
+		// Try as a branch first (most common for "main", "master", etc.)
+		opts.ReferenceName = plumbing.NewBranchReferenceName(ref.Version)
+		opts.SingleBranch = true
+	}
+
+	repo, err := git.PlainCloneContext(ctx, destDir, false, opts)
+	if err != nil {
+		// If branch failed, try without specific reference
+		// (we'll checkout the tag/commit later)
+		if ref.Version != "" && isBranchNotFoundError(err) {
+			opts.ReferenceName = ""
+			opts.SingleBranch = false
+			repo, err = git.PlainCloneContext(ctx, destDir, false, opts)
+		}
+
+		if err != nil {
+			return nil, f.wrapCloneError(ref, err)
+		}
+	}
+
+	return repo, nil
+}
+
+// checkout checks out a specific version (tag, branch, or commit).
+func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
+	wt, err := repo.Worktree()
+	if err != nil {
+		return &FetchError{Ref: ref, Message: "cannot get worktree", Err: err}
+	}
+
+	// Try different reference types in order:
+	// 1. Tag
+	// 2. Branch
+	// 3. Commit SHA
+
+	// Try as tag
+	tagRef := plumbing.NewTagReferenceName(ref.Version)
+	if _, err := repo.Reference(tagRef, true); err == nil {
+		err = wt.Checkout(&git.CheckoutOptions{
+			Branch: tagRef,
+			Force:  true,
+		})
+		if err == nil {
+			return nil
+		}
+	}
+
+	// Try as remote branch
+	branchRef := plumbing.NewRemoteReferenceName("origin", ref.Version)
+	if _, err := repo.Reference(branchRef, true); err == nil {
+		err = wt.Checkout(&git.CheckoutOptions{
+			Branch: branchRef,
+			Force:  true,
+		})
+		if err == nil {
+			return nil
+		}
+	}
+
+	// Try as commit SHA
+	if looksLikeCommitSHA(ref.Version) {
+		hash := plumbing.NewHash(ref.Version)
+		err = wt.Checkout(&git.CheckoutOptions{
+			Hash:  hash,
+			Force: true,
+		})
+		if err == nil {
+			return nil
+		}
+	}
+
+	return &FetchError{
+		Ref:     ref,
+		Message: fmt.Sprintf("version %q not found (tried as tag, branch, and commit)", ref.Version),
+		Err:     ErrVersionNotFound,
+	}
+}
+
+// wrapCloneError wraps clone errors with helpful messages.
+func (f *GitFetcher) wrapCloneError(ref *Reference, err error) error {
+	errStr := err.Error()
+
+	// Check for auth errors
+	if strings.Contains(errStr, "authentication") ||
+		strings.Contains(errStr, "401") ||
+		strings.Contains(errStr, "403") {
+		return &AuthError{
+			Provider: ref.Provider,
+			Message:  "repository access denied",
+			Err:      err,
+		}
+	}
+
+	// Check for not found
+	if strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "404") ||
+		strings.Contains(errStr, "repository not found") {
+		return &FetchError{
+			Ref:     ref,
+			Message: "repository not found",
+			Err:     ErrNotFound,
+		}
+	}
+
+	return &FetchError{Ref: ref, Message: "clone failed", Err: err}
+}
+
+// isBranchNotFoundError checks if the error is due to a branch not being found.
+func isBranchNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "reference not found") ||
+		strings.Contains(errStr, "couldn't find remote ref")
+}
+
+// looksLikeCommitSHA checks if the string looks like a commit SHA.
+func looksLikeCommitSHA(s string) bool {
+	if len(s) < 7 || len(s) > 40 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// Fetcher is the interface for all fetchers.
+type Fetcher interface {
+	Fetch(ctx context.Context, ref *Reference) (path string, err error)
+}
+
+// Ensure GitFetcher implements Fetcher.
+var _ Fetcher = (*GitFetcher)(nil)
+
+// CleanupTempDir removes a temporary directory created by Fetch.
+// This should be called after the template has been cached.
+func CleanupTempDir(path string) error {
+	// Safety check: only remove paths that look like temp directories
+	if !strings.Contains(path, "tag-git-") && !strings.Contains(path, "tag-zip-") {
+		return errors.New("refusing to remove non-temp directory")
+	}
+	return os.RemoveAll(path)
+}

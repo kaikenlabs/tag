@@ -9,14 +9,14 @@ import (
 
 // Metadata extraction and parsing errors.
 var (
-	ErrNoMetadataBlock     = errors.New("no metadata block found")
-	ErrMalformedMetadata   = errors.New("malformed metadata line")
-	ErrInvalidBoolValue    = errors.New("invalid boolean value")
-	ErrConflictingAction   = errors.New("conflicting action: cannot have both append and inject")
-	ErrMissingInjection    = errors.New("inject action requires before or after clause")
-	ErrMissingToField      = errors.New("missing required 'to' field in metadata")
-	ErrEmptyInjectMatcher  = errors.New("inject clause requires non-empty matcher value")
-	ErrOrphanInjectClause  = errors.New("before/after clause without inject: true is ignored")
+	ErrNoMetadataBlock    = errors.New("no metadata block found")
+	ErrMalformedMetadata  = errors.New("malformed metadata line")
+	ErrInvalidBoolValue   = errors.New("invalid boolean value")
+	ErrConflictingAction  = errors.New("conflicting action: cannot have both append and inject")
+	ErrMissingInjection   = errors.New("inject action requires before or after clause")
+	ErrMissingToField     = errors.New("missing required 'to' field in metadata")
+	ErrEmptyInjectMatcher = errors.New("inject clause requires non-empty matcher value")
+	ErrOrphanInjectClause = errors.New("before/after clause without inject: true is ignored")
 )
 
 // Action represents the type of file operation to perform.
