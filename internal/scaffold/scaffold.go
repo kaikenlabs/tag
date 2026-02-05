@@ -19,6 +19,7 @@ type Scaffold struct {
 	Writer      OutputWriter
 	Engine      *template.Engine
 	Prompter    Prompter
+	HookRunner  HookRunner // Executes pre/post scaffold hooks
 	DryRun      bool
 	Verbose     bool
 	ProjectName string // Override for project_name variable
@@ -53,6 +54,7 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 		Writer:      writer,
 		Engine:      engine,
 		Prompter:    prompter,
+		HookRunner:  NewHookRunner(),
 		ProjectName: opts.ProjectName,
 	}, nil
 }
@@ -131,31 +133,52 @@ func (s *Scaffold) Run(opts Options) error {
 		}
 	}
 
-	// Step 6: Create output directory (renumbered after safety check)
+	// Make template directory absolute for hooks
+	templateDirAbs := opts.TemplateDir
+	if !filepath.IsAbs(templateDirAbs) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+		templateDirAbs = filepath.Join(cwd, templateDirAbs)
+	}
+
+	// Step 6: Build hook environment
+	hookEnv := BuildHookEnv(vars, templateDirAbs, outputDir)
+
+	// Step 7: Run pre-scaffold hooks (before creating output directory)
+	if err := RunPreScaffoldHooks(s.HookRunner, config.Hooks, templateDirAbs, hookEnv); err != nil {
+		return fmt.Errorf("pre-scaffold hook failed: %w", err)
+	}
+
+	// Step 8: Create output directory
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Step 7: Process template files
+	// Step 9: Process template files
 	if err := s.Writer.Write(opts.TemplateDir, outputDir, vars); err != nil {
 		// Clean up on error
 		_ = os.RemoveAll(outputDir)
 		return fmt.Errorf("failed to process template: %w", err)
 	}
 
-	// Step 8: Copy _generators to _templates
+	// Step 10: Copy _generators to _templates
 	if err := CopyGenerators(opts.TemplateDir, outputDir); err != nil {
 		// Clean up on error
 		_ = os.RemoveAll(outputDir)
 		return fmt.Errorf("failed to copy generators: %w", err)
 	}
 
-	// Step 9: Generate .tagconfig.json
+	// Step 11: Generate .tagconfig.json
 	if err := GenerateTagConfig(outputDir); err != nil {
 		return fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
-	// Step 10: Save replay data (unless --no-save)
+	// Step 12: Run post-scaffold hooks (failures are warnings, not errors)
+	RunPostScaffoldHooks(s.HookRunner, config.Hooks, outputDir, hookEnv)
+
+	// Step 13: Save replay data (unless --no-save)
 	if !opts.NoSave && opts.TemplateRef != "" {
 		// Build secrets map from variable definitions
 		secrets := make(map[string]bool)
@@ -172,7 +195,7 @@ func (s *Scaffold) Run(opts Options) error {
 		}
 	}
 
-	// Step 11: Display summary
+	// Step 14: Display summary
 	s.displaySummary(outputDir, vars)
 
 	return nil

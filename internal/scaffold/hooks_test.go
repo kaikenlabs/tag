@@ -1,0 +1,837 @@
+package scaffold
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// MockHookRunner is a mock implementation of HookRunner for testing.
+type MockHookRunner struct {
+	RunFunc func(phase HookPhase, commands []string, workDir string, env []string) ([]HookResult, error)
+	Calls   []MockHookCall
+}
+
+type MockHookCall struct {
+	Phase    HookPhase
+	Commands []string
+	WorkDir  string
+	Env      []string
+}
+
+func (m *MockHookRunner) Run(phase HookPhase, commands []string, workDir string, env []string) ([]HookResult, error) {
+	m.Calls = append(m.Calls, MockHookCall{
+		Phase:    phase,
+		Commands: commands,
+		WorkDir:  workDir,
+		Env:      env,
+	})
+	if m.RunFunc != nil {
+		return m.RunFunc(phase, commands, workDir, env)
+	}
+	// Default: return success for all commands
+	results := make([]HookResult, len(commands))
+	for i, cmd := range commands {
+		results[i] = HookResult{Command: cmd, ExitCode: 0}
+	}
+	return results, nil
+}
+
+// --- Unit Tests for BuildHookEnv ---
+
+func TestUT_BuildHookEnv_BasicVariables(t *testing.T) {
+	vars := map[string]any{
+		"project_name": "my_project",
+		"author":       "John Doe",
+	}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	// Check TAG-specific variables
+	assertEnvContains(t, env, "TAG_TEMPLATE_DIR=/template")
+	assertEnvContains(t, env, "TAG_OUTPUT_DIR=/output")
+	assertEnvContains(t, env, "TAG_PROJECT_NAME=my_project")
+	assertEnvContains(t, env, "TAG_VAR_PROJECT_NAME=my_project")
+	assertEnvContains(t, env, "TAG_VAR_AUTHOR=John Doe")
+}
+
+func TestUT_BuildHookEnv_BooleanVariables(t *testing.T) {
+	vars := map[string]any{
+		"use_docker": true,
+		"use_ci":     false,
+	}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	assertEnvContains(t, env, "TAG_VAR_USE_DOCKER=true")
+	assertEnvContains(t, env, "TAG_VAR_USE_CI=false")
+}
+
+func TestUT_BuildHookEnv_NumberVariables(t *testing.T) {
+	vars := map[string]any{
+		"port":    float64(8080),
+		"version": float64(1.5),
+	}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	assertEnvContains(t, env, "TAG_VAR_PORT=8080")
+	assertEnvContains(t, env, "TAG_VAR_VERSION=1.5")
+}
+
+func TestUT_BuildHookEnv_ComplexVariables(t *testing.T) {
+	vars := map[string]any{
+		"features": []any{"auth", "logging", "metrics"},
+		"config": map[string]any{
+			"key": "value",
+		},
+	}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	// Complex types should be JSON encoded
+	assertEnvContainsPrefix(t, env, "TAG_VAR_FEATURES=")
+	assertEnvContainsPrefix(t, env, "TAG_VAR_CONFIG=")
+
+	// Verify JSON encoding
+	for _, e := range env {
+		if strings.HasPrefix(e, "TAG_VAR_FEATURES=") {
+			value := strings.TrimPrefix(e, "TAG_VAR_FEATURES=")
+			var arr []string
+			err := json.Unmarshal([]byte(value), &arr)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"auth", "logging", "metrics"}, arr)
+		}
+	}
+}
+
+func TestUT_BuildHookEnv_SpecialCharactersInNames(t *testing.T) {
+	vars := map[string]any{
+		"project-name":  "test",
+		"use_docker":    true,
+		"CamelCaseVar":  "value",
+		"with.dots":     "dotted",
+		"with spaces":   "spaced",
+		"with@special!": "special",
+	}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	// All should be converted to uppercase with underscores
+	assertEnvContains(t, env, "TAG_VAR_PROJECT_NAME=test")
+	assertEnvContains(t, env, "TAG_VAR_USE_DOCKER=true")
+	assertEnvContains(t, env, "TAG_VAR_CAMELCASEVAR=value")
+	assertEnvContains(t, env, "TAG_VAR_WITH_DOTS=dotted")
+	assertEnvContains(t, env, "TAG_VAR_WITH_SPACES=spaced")
+	assertEnvContains(t, env, "TAG_VAR_WITH_SPECIAL_=special")
+}
+
+func TestUT_BuildHookEnv_EmptyVars(t *testing.T) {
+	vars := map[string]any{}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	// Should still have TAG_TEMPLATE_DIR and TAG_OUTPUT_DIR
+	assertEnvContains(t, env, "TAG_TEMPLATE_DIR=/template")
+	assertEnvContains(t, env, "TAG_OUTPUT_DIR=/output")
+	// Should not have TAG_PROJECT_NAME if not in vars
+	assertEnvNotContainsPrefix(t, env, "TAG_PROJECT_NAME=")
+}
+
+func TestUT_BuildHookEnv_IncludesSystemEnv(t *testing.T) {
+	vars := map[string]any{}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	// Should include PATH from system environment
+	hasPath := false
+	for _, e := range env {
+		if strings.HasPrefix(e, "PATH=") || strings.HasPrefix(e, "Path=") {
+			hasPath = true
+			break
+		}
+	}
+	assert.True(t, hasPath, "should include system PATH")
+}
+
+// --- Unit Tests for formatEnvKey ---
+
+func TestUT_FormatEnvKey(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"project_name", "TAG_VAR_PROJECT_NAME"},
+		{"projectName", "TAG_VAR_PROJECTNAME"},
+		{"project-name", "TAG_VAR_PROJECT_NAME"},
+		{"use.docker", "TAG_VAR_USE_DOCKER"},
+		{"CamelCase", "TAG_VAR_CAMELCASE"},
+		{"ALREADY_UPPER", "TAG_VAR_ALREADY_UPPER"},
+		{"123numeric", "TAG_VAR_123NUMERIC"},
+		{"with spaces", "TAG_VAR_WITH_SPACES"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := formatEnvKey(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// --- Unit Tests for stringifyValue ---
+
+func TestUT_StringifyValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    any
+		expected string
+	}{
+		{"string", "hello", "hello"},
+		{"bool true", true, "true"},
+		{"bool false", false, "false"},
+		{"integer float", float64(42), "42"},
+		{"decimal float", float64(3.14), "3.14"},
+		{"int", int(100), "100"},
+		{"int64", int64(999), "999"},
+		{"slice", []any{"a", "b"}, `["a","b"]`},
+		{"map", map[string]any{"k": "v"}, `{"k":"v"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stringifyValue(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// --- Unit Tests for ShellHookRunner ---
+
+func TestUT_ShellHookRunner_SuccessfulCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	results, err := runner.Run(HookPhasePre, []string{"echo hello"}, dir, os.Environ())
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "echo hello", results[0].Command)
+	assert.Equal(t, 0, results[0].ExitCode)
+	assert.Contains(t, results[0].Output, "hello")
+}
+
+func TestUT_ShellHookRunner_MultipleCommands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	results, err := runner.Run(HookPhasePre, []string{"echo first", "echo second"}, dir, os.Environ())
+
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	assert.Contains(t, results[0].Output, "first")
+	assert.Contains(t, results[1].Output, "second")
+}
+
+func TestUT_ShellHookRunner_FirstCommandFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	results, err := runner.Run(HookPhasePre, []string{"exit 1", "echo should not run"}, dir, os.Environ())
+
+	require.Error(t, err)
+	require.Len(t, results, 1) // Only first command was executed
+	assert.Equal(t, 1, results[0].ExitCode)
+
+	// Verify it's a HookError
+	hookErr, ok := err.(*HookError)
+	require.True(t, ok)
+	assert.Equal(t, HookPhasePre, hookErr.Phase)
+	assert.Equal(t, "exit 1", hookErr.Command)
+}
+
+func TestUT_ShellHookRunner_MiddleCommandFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	results, err := runner.Run(HookPhasePre, []string{"echo first", "exit 2", "echo third"}, dir, os.Environ())
+
+	require.Error(t, err)
+	require.Len(t, results, 2) // First two commands were executed
+	assert.Equal(t, 0, results[0].ExitCode)
+	assert.Equal(t, 2, results[1].ExitCode)
+}
+
+func TestUT_ShellHookRunner_EmptyCommands(t *testing.T) {
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	results, err := runner.Run(HookPhasePre, []string{}, dir, os.Environ())
+
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
+func TestUT_ShellHookRunner_NilCommands(t *testing.T) {
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	results, err := runner.Run(HookPhasePre, nil, dir, os.Environ())
+
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
+func TestUT_ShellHookRunner_WorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	results, err := runner.Run(HookPhasePre, []string{"pwd"}, dir, os.Environ())
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Output, dir)
+}
+
+func TestUT_ShellHookRunner_EnvironmentVariables(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+	env := append(os.Environ(), "TAG_TEST_VAR=test_value")
+
+	results, err := runner.Run(HookPhasePre, []string{"echo $TAG_TEST_VAR"}, dir, env)
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Output, "test_value")
+}
+
+func TestUT_ShellHookRunner_CapturesStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	results, err := runner.Run(HookPhasePre, []string{"echo error >&2"}, dir, os.Environ())
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Output, "error")
+}
+
+func TestUT_ShellHookRunner_EmptyEnvUsesSystemEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ShellHookRunner{}
+	dir := t.TempDir()
+
+	// With nil/empty env, should still work (uses os.Environ internally)
+	results, err := runner.Run(HookPhasePre, []string{"echo $PATH"}, dir, nil)
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	// PATH should exist and have some content
+	assert.NotEmpty(t, strings.TrimSpace(results[0].Output))
+}
+
+func TestUT_LimitedBuffer_TruncatesLargeOutput(t *testing.T) {
+	buf := &limitedBuffer{max: 100}
+
+	// Write 50 bytes - should succeed
+	n, err := buf.Write([]byte(strings.Repeat("a", 50)))
+	assert.NoError(t, err)
+	assert.Equal(t, 50, n)
+	assert.Len(t, buf.String(), 50)
+
+	// Write 60 more bytes - should be truncated
+	n, err = buf.Write([]byte(strings.Repeat("b", 60)))
+	assert.NoError(t, err)
+	assert.Equal(t, 60, n) // Reports full write but truncates internally
+
+	output := buf.String()
+	assert.Contains(t, output, "truncated")
+	assert.True(t, len(output) < 200) // Much less than 110 + message
+}
+
+func TestUT_LimitedBuffer_HandlesExactLimit(t *testing.T) {
+	buf := &limitedBuffer{max: 10}
+
+	// Write exactly 10 bytes
+	n, err := buf.Write([]byte("1234567890"))
+	assert.NoError(t, err)
+	assert.Equal(t, 10, n)
+	assert.Equal(t, "1234567890", buf.String())
+
+	// Next write should trigger truncation
+	n, err = buf.Write([]byte("X"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, n)
+	assert.Contains(t, buf.String(), "truncated")
+}
+
+func TestUT_LimitedBuffer_DiscardsAfterTruncation(t *testing.T) {
+	buf := &limitedBuffer{max: 5}
+
+	// Fill the buffer and trigger truncation
+	_, _ = buf.Write([]byte("12345"))
+	_, _ = buf.Write([]byte("overflow"))
+
+	snapshot := buf.String()
+
+	// Additional writes should be discarded
+	_, _ = buf.Write([]byte("more data"))
+	_, _ = buf.Write([]byte("even more"))
+
+	// Output shouldn't grow beyond the truncation message
+	assert.Equal(t, snapshot, buf.String())
+}
+
+// --- Integration Tests for Scaffold with Hooks ---
+
+func TestIT_Scaffold_PreHookSuccess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template with pre-scaffold hook
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+		"hooks": map[string]any{
+			"pre_scaffold": []string{"echo pre-hook executed"},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	// Create a simple template file
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "test.txt"), []byte("content"), 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Verify output was created
+	assert.DirExists(t, outputDir)
+	assert.FileExists(t, filepath.Join(outputDir, "test.txt"))
+}
+
+func TestIT_Scaffold_PreHookFailure_NoOutputCreated(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template with failing pre-scaffold hook
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+		"hooks": map[string]any{
+			"pre_scaffold": []string{"exit 1"},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "test.txt"), []byte("content"), 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pre-scaffold hook failed")
+
+	// Verify output was NOT created
+	assert.NoDirExists(t, outputDir)
+}
+
+func TestIT_Scaffold_PostHookSuccess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template with post-scaffold hook that creates a marker file
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+		"hooks": map[string]any{
+			"post_scaffold": []string{"touch post_hook_marker.txt"},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "test.txt"), []byte("content"), 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Verify output and marker file were created
+	assert.DirExists(t, outputDir)
+	assert.FileExists(t, filepath.Join(outputDir, "test.txt"))
+	assert.FileExists(t, filepath.Join(outputDir, "post_hook_marker.txt"))
+}
+
+func TestIT_Scaffold_PostHookFailure_OutputPreserved(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template with failing post-scaffold hook
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+		"hooks": map[string]any{
+			"post_scaffold": []string{"exit 1"},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "test.txt"), []byte("content"), 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	// Post-hook failures should NOT cause scaffold to fail
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Verify output was still created despite hook failure
+	assert.DirExists(t, outputDir)
+	assert.FileExists(t, filepath.Join(outputDir, "test.txt"))
+}
+
+func TestIT_Scaffold_HooksReceiveEnvironmentVariables(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template that writes env vars to a file
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "env_test_project",
+			"author":       "Test Author",
+		},
+		"hooks": map[string]any{
+			"post_scaffold": []string{
+				"echo TAG_PROJECT_NAME=$TAG_PROJECT_NAME > env_check.txt",
+				"echo TAG_VAR_PROJECT_NAME=$TAG_VAR_PROJECT_NAME >> env_check.txt",
+				"echo TAG_VAR_AUTHOR=$TAG_VAR_AUTHOR >> env_check.txt",
+				"echo TAG_OUTPUT_DIR=$TAG_OUTPUT_DIR >> env_check.txt",
+			},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Read and verify env check file
+	envContent, err := os.ReadFile(filepath.Join(outputDir, "env_check.txt"))
+	require.NoError(t, err)
+
+	content := string(envContent)
+	assert.Contains(t, content, "TAG_PROJECT_NAME=env_test_project")
+	assert.Contains(t, content, "TAG_VAR_PROJECT_NAME=env_test_project")
+	assert.Contains(t, content, "TAG_VAR_AUTHOR=Test Author")
+	assert.Contains(t, content, "TAG_OUTPUT_DIR="+outputDir)
+}
+
+func TestIT_Scaffold_PreHooksRunInTemplateDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template with pre-hook that writes pwd to a marker file
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+		"hooks": map[string]any{
+			"pre_scaffold": []string{"pwd > pre_hook_pwd.txt"},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Read the marker file created in template directory
+	pwdContent, err := os.ReadFile(filepath.Join(templateDir, "pre_hook_pwd.txt"))
+	require.NoError(t, err)
+	assert.Contains(t, string(pwdContent), templateDir)
+}
+
+func TestIT_Scaffold_PostHooksRunInOutputDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template with post-hook that writes pwd to a marker file
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+		"hooks": map[string]any{
+			"post_scaffold": []string{"pwd > post_hook_pwd.txt"},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Read the marker file created in output directory
+	pwdContent, err := os.ReadFile(filepath.Join(outputDir, "post_hook_pwd.txt"))
+	require.NoError(t, err)
+	assert.Contains(t, string(pwdContent), outputDir)
+}
+
+func TestIT_Scaffold_MultipleHooksExecuteInOrder(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template with multiple hooks that append to a file
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+		"hooks": map[string]any{
+			"post_scaffold": []string{
+				"echo first > order.txt",
+				"echo second >> order.txt",
+				"echo third >> order.txt",
+			},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Verify hooks ran in order
+	orderContent, err := os.ReadFile(filepath.Join(outputDir, "order.txt"))
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(string(orderContent)), "\n")
+	require.Len(t, lines, 3)
+	assert.Equal(t, "first", lines[0])
+	assert.Equal(t, "second", lines[1])
+	assert.Equal(t, "third", lines[2])
+}
+
+func TestIT_Scaffold_NoHooksConfigured(t *testing.T) {
+	// Create template without hooks
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "test.txt"), []byte("content"), 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Verify output was created successfully
+	assert.DirExists(t, outputDir)
+	assert.FileExists(t, filepath.Join(outputDir, "test.txt"))
+}
+
+// --- Helper functions ---
+
+func assertEnvContains(t *testing.T, env []string, expected string) {
+	t.Helper()
+	for _, e := range env {
+		if e == expected {
+			return
+		}
+	}
+	t.Errorf("expected env to contain %q, but it didn't.\nEnv: %v", expected, filterTagEnv(env))
+}
+
+func assertEnvContainsPrefix(t *testing.T, env []string, prefix string) {
+	t.Helper()
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			return
+		}
+	}
+	t.Errorf("expected env to contain entry with prefix %q, but it didn't.\nEnv: %v", prefix, filterTagEnv(env))
+}
+
+func assertEnvNotContainsPrefix(t *testing.T, env []string, prefix string) {
+	t.Helper()
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			t.Errorf("expected env NOT to contain entry with prefix %q, but found %q", prefix, e)
+			return
+		}
+	}
+}
+
+// filterTagEnv returns only TAG_ prefixed env vars for easier debugging
+func filterTagEnv(env []string) []string {
+	var result []string
+	for _, e := range env {
+		if strings.HasPrefix(e, "TAG_") {
+			result = append(result, e)
+		}
+	}
+	return result
+}
