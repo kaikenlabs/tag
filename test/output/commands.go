@@ -1,0 +1,4 @@
+package output
+
+func output() {
+}

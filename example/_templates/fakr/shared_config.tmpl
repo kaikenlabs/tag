@@ -1,0 +1,5 @@
+---
+to: example/fakr/{{ .Name }}.go
+append: true
+---
+    {{ template "example/_templates/shared/config.tmpl" . }} // you need to pass the data down

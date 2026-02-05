@@ -1,0 +1,29 @@
+---
+to: test/output/cmd_{{ .Name | caseSnake }}.go
+---
+
+package output
+
+import (
+	"log"
+
+	"github.com/spf13/cobra"
+)
+
+func {{.Name | caseCamel }}Cmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "{{ .Name | caseLower }}",
+		Short: "a new command",
+		Long:  "a new command",
+		Run:   {{ .Name | caseCamel }}Func(),
+	}
+}
+
+func {{ .Name | caseCamel }}Func() cmdFunc {
+	return func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			log.Println("at least 1 argument must be provided")
+			return
+		}
+	}
+}

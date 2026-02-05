@@ -1,0 +1,8 @@
+---
+to: example/fakr/{{ .Name }}.go
+append: true
+---
+
+func appended(name string) error {
+    return fmt.Errorf("error")
+}

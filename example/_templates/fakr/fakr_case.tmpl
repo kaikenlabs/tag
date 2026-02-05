@@ -1,0 +1,18 @@
+---
+to: example/fakr/{{ .Name | caseKebab }}.go
+bar: randomText
+---
+
+package {{ .Name }}
+
+import "fmt"
+
+func main() {
+    fmt.Println("hello world")
+    fmt.Println("{{ .Meta.bar | caseSnake }}")
+    fmt.Println("{{ .Meta.bar | caseKebab }}")
+    fmt.Println("{{ .Meta.bar | casePascal }}")
+    fmt.Println("{{ .Meta.bar | caseLower }}")
+    fmt.Println("{{ .Meta.bar | caseTitle }}")
+    fmt.Println("{{ "flashGordon" | caseSnake | caseTitle }}")
+}

@@ -1,0 +1,36 @@
+---
+to: example/fakr/{{ .Name }}_stringers.go
+list: foo,bar,bin,baz
+contains_check: flash gordon
+---
+
+package {{ .Name }}
+
+import "fmt"
+
+func main() {
+
+    {{ $nameList := splitByDelimiter .Meta.list "," }}
+    {{ range $i, $item := $nameList }}
+        fmt.PrintLn({{ $item }})
+    {{ end }}
+
+
+    {{ if contains .Meta.contains_check "flash" }}
+        fmt.PrintLn("contains flash")
+    {{ end }}
+    
+
+    {{ if hasPrefix .Meta.contains_check "flash"  }}
+        fmt.PrintLn("has prefix flash")
+    {{ end }}
+
+    {{ if hasSuffix .Meta.contains_check "gordon"  }}
+        fmt.PrintLn("has prefix gordon")
+    {{ end }}
+
+    {{ $enumList := splitByDelimiter .Meta.enum_list "-" }}
+    {{ range $i, $item := $enumList }}
+        fmt.PrintLn("{{$item}}")
+    {{ end }}
+}
