@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/schema"
 	"github.com/kaikenlabs/tag/internal/template"
 )
@@ -71,10 +72,12 @@ func (s *Scaffold) Run(opts Options) error {
 
 	// Step 3: Collect variables
 	collectOpts := CollectOptions{
-		ValuesFile: opts.ValuesFile,
-		Meta:       opts.Meta,
-		NoPrompt:   opts.NoInput,
-		IsTTY:      IsTTY(),
+		ValuesFile:  opts.ValuesFile,
+		Meta:        opts.Meta,
+		NoPrompt:    opts.NoInput,
+		IsTTY:       IsTTY(),
+		Replay:      opts.Replay,
+		TemplateRef: opts.TemplateRef,
 	}
 
 	// Add project name to meta if provided
@@ -152,7 +155,24 @@ func (s *Scaffold) Run(opts Options) error {
 		return fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
-	// Step 10: Display summary
+	// Step 10: Save replay data (unless --no-save)
+	if !opts.NoSave && opts.TemplateRef != "" {
+		// Build secrets map from variable definitions
+		secrets := make(map[string]bool)
+		for name, def := range config.Vars {
+			if def.Secret {
+				secrets[name] = true
+			}
+		}
+
+		// Save replay data
+		if err := replay.Save(opts.TemplateRef, config.Version, vars, secrets); err != nil {
+			// Don't fail the scaffold for replay save errors, just warn
+			fmt.Printf("Warning: failed to save replay data: %v\n", err)
+		}
+	}
+
+	// Step 11: Display summary
 	s.displaySummary(outputDir, vars)
 
 	return nil

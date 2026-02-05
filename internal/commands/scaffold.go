@@ -52,7 +52,13 @@ Examples:
   tag scaffold gh:user/template --update
 
   # Scaffold non-interactively (use defaults)
-  tag scaffold gh:user/template --no-input`,
+  tag scaffold gh:user/template --no-input
+
+  # Replay with saved values from previous scaffold
+  tag scaffold gh:user/template another-api --replay
+
+  # Scaffold without saving replay data
+  tag scaffold gh:user/template test-project --no-save`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "output",
@@ -81,6 +87,14 @@ Examples:
 				Name:    "update",
 				Aliases: []string{"u"},
 				Usage:   "Force refresh of cached remote templates",
+			},
+			&cli.BoolFlag{
+				Name:  "replay",
+				Usage: "Reuse saved variable values from a previous scaffold of this template",
+			},
+			&cli.BoolFlag{
+				Name:  "no-save",
+				Usage: "Don't save variable values for future replay",
 			},
 		},
 		Action: scaffoldAction,
@@ -126,6 +140,9 @@ func scaffoldAction(c *cli.Context) error {
 		Meta:        meta,
 		NoInput:     c.Bool("no-input"),
 		Force:       c.Bool("force"),
+		Replay:      c.Bool("replay"),
+		NoSave:      c.Bool("no-save"),
+		TemplateRef: templateRef, // Pass original reference for replay ID generation
 	}
 
 	// Create and run scaffold

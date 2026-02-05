@@ -2,11 +2,14 @@ package scaffold
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/replay"
 )
 
 // VariableCollector gathers variable values from all sources.
@@ -25,7 +28,7 @@ func NewVariableCollector(prompter Prompter) *DefaultVariableCollector {
 }
 
 // Collect gathers variables following the priority chain:
-// defaults -> prompts -> --values file -> --meta flags
+// defaults -> --replay -> --values file -> prompts -> --meta flags
 //
 // Each layer overwrites the previous, with --meta having highest priority.
 func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectOptions) (map[string]any, error) {
@@ -42,7 +45,40 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 		}
 	}
 
-	// Step 2: Load values from --values file (if provided)
+	// Step 2: Load replay values (if --replay flag is set)
+	if opts.Replay {
+		if opts.TemplateRef == "" {
+			return nil, fmt.Errorf("--replay requires template reference to be set")
+		}
+		replayData, err := replay.Load(opts.TemplateRef)
+		if err != nil {
+			if errors.Is(err, replay.ErrReplayNotFound) {
+				return nil, fmt.Errorf("no saved replay data found for this template (use scaffold without --replay first)")
+			}
+			if errors.Is(err, replay.ErrReplayCorrupt) {
+				return nil, fmt.Errorf("replay file is corrupt: %w (delete it and try again)", err)
+			}
+			return nil, fmt.Errorf("failed to load replay data: %w", err)
+		}
+		// Apply replay values
+		for k, v := range replayData.Values {
+			// Coerce replay values to expected types if we know them
+			if def, ok := config.Vars[k]; ok {
+				coerced, err := coerceAnyValue(v, def.Type)
+				if err != nil {
+					// If coercion fails, use the raw value (template may have changed)
+					vars[k] = v
+				} else {
+					vars[k] = coerced
+				}
+			} else {
+				// Unknown variable (template may have changed), store as-is
+				vars[k] = v
+			}
+		}
+	}
+
+	// Step 3: Load values from --values file (if provided)
 	if opts.ValuesFile != "" {
 		fileVars, err := loadValuesFile(opts.ValuesFile)
 		if err != nil {
@@ -53,7 +89,7 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 		}
 	}
 
-	// Step 3: Interactive prompts for missing required variables (if TTY)
+	// Step 4: Interactive prompts for missing required variables (if TTY)
 	if opts.IsTTY && !opts.NoPrompt {
 		for _, name := range varNames {
 			def := config.Vars[name]
@@ -63,7 +99,7 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 				continue
 			}
 
-			// Skip if already has a value from file or default
+			// Skip if already has a value from previous steps
 			if _, hasValue := vars[name]; hasValue {
 				continue
 			}
@@ -104,7 +140,7 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 		}
 	}
 
-	// Step 4: Apply --meta overrides (highest priority)
+	// Step 5: Apply --meta overrides (highest priority)
 	for k, v := range opts.Meta {
 		// Try to coerce value to the expected type if we know it
 		if def, ok := config.Vars[k]; ok {
@@ -119,12 +155,12 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 		}
 	}
 
-	// Step 5: Validate all required variables have values
+	// Step 6: Validate all required variables have values
 	if err := c.validateRequired(config, vars); err != nil {
 		return nil, err
 	}
 
-	// Step 6: Process computed/private variables
+	// Step 7: Process computed/private variables
 	// These are variables starting with underscore that may reference other vars
 	// For now, we skip them - they'll be processed during template rendering
 
@@ -236,6 +272,49 @@ func coerceValue(value string, varType VariableType) (any, error) {
 
 	case VarTypeChoice, VarTypeString:
 		return value, nil
+
+	default:
+		return value, nil
+	}
+}
+
+// coerceAnyValue attempts to convert a value of any type to the expected type.
+// This is used for replay values which are already typed from JSON.
+func coerceAnyValue(value any, varType VariableType) (any, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	switch varType {
+	case VarTypeBoolean:
+		switch v := value.(type) {
+		case bool:
+			return v, nil
+		case string:
+			return parseBool(v)
+		default:
+			return nil, fmt.Errorf("cannot convert %T to boolean", value)
+		}
+
+	case VarTypeNumber:
+		switch v := value.(type) {
+		case float64:
+			return v, nil
+		case int:
+			return float64(v), nil
+		case string:
+			return strconv.ParseFloat(v, 64)
+		default:
+			return nil, fmt.Errorf("cannot convert %T to number", value)
+		}
+
+	case VarTypeChoice, VarTypeString:
+		switch v := value.(type) {
+		case string:
+			return v, nil
+		default:
+			return fmt.Sprintf("%v", value), nil
+		}
 
 	default:
 		return value, nil

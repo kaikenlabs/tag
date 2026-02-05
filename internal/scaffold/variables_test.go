@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -408,4 +409,262 @@ func TestUT_ParseBool(t *testing.T) {
 			}
 		})
 	}
+}
+
+// =============================================================================
+// Replay-specific tests
+// =============================================================================
+
+func TestUT_VariableCollector_ReplayPriority(t *testing.T) {
+	// Set up a temp home directory for replay files
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	// Create replay data
+	templateRef := "gh:test/replay-test"
+	err := replay.Save(templateRef, "v1.0.0", map[string]any{
+		"var1": "replay_value",
+		"var2": "replay_value",
+		"var3": "replay_value",
+	}, nil)
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"var1": {Type: VarTypeString, Default: "default_value"},
+			"var2": {Type: VarTypeString, Default: "default_value"},
+			"var3": {Type: VarTypeString, Default: "default_value"},
+		},
+	}
+
+	// Create a temp values file that overrides var2
+	valuesFile := filepath.Join(tempHome, "values.json")
+	err = os.WriteFile(valuesFile, []byte(`{"var2": "values_file_value", "var3": "values_file_value"}`), 0o644)
+	require.NoError(t, err)
+
+	opts := CollectOptions{
+		Replay:      true,
+		TemplateRef: templateRef,
+		ValuesFile:  valuesFile,
+		Meta: map[string]string{
+			"var3": "meta_override",
+		},
+		NoPrompt: true,
+		IsTTY:    false,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// var1: replay overwrites default
+	assert.Equal(t, "replay_value", vars["var1"])
+	// var2: values file overwrites replay
+	assert.Equal(t, "values_file_value", vars["var2"])
+	// var3: meta overwrites values file (which overwrote replay)
+	assert.Equal(t, "meta_override", vars["var3"])
+}
+
+func TestUT_VariableCollector_ReplayOverridesDefaults(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	templateRef := "gh:test/replay-defaults"
+	err := replay.Save(templateRef, "", map[string]any{
+		"project_name": "replayed-project",
+		"port":         float64(9000),
+		"use_docker":   true,
+	}, nil)
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "default-project"},
+			"port":         {Type: VarTypeNumber, Default: float64(8080)},
+			"use_docker":   {Type: VarTypeBoolean, Default: false},
+		},
+	}
+
+	opts := CollectOptions{
+		Replay:      true,
+		TemplateRef: templateRef,
+		NoPrompt:    true,
+		IsTTY:       false,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	assert.Equal(t, "replayed-project", vars["project_name"])
+	assert.Equal(t, float64(9000), vars["port"])
+	assert.Equal(t, true, vars["use_docker"])
+}
+
+func TestUT_VariableCollector_ReplayNotFound(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"var1": {Type: VarTypeString, Default: "default"},
+		},
+	}
+
+	opts := CollectOptions{
+		Replay:      true,
+		TemplateRef: "gh:nonexistent/repo",
+		NoPrompt:    true,
+		IsTTY:       false,
+	}
+
+	_, err := collector.Collect(config, opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no saved replay data found")
+}
+
+func TestUT_VariableCollector_ReplayWithoutTemplateRef(t *testing.T) {
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"var1": {Type: VarTypeString, Default: "default"},
+		},
+	}
+
+	opts := CollectOptions{
+		Replay:      true,
+		TemplateRef: "", // Missing template ref
+		NoPrompt:    true,
+		IsTTY:       false,
+	}
+
+	_, err := collector.Collect(config, opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "template reference")
+}
+
+func TestUT_VariableCollector_ReplayPromptsForNewVars(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	// Save replay with only var1
+	templateRef := "gh:test/replay-new-vars"
+	err := replay.Save(templateRef, "", map[string]any{
+		"var1": "replayed_value",
+	}, nil)
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Enter value for new_var"] = "prompted_new_value"
+	collector := NewVariableCollector(mockPrompter)
+
+	// Config has both var1 (in replay) and new_var (not in replay)
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"var1":    {Type: VarTypeString, Default: "default"},
+			"new_var": {Type: VarTypeString, Required: true},
+		},
+	}
+
+	opts := CollectOptions{
+		Replay:      true,
+		TemplateRef: templateRef,
+		NoPrompt:    false,
+		IsTTY:       true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// var1 should come from replay
+	assert.Equal(t, "replayed_value", vars["var1"])
+	// new_var should be prompted for
+	assert.Equal(t, "prompted_new_value", vars["new_var"])
+	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
+}
+
+func TestUT_VariableCollector_ReplayTypeCoercion(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	// Save replay with typed values
+	templateRef := "gh:test/replay-types"
+	err := replay.Save(templateRef, "", map[string]any{
+		"str_var":  "string_value",
+		"bool_var": true,
+		"num_var":  float64(42),
+	}, nil)
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"str_var":  {Type: VarTypeString},
+			"bool_var": {Type: VarTypeBoolean},
+			"num_var":  {Type: VarTypeNumber},
+		},
+	}
+
+	opts := CollectOptions{
+		Replay:      true,
+		TemplateRef: templateRef,
+		NoPrompt:    true,
+		IsTTY:       false,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	assert.Equal(t, "string_value", vars["str_var"])
+	assert.Equal(t, true, vars["bool_var"])
+	assert.Equal(t, float64(42), vars["num_var"])
+}
+
+func TestUT_VariableCollector_ReplayIgnoresRemovedVars(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	// Save replay with a variable that's no longer in the template
+	templateRef := "gh:test/replay-removed"
+	err := replay.Save(templateRef, "", map[string]any{
+		"current_var": "current_value",
+		"removed_var": "removed_value",
+	}, nil)
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+
+	// Template only has current_var, not removed_var
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"current_var": {Type: VarTypeString},
+		},
+	}
+
+	opts := CollectOptions{
+		Replay:      true,
+		TemplateRef: templateRef,
+		NoPrompt:    true,
+		IsTTY:       false,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// current_var should be loaded from replay
+	assert.Equal(t, "current_value", vars["current_var"])
+	// removed_var should still be in vars (unknown variables are kept)
+	assert.Equal(t, "removed_value", vars["removed_var"])
 }

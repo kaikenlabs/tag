@@ -169,12 +169,17 @@ type Options struct {
 	Meta        map[string]string // Individual variable overrides (-m/--meta flags)
 	NoInput     bool              // Skip interactive prompts (--no-input flag)
 	Force       bool              // Overwrite existing output (--force flag)
+	Replay      bool              // Use saved replay values (--replay flag)
+	NoSave      bool              // Don't save inputs for replay (--no-save flag)
+	TemplateRef string            // Original template reference (for replay ID generation)
 }
 
 // CollectOptions contains options for variable collection.
 type CollectOptions struct {
-	ValuesFile string            // Path to values JSON file
-	Meta       map[string]string // CLI meta overrides
-	NoPrompt   bool              // Skip interactive prompts
-	IsTTY      bool              // Whether stdin is a TTY
+	ValuesFile  string            // Path to values JSON file
+	Meta        map[string]string // CLI meta overrides
+	NoPrompt    bool              // Skip interactive prompts
+	IsTTY       bool              // Whether stdin is a TTY
+	Replay      bool              // Load and use saved replay values
+	TemplateRef string            // Original template reference (for replay ID lookup)
 }
