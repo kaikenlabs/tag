@@ -37,6 +37,9 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	if err := config.CheckConfig(cfg); err != nil {
 		return err
 	}
+	if err := cfg.Validate(); err != nil {
+		return app.Errorf("configuration error: %w", err)
+	}
 
 	if c.Args().Len() == 0 {
 		return app.Errorf("please provide the bundle name")

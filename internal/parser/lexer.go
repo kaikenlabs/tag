@@ -80,8 +80,11 @@ func generateTemplate(tmplName, tmplOutput string, data TemplateData, funcs temp
 	}
 
 	for sharedTmplName, sharedTmpl := range sharedTmpl {
-		// we don't mind if this fails
-		_, _ = tmpl.New(sharedTmplName).Funcs(funcs).Parse(sharedTmpl)
+		if _, err := tmpl.New(sharedTmplName).Funcs(funcs).Parse(sharedTmpl); err != nil {
+			slog.Warn("failed to parse shared template",
+				"template", sharedTmplName,
+				"error", err)
+		}
 	}
 
 	var buf bytes.Buffer

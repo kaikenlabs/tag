@@ -61,6 +61,9 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 	if err := config.CheckConfig(cfg); err != nil {
 		return err
 	}
+	if err := cfg.Validate(); err != nil {
+		return app.Errorf("configuration error: %w", err)
+	}
 
 	if c.Args().Len() < 2 {
 		return app.Errorf("please provide the generator/bundle and the name")
@@ -157,7 +160,16 @@ func runCommand(hook []string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(filepath.Join(dir, hook[0]), hook[1:]...)
+
+	// Determine the command path:
+	// - If it contains a path separator, resolve relative to working directory
+	// - Otherwise, let the OS resolve it via PATH
+	cmdPath := hook[0]
+	if strings.ContainsAny(cmdPath, "/\\") && !filepath.IsAbs(cmdPath) {
+		cmdPath = filepath.Join(dir, cmdPath)
+	}
+
+	cmd := exec.Command(cmdPath, hook[1:]...)
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	if output != nil {

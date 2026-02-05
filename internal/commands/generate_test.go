@@ -33,7 +33,8 @@ func TestUT_GenerateAction_MissingArguments(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := createTestConfig(t, "_templates")
+			tmpDir := setupTempDir(t)
+			cfg := createTestConfig(t, tmpDir)
 			ctx := createTestCLIContext(t, tt.args, nil)
 
 			err := generateAction(ctx, cfg)
@@ -396,7 +397,8 @@ func TestUT_RunHooks_ValidHook(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-	err = runHooks([][]string{{"test-hook.sh"}})
+	// Use relative path with ./ prefix to indicate it's a local file
+	err = runHooks([][]string{{"./test-hook.sh"}})
 	require.NoError(t, err)
 }
 
@@ -414,7 +416,8 @@ func TestUT_RunHooks_FailingHook(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-	err = runHooks([][]string{{"failing-hook.sh"}})
+	// Use relative path with ./ prefix to indicate it's a local file
+	err = runHooks([][]string{{"./failing-hook.sh"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to run hook")
 }
@@ -439,7 +442,8 @@ func TestUT_RunHooks_StopsOnFailure(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-	err = runHooks([][]string{{"hook1.sh"}, {"hook2.sh"}})
+	// Use relative paths with ./ prefix to indicate they are local files
+	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}})
 	require.Error(t, err)
 
 	// Verify second hook didn't run
@@ -458,4 +462,29 @@ func TestUT_RunCommand_NonexistentCommand(t *testing.T) {
 
 	err = runCommand([]string{"nonexistent-command-xyz"})
 	require.Error(t, err)
+}
+
+func TestUT_RunCommand_PathCommand(t *testing.T) {
+	// Test that PATH commands work (e.g., "echo" should be found in PATH)
+	err := runCommand([]string{"echo", "hello"})
+	require.NoError(t, err)
+}
+
+func TestUT_RunCommand_RelativePathCommand(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a script
+	scriptPath := filepath.Join(tmpDir, "myscript.sh")
+	err := os.WriteFile(scriptPath, []byte("#!/bin/bash\nexit 0"), 0o755)
+	require.NoError(t, err)
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	// Relative path should resolve from working directory
+	err = runCommand([]string{"./myscript.sh"})
+	require.NoError(t, err)
 }
