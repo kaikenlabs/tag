@@ -1,0 +1,108 @@
+package commands
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestUT_BundleAction_MissingName(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	err := bundleAction(ctx, cfg)
+
+	require.Error(t, err)
+	var cmdErr *app.CommandError
+	require.ErrorAs(t, err, &cmdErr)
+	assert.Contains(t, err.Error(), "please provide the bundle name")
+}
+
+func TestUT_BundleAction_NoConfig(t *testing.T) {
+	ctx := createTestCLIContext(t, []string{"mybundle"}, nil)
+
+	err := bundleAction(ctx, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "init")
+}
+
+func TestUT_BundleAction_ValidBundleCreation(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	err := bundleAction(ctx, cfg)
+
+	require.NoError(t, err)
+
+	// Verify bundle file was created
+	bundlePath := filepath.Join(tmpDir, "_bundles", "mybundle", "mybundle.json")
+	require.FileExists(t, bundlePath)
+
+	// Verify content
+	data, err := os.ReadFile(bundlePath)
+	require.NoError(t, err)
+
+	var bundle engine.Bundle
+	err = json.Unmarshal(data, &bundle)
+	require.NoError(t, err)
+
+	assert.Equal(t, "mybundle", bundle.Name)
+	assert.Len(t, bundle.Generators, 1)
+	assert.Equal(t, "myGenerator", bundle.Generators[0].Name)
+}
+
+func TestUT_BundleAction_CreatesDirectory(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"newbundle"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	// Ensure bundle directory doesn't exist yet
+	bundleDir := filepath.Join(tmpDir, "_bundles", "newbundle")
+	_, err := os.Stat(bundleDir)
+	require.True(t, os.IsNotExist(err))
+
+	err = bundleAction(ctx, cfg)
+	require.NoError(t, err)
+
+	// Verify directory was created
+	info, err := os.Stat(bundleDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+func TestUT_GetBundleTemplate(t *testing.T) {
+	data, err := getBundleTemplate("testbundle")
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+
+	var bundle engine.Bundle
+	err = json.Unmarshal(data, &bundle)
+	require.NoError(t, err)
+
+	assert.Equal(t, "testbundle", bundle.Name)
+	assert.Len(t, bundle.Generators, 1)
+	assert.Equal(t, "myGenerator", bundle.Generators[0].Name)
+}

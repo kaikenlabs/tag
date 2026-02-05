@@ -18,6 +18,16 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// newEngine is a function variable that creates a new engine.
+// It can be replaced in tests to inject a mock generator.
+var newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+	core, err := engine.New(dryRun, dirPath, sharedPath, fileSuffix)
+	if err != nil {
+		return nil, err
+	}
+	return &core, nil
+}
+
 func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name: "generate",
@@ -115,12 +125,12 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
 	}
 
-	e, err := engine.New(c.Bool(flags.DryRunFlag), dirPath, sharedPath, cfg.Env.Extension)
+	gen, err := newEngine(c.Bool(flags.DryRunFlag), dirPath, sharedPath, cfg.Env.Extension)
 	if err != nil {
 		return app.Errorf("error creating engine: %w", err)
 	}
 
-	err = e.Generate(engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)})
+	err = gen.Generate(engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)})
 	if err != nil {
 		return app.Errorf("error when generating template: %w", err)
 	}

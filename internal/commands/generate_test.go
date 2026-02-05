@@ -1,0 +1,461 @@
+package commands
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestUT_GenerateAction_MissingArguments(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "no arguments",
+			args:    []string{},
+			wantErr: "please provide the generator/bundle and the name",
+		},
+		{
+			name:    "only generator name",
+			args:    []string{"myGenerator"},
+			wantErr: "please provide the generator/bundle and the name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := createTestConfig(t, "_templates")
+			ctx := createTestCLIContext(t, tt.args, nil)
+
+			err := generateAction(ctx, cfg)
+
+			require.Error(t, err)
+			var cmdErr *app.CommandError
+			require.True(t, errors.As(err, &cmdErr))
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestUT_GenerateAction_NoConfig(t *testing.T) {
+	ctx := createTestCLIContext(t, []string{"myGenerator", "myName"}, nil)
+
+	err := generateAction(ctx, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "init")
+}
+
+func TestUT_GenerateAction_GeneratorNotFound(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"nonexistent", "myName"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "generator nonexistent not found")
+}
+
+func TestUT_GenerateAction_ValidGenerator(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a simple template
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	// Use a mock to verify the engine is called correctly
+	var capturedData engine.Data
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				capturedData = data
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "world", capturedData.Name)
+}
+
+func TestUT_GenerateAction_WithArgs(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }} with {{ .Args }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world", "extra-args"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	var capturedData engine.Data
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				capturedData = data
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "world", capturedData.Name)
+	assert.Equal(t, "extra-args", capturedData.Args)
+}
+
+func TestUT_GenerateAction_WithMeta(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.MetaFlag:       []string{"key1=value1", "key2=value2"},
+	})
+
+	var capturedData engine.Data
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				capturedData = data
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"key1=value1", "key2=value2"}, capturedData.MetaArgs)
+}
+
+func TestUT_GenerateAction_GeneratorError(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				return errors.New("template execution failed")
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error when generating template")
+}
+
+func TestUT_GenerateAction_EngineCreationError(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+		return nil, errors.New("failed to create engine")
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error creating engine")
+}
+
+func TestUT_GenerateBundle_BundleNotFound(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"nonexistent", "myName"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot open bundle file")
+}
+
+func TestUT_GenerateBundle_InvalidJSON(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	// Create invalid JSON bundle
+	createBundle(t, tmpDir, "mybundle", "not valid json")
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "myName"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot decode bundle file")
+}
+
+func TestUT_GenerateBundle_ValidBundle(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	// Create valid bundle
+	bundleJSON := `{"name":"mybundle","generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	var generateCalls int
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				generateCalls++
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, generateCalls, "expected Generate to be called once for the single generator in bundle")
+}
+
+func TestUT_GenerateBundle_MultipleGenerators(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "gen1", templateContent)
+	createGenerator(t, tmpDir, "gen2", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","generators":[{"name":"gen1"},{"name":"gen2"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]interface{}{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	var generateCalls int
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				generateCalls++
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, generateCalls, "expected Generate to be called twice for two generators in bundle")
+}
+
+func TestUT_RunHooks_EmptyHooks(t *testing.T) {
+	err := runHooks([][]string{})
+	require.NoError(t, err)
+}
+
+func TestUT_RunHooks_NilHooks(t *testing.T) {
+	err := runHooks(nil)
+	require.NoError(t, err)
+}
+
+func TestUT_RunHooks_ValidHook(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a simple script that succeeds
+	scriptPath := filepath.Join(tmpDir, "test-hook.sh")
+	err := os.WriteFile(scriptPath, []byte("#!/bin/bash\nexit 0"), 0o755)
+	require.NoError(t, err)
+
+	// Change to temp dir so hook paths resolve
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	err = runHooks([][]string{{"test-hook.sh"}})
+	require.NoError(t, err)
+}
+
+func TestUT_RunHooks_FailingHook(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a script that fails
+	scriptPath := filepath.Join(tmpDir, "failing-hook.sh")
+	err := os.WriteFile(scriptPath, []byte("#!/bin/bash\nexit 1"), 0o755)
+	require.NoError(t, err)
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	err = runHooks([][]string{{"failing-hook.sh"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to run hook")
+}
+
+func TestUT_RunHooks_StopsOnFailure(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create first hook that fails
+	script1Path := filepath.Join(tmpDir, "hook1.sh")
+	err := os.WriteFile(script1Path, []byte("#!/bin/bash\nexit 1"), 0o755)
+	require.NoError(t, err)
+
+	// Create second hook that succeeds (but shouldn't run)
+	script2Path := filepath.Join(tmpDir, "hook2.sh")
+	markerFile := filepath.Join(tmpDir, "hook2-ran")
+	err = os.WriteFile(script2Path, []byte("#!/bin/bash\ntouch "+markerFile+"\nexit 0"), 0o755)
+	require.NoError(t, err)
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	err = runHooks([][]string{{"hook1.sh"}, {"hook2.sh"}})
+	require.Error(t, err)
+
+	// Verify second hook didn't run
+	_, statErr := os.Stat(markerFile)
+	assert.True(t, os.IsNotExist(statErr), "second hook should not have run")
+}
+
+func TestUT_RunCommand_NonexistentCommand(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	err = runCommand([]string{"nonexistent-command-xyz"})
+	require.Error(t, err)
+}
