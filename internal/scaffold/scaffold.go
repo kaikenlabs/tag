@@ -207,6 +207,10 @@ func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, e
 
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		// Check if this is a Cookiecutter template
+		if ccPath, isCookiecutter := IsCookiecutterTemplate(templateDir); isCookiecutter {
+			return nil, &ErrCookiecutterDetected{CookiecutterPath: ccPath}
+		}
 		return nil, fmt.Errorf("%w: %s", ErrConfigNotFound, configPath)
 	}
 

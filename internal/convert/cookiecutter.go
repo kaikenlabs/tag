@@ -261,6 +261,57 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 	})
 }
 
+// ConvertInPlace converts a Cookiecutter template in-place by writing
+// tag.template.json to the same directory as cookiecutter.json.
+// Unlike Convert(), this does not copy files to a new directory.
+func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) error {
+	// Verify it's a Cookiecutter template
+	cookiecutterPath := filepath.Join(templateDir, "cookiecutter.json")
+	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) {
+		return ErrNoCookiecutterConfig
+	}
+
+	// Read and convert cookiecutter.json
+	configData, err := os.ReadFile(cookiecutterPath)
+	if err != nil {
+		return fmt.Errorf("failed to read cookiecutter.json: %w", err)
+	}
+
+	tagConfig, _, _, err := ConvertCookiecutterConfig(configData)
+	if err != nil {
+		return err
+	}
+
+	// Process hooks (detect only, don't copy - they're already in place)
+	hooksProcessor := NewHooksProcessor(templateDir, templateDir, false)
+	hookFindings, err := hooksProcessor.DetectHooks()
+	if err != nil {
+		return fmt.Errorf("failed to detect hooks: %w", err)
+	}
+
+	// Add shell hooks to config
+	preHooks, postHooks := SuggestTagHooksConfig(hookFindings)
+	if len(preHooks) > 0 || len(postHooks) > 0 {
+		tagConfig.Hooks = &scaffold.HooksConfig{
+			PreScaffold:  preHooks,
+			PostScaffold: postHooks,
+		}
+	}
+
+	// Write tag.template.json
+	tagJSON, err := GenerateTagTemplateJSON(tagConfig, "", "Converted from Cookiecutter template")
+	if err != nil {
+		return fmt.Errorf("failed to generate tag.template.json: %w", err)
+	}
+
+	tagConfigPath := filepath.Join(templateDir, "tag.template.json")
+	if err := os.WriteFile(tagConfigPath, tagJSON, 0o644); err != nil {
+		return fmt.Errorf("failed to write tag.template.json: %w", err)
+	}
+
+	return nil
+}
+
 // copyFile copies a file from src to dst.
 func copyFile(src, dst string) error {
 	srcFile, err := os.Open(src)
