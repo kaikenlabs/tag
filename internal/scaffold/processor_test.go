@@ -219,6 +219,16 @@ func TestUT_PathProcessor_ComplexExpressions(t *testing.T) {
 			path:     "{{ vars.package_display_name.upper() }}",
 			expected: "MY COOL PACKAGE",
 		},
+		{
+			name:     "replace method with 2 args (Python style)",
+			path:     "{{ vars.package_display_name.replace(' ', '_') }}",
+			expected: "My_Cool_Package",
+		},
+		{
+			name:     "chained methods (Cookiecutter style)",
+			path:     "{{ cookiecutter.package_display_name.lower().replace(' ', '_').replace('-', '_') }}",
+			expected: "my_cool_package",
+		},
 	}
 
 	for _, tt := range tests {

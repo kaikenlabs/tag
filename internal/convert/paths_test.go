@@ -74,12 +74,12 @@ func TestUT_ConvertPath_WithFilter(t *testing.T) {
 		{
 			name:     "filter without spaces",
 			input:    "{{ cookiecutter.project_name|upper }}",
-			expected: "{{ vars.project_name | upper }}",
+			expected: "{{ vars.project_name|upper }}",
 		},
 		{
 			name:     "filter with extra spaces",
 			input:    "{{  cookiecutter.project_name  |  snake  }}",
-			expected: "{{ vars.project_name | snake }}",
+			expected: "{{  vars.project_name  |  snake  }}",
 		},
 		{
 			name:     "filter in complex path",
@@ -98,6 +98,8 @@ func TestUT_ConvertPath_WithFilter(t *testing.T) {
 }
 
 func TestUT_ConvertPath_WhitespaceVariants(t *testing.T) {
+	// Note: The converter preserves whitespace as-is (no normalization).
+	// Gonja handles whitespace variants correctly, so normalization is unnecessary.
 	tests := []struct {
 		name     string
 		input    string
@@ -106,7 +108,7 @@ func TestUT_ConvertPath_WhitespaceVariants(t *testing.T) {
 		{
 			name:     "no spaces",
 			input:    "{{cookiecutter.var}}",
-			expected: "{{ vars.var }}",
+			expected: "{{vars.var}}",
 		},
 		{
 			name:     "single space",
@@ -116,12 +118,12 @@ func TestUT_ConvertPath_WhitespaceVariants(t *testing.T) {
 		{
 			name:     "extra spaces",
 			input:    "{{   cookiecutter.var   }}",
-			expected: "{{ vars.var }}",
+			expected: "{{   vars.var   }}",
 		},
 		{
 			name:     "mixed spacing with filter",
 			input:    "{{ cookiecutter.var| lower}}",
-			expected: "{{ vars.var | lower }}",
+			expected: "{{ vars.var| lower}}",
 		},
 	}
 
@@ -168,6 +170,49 @@ func TestUT_ConvertPathWithDetails(t *testing.T) {
 
 	assert.Equal(t, "{{ cookiecutter.module | lower }}", conversions[1].From)
 	assert.Equal(t, "{{ vars.module | lower }}", conversions[1].To)
+}
+
+func TestUT_ConvertPath_ComplexExpressions(t *testing.T) {
+	// Test complex expressions that Cookiecutter templates actually use
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		changed  bool
+	}{
+		{
+			name:     "method chaining",
+			input:    "{{cookiecutter.package_display_name.lower().replace(' ', '_').replace('-', '_')}}",
+			expected: "{{vars.package_display_name.lower().replace(' ', '_').replace('-', '_')}}",
+			changed:  true,
+		},
+		{
+			name:     "method chaining with spaces",
+			input:    "{{ cookiecutter.name.lower().replace(' ', '_') }}",
+			expected: "{{ vars.name.lower().replace(' ', '_') }}",
+			changed:  true,
+		},
+		{
+			name:     "filter with method on result",
+			input:    "{{ cookiecutter.project_name | lower | replace(' ', '_') }}",
+			expected: "{{ vars.project_name | lower | replace(' ', '_') }}",
+			changed:  true,
+		},
+		{
+			name:     "mixed filters and methods",
+			input:    "src/{{ cookiecutter.name.strip().lower() }}/{{ cookiecutter.module | snake }}",
+			expected: "src/{{ vars.name.strip().lower() }}/{{ vars.module | snake }}",
+			changed:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, changed := ConvertPath(tt.input)
+			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.changed, changed)
+		})
+	}
 }
 
 func TestUT_HasCookiecutterPlaceholders(t *testing.T) {

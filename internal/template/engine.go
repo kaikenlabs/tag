@@ -63,13 +63,17 @@ func MustNewEngine(opts ...Option) *Engine {
 
 // createEnvironment creates a Gonja environment with our custom configuration.
 func (e *Engine) createEnvironment() (*exec.Environment, error) {
+	// Create custom methods with our modifications (e.g., replace with optional count)
+	customMethods := builtins.Methods
+	customMethods.Str = createCustomStringMethods()
+
 	// Use builtins directly - they're already initialized properly
 	env := &exec.Environment{
 		Context:           exec.EmptyContext().Update(builtins.GlobalFunctions),
 		Filters:           builtins.Filters,
 		Tests:             builtins.Tests,
 		ControlStructures: builtins.ControlStructures,
-		Methods:           builtins.Methods,
+		Methods:           customMethods,
 	}
 
 	// Register our custom filters on top of builtins
