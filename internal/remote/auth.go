@@ -55,26 +55,14 @@ func (p *EnvAuthProvider) GitAuth(ref *Reference) (transport.AuthMethod, error) 
 		return nil, nil
 	}
 
-	// Different providers use different username conventions
-	var username string
-	switch ref.Provider {
-	case ProviderBitbucket:
-		// Bitbucket Cloud supports two auth methods:
-		// 1. App Passwords: use actual username (from BITBUCKET_USERNAME env var)
-		// 2. Repository Access Tokens: use "x-token-auth"
-		// We try BITBUCKET_USERNAME first, fall back to x-token-auth
-		if bbUser := os.Getenv("BITBUCKET_USERNAME"); bbUser != "" {
-			username = bbUser
-		} else {
-			username = "x-token-auth"
-		}
-	default:
-		// GitHub and GitLab use x-access-token
-		username = "x-access-token"
+	// Bitbucket access tokens require Bearer auth
+	if ref.Provider == ProviderBitbucket {
+		return &http.TokenAuth{Token: token}, nil
 	}
 
+	// GitHub and GitLab use basic auth with x-access-token
 	return &http.BasicAuth{
-		Username: username,
+		Username: "x-access-token",
 		Password: token,
 	}, nil
 }

@@ -3,7 +3,9 @@ package remote
 import (
 	"testing"
 
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUT_EnvAuthProvider_GitHubToken(t *testing.T) {
@@ -82,6 +84,45 @@ func TestUT_EnvAuthProvider_GitAuth_HTTPSWithoutToken(t *testing.T) {
 	auth, err := provider.GitAuth(ref)
 	assert.NoError(t, err)
 	assert.Nil(t, auth) // No auth, will try public access
+}
+
+func TestUT_EnvAuthProvider_GitAuth_BitbucketUsesBearer(t *testing.T) {
+	provider := NewEnvAuthProvider()
+	t.Setenv("BITBUCKET_TOKEN", "test-bb-token")
+
+	ref := &Reference{
+		Type:     ReferenceTypeGit,
+		Provider: ProviderBitbucket,
+		URL:      "https://bitbucket.org/user/repo.git",
+	}
+
+	auth, err := provider.GitAuth(ref)
+	require.NoError(t, err)
+	require.NotNil(t, auth)
+
+	tokenAuth, ok := auth.(*githttp.TokenAuth)
+	require.True(t, ok, "expected TokenAuth for Bitbucket, got %T", auth)
+	assert.Equal(t, "test-bb-token", tokenAuth.Token)
+}
+
+func TestUT_EnvAuthProvider_GitAuth_GitHubUsesBasicAuth(t *testing.T) {
+	provider := NewEnvAuthProvider()
+	t.Setenv("GITHUB_TOKEN", "test-gh-token")
+
+	ref := &Reference{
+		Type:     ReferenceTypeGit,
+		Provider: ProviderGitHub,
+		URL:      "https://github.com/user/repo.git",
+	}
+
+	auth, err := provider.GitAuth(ref)
+	require.NoError(t, err)
+	require.NotNil(t, auth)
+
+	basicAuth, ok := auth.(*githttp.BasicAuth)
+	require.True(t, ok, "expected BasicAuth for GitHub, got %T", auth)
+	assert.Equal(t, "x-access-token", basicAuth.Username)
+	assert.Equal(t, "test-gh-token", basicAuth.Password)
 }
 
 func TestUT_IsSSHURL(t *testing.T) {
