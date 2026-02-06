@@ -95,14 +95,20 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 	}
 
 	// Step 4: Interactive prompts for variables (if TTY)
-	// Prompt for all non-private variables, even if they have defaults.
+	// Prompt for all non-private, non-derived variables, even if they have defaults.
 	// Skip only if the value was explicitly provided via replay or values file.
 	if opts.IsTTY && !opts.NoPrompt {
 		for _, name := range varNames {
 			def := config.Vars[name]
 
-			// Skip private/computed variables
+			// Skip private/computed variables (start with _)
 			if def.IsPrivate(name) {
+				continue
+			}
+
+			// Skip derived variables (default contains template expression)
+			// These are computed from other variables, following Cookiecutter behavior
+			if def.IsDerived() {
 				continue
 			}
 

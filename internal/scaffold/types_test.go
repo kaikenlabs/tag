@@ -250,3 +250,104 @@ func TestUT_VariableDef_GetPrompt(t *testing.T) {
 		})
 	}
 }
+
+func TestUT_VariableDef_IsDerived(t *testing.T) {
+	tests := []struct {
+		name     string
+		def      VariableDef
+		expected bool
+	}{
+		{
+			name:     "simple string default - not derived",
+			def:      VariableDef{Default: "my_project"},
+			expected: false,
+		},
+		{
+			name:     "vars namespace - derived",
+			def:      VariableDef{Default: "{{ vars.project_name }}"},
+			expected: true,
+		},
+		{
+			name:     "vars namespace no spaces - derived",
+			def:      VariableDef{Default: "{{vars.project_name}}"},
+			expected: true,
+		},
+		{
+			name:     "cookiecutter namespace - derived",
+			def:      VariableDef{Default: "{{ cookiecutter.project_name }}"},
+			expected: true,
+		},
+		{
+			name:     "cookiecutter with method calls - derived",
+			def:      VariableDef{Default: "{{cookiecutter.package_display_name.lower().replace(' ', '_')}}"},
+			expected: true,
+		},
+		{
+			name:     "vars with filter - derived",
+			def:      VariableDef{Default: "{{ vars.project_name | snake }}"},
+			expected: true,
+		},
+		{
+			name:     "nil default - not derived",
+			def:      VariableDef{Default: nil},
+			expected: false,
+		},
+		{
+			name:     "boolean default - not derived",
+			def:      VariableDef{Default: true},
+			expected: false,
+		},
+		{
+			name:     "number default - not derived",
+			def:      VariableDef{Default: float64(8080)},
+			expected: false,
+		},
+		{
+			name:     "empty string - not derived",
+			def:      VariableDef{Default: ""},
+			expected: false,
+		},
+		{
+			name:     "string with braces but no vars - not derived",
+			def:      VariableDef{Default: "{{ some_other_thing }}"},
+			expected: false,
+		},
+		{
+			name:     "jinja2 now tag - not derived",
+			def:      VariableDef{Default: "{% now 'utc', '%Y' %}"},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.def.IsDerived())
+		})
+	}
+}
+
+func TestUT_ContainsTemplateExpression(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{"vars with spaces", "{{ vars.name }}", true},
+		{"vars without spaces", "{{vars.name}}", true},
+		{"cookiecutter with spaces", "{{ cookiecutter.name }}", true},
+		{"cookiecutter without spaces", "{{cookiecutter.name}}", true},
+		{"complex expression", "{{vars.package_display_name.lower().replace(' ', '_')}}", true},
+		{"with filter", "{{ vars.name | snake }}", true},
+		{"plain string", "hello world", false},
+		{"empty string", "", false},
+		{"braces but no vars", "{{ something_else }}", false},
+		{"partial match vars", "{{ variable }}", false},
+		{"just braces", "{{}}", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, containsTemplateExpression(tt.input))
+		})
+	}
+}
