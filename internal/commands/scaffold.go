@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/kaikenlabs/tag/internal/convert"
 	"github.com/kaikenlabs/tag/internal/remote"
@@ -191,21 +193,44 @@ func handleCookiecutterDetection(c *cli.Context, ccErr *scaffold.ErrCookiecutter
 		return app.Errorf("Conversion declined. Use 'tag convert cookiecutter %s' to convert manually.", templateRef)
 	}
 
-	// Run in-place conversion
+	// Generate default output directory name
+	defaultDestination := suggestConvertedTemplateName(templateRef)
+
+	// Prompt for output directory
+	destination, err := prompter.Input("Output directory for converted template", defaultDestination, false)
+	if err != nil {
+		return app.Errorf("prompt failed: %w", err)
+	}
+	if destination == "" {
+		destination = defaultDestination
+	}
+
+	// Run full conversion to new directory
 	converter, err := convert.NewConverter()
 	if err != nil {
 		return app.Errorf("failed to create converter: %w", err)
 	}
 	ctx := context.Background()
-	if err := converter.ConvertInPlace(ctx, templateDir); err != nil {
+	result, err := converter.Convert(ctx, convert.Options{
+		Source:      templateDir,
+		Destination: destination,
+		Force:       c.Bool("force"),
+	})
+	if err != nil {
 		return app.Errorf("conversion failed: %w", err)
 	}
 
-	fmt.Println("Created tag.template.json")
-	fmt.Println("Template ready")
+	fmt.Printf("Converted template to: %s\n", result.Destination)
+	fmt.Printf("  Variables: %d, Files: %d\n", result.VariablesConverted, result.FilesProcessed)
+	if len(result.Warnings) > 0 {
+		fmt.Printf("  Warnings: %d (review after scaffolding)\n", len(result.Warnings))
+	}
 	fmt.Println()
 
-	// Retry scaffolding
+	// Update opts to use the converted template directory
+	opts.TemplateDir = result.Destination
+
+	// Retry scaffolding with converted template
 	s, err := scaffold.NewScaffold(opts)
 	if err != nil {
 		return app.Errorf("failed to reinitialize scaffold: %w", err)
@@ -214,4 +239,28 @@ func handleCookiecutterDetection(c *cli.Context, ccErr *scaffold.ErrCookiecutter
 		return app.Errorf("scaffolding failed: %w", err)
 	}
 	return nil
+}
+
+// suggestConvertedTemplateName generates a default name for converted template output.
+func suggestConvertedTemplateName(templateRef string) string {
+	// Extract base name from template reference
+	baseName := filepath.Base(templateRef)
+
+	// Handle remote references like gh:user/repo
+	if strings.Contains(templateRef, ":") {
+		parts := strings.Split(templateRef, ":")
+		if len(parts) > 1 {
+			baseName = filepath.Base(parts[1])
+		}
+	}
+
+	// Strip version tags like @v1.0.0
+	if idx := strings.Index(baseName, "@"); idx != -1 {
+		baseName = baseName[:idx]
+	}
+
+	// Strip common cookiecutter prefixes
+	baseName = strings.TrimPrefix(baseName, "cookiecutter-")
+
+	return baseName + "-tag"
 }
