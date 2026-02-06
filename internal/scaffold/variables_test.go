@@ -192,8 +192,72 @@ func TestUT_VariableCollector_SkipPrivateVars(t *testing.T) {
 
 	// Private var should get its default
 	assert.Equal(t, "computed", vars["_private_var"])
-	// Should not prompt for private vars
-	// (Only prompt for optional vars without values, which is the public one)
+	// Should not prompt for private vars (but should prompt for public_var)
+	assert.Equal(t, 1, mockPrompter.CallCount["Input"]) // Only public_var prompted
+}
+
+func TestUT_VariableCollector_PromptForVarsWithDefaults(t *testing.T) {
+	// This test verifies that variables WITH defaults are still prompted in interactive mode
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Enter value for project_name"] = "user_provided_value"
+	mockPrompter.InputResults["Enter value for author"] = "Jane Doe"
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "default_project"},
+			"author":       {Type: VarTypeString, Default: "John Doe"},
+		},
+	}
+
+	opts := CollectOptions{
+		NoPrompt: false,
+		IsTTY:    true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// Both variables should be prompted even though they have defaults
+	assert.Equal(t, "user_provided_value", vars["project_name"])
+	assert.Equal(t, "Jane Doe", vars["author"])
+	assert.Equal(t, 2, mockPrompter.CallCount["Input"])
+}
+
+func TestUT_VariableCollector_ValuesFileSkipsPrompt(t *testing.T) {
+	// This test verifies that variables provided via values file are NOT re-prompted
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Enter value for prompted_var"] = "prompted_value"
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"file_var":     {Type: VarTypeString, Default: "default"},
+			"prompted_var": {Type: VarTypeString, Default: "default"},
+		},
+	}
+
+	// Create a temp values file that provides file_var
+	tempDir := t.TempDir()
+	valuesFile := filepath.Join(tempDir, "values.json")
+	err := os.WriteFile(valuesFile, []byte(`{"file_var": "from_file"}`), 0o644)
+	require.NoError(t, err)
+
+	opts := CollectOptions{
+		ValuesFile: valuesFile,
+		NoPrompt:   false,
+		IsTTY:      true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// file_var should come from values file (not prompted)
+	assert.Equal(t, "from_file", vars["file_var"])
+	// prompted_var should be prompted since it wasn't in values file
+	assert.Equal(t, "prompted_value", vars["prompted_var"])
+	// Only one prompt should have happened
+	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
 }
 
 func TestUT_VariableCollector_TypeCoercion(t *testing.T) {
