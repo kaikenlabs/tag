@@ -85,7 +85,7 @@ func (e *AuthError) Error() string {
 	case ProviderGitLab:
 		hint = " (hint: set GITLAB_TOKEN environment variable)"
 	case ProviderBitbucket:
-		hint = " (hint: set BITBUCKET_TOKEN environment variable)"
+		hint = " (hint: set BITBUCKET_USERNAME and BITBUCKET_TOKEN for app passwords, or just BITBUCKET_TOKEN for repository access tokens)"
 	}
 
 	if e.Err != nil {
