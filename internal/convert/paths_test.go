@@ -16,25 +16,25 @@ func TestUT_ConvertPath_SimplePlaceholder(t *testing.T) {
 		{
 			name:     "single placeholder",
 			input:    "{{ cookiecutter.project_name }}",
-			expected: "__project_name__",
+			expected: "{{ vars.project_name }}",
 			changed:  true,
 		},
 		{
 			name:     "placeholder in path",
 			input:    "{{ cookiecutter.project_name }}/src/main.go",
-			expected: "__project_name__/src/main.go",
+			expected: "{{ vars.project_name }}/src/main.go",
 			changed:  true,
 		},
 		{
 			name:     "placeholder in filename",
 			input:    "src/{{ cookiecutter.module_name }}.py",
-			expected: "src/__module_name__.py",
+			expected: "src/{{ vars.module_name }}.py",
 			changed:  true,
 		},
 		{
 			name:     "multiple placeholders",
 			input:    "{{ cookiecutter.project_name }}/{{ cookiecutter.module_name }}/service.go",
-			expected: "__project_name__/__module_name__/service.go",
+			expected: "{{ vars.project_name }}/{{ vars.module_name }}/service.go",
 			changed:  true,
 		},
 		{
@@ -42,6 +42,12 @@ func TestUT_ConvertPath_SimplePlaceholder(t *testing.T) {
 			input:    "src/main.go",
 			expected: "src/main.go",
 			changed:  false,
+		},
+		{
+			name:     "python __init__.py preserved",
+			input:    "{{ cookiecutter.project_name }}/src/__init__.py",
+			expected: "{{ vars.project_name }}/src/__init__.py",
+			changed:  true,
 		},
 	}
 
@@ -61,24 +67,24 @@ func TestUT_ConvertPath_WithFilter(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "snake filter",
+			name:     "lower filter",
 			input:    "{{ cookiecutter.project_name | lower }}",
-			expected: "__project_name | lower__",
+			expected: "{{ vars.project_name | lower }}",
 		},
 		{
 			name:     "filter without spaces",
 			input:    "{{ cookiecutter.project_name|upper }}",
-			expected: "__project_name | upper__",
+			expected: "{{ vars.project_name | upper }}",
 		},
 		{
 			name:     "filter with extra spaces",
 			input:    "{{  cookiecutter.project_name  |  snake  }}",
-			expected: "__project_name | snake__",
+			expected: "{{ vars.project_name | snake }}",
 		},
 		{
 			name:     "filter in complex path",
 			input:    "{{ cookiecutter.project_name | snake }}/internal/{{ cookiecutter.model | plural }}/handler.go",
-			expected: "__project_name | snake__/internal/__model | plural__/handler.go",
+			expected: "{{ vars.project_name | snake }}/internal/{{ vars.model | plural }}/handler.go",
 		},
 	}
 
@@ -100,22 +106,22 @@ func TestUT_ConvertPath_WhitespaceVariants(t *testing.T) {
 		{
 			name:     "no spaces",
 			input:    "{{cookiecutter.var}}",
-			expected: "__var__",
+			expected: "{{ vars.var }}",
 		},
 		{
 			name:     "single space",
 			input:    "{{ cookiecutter.var }}",
-			expected: "__var__",
+			expected: "{{ vars.var }}",
 		},
 		{
 			name:     "extra spaces",
 			input:    "{{   cookiecutter.var   }}",
-			expected: "__var__",
+			expected: "{{ vars.var }}",
 		},
 		{
 			name:     "mixed spacing with filter",
 			input:    "{{ cookiecutter.var| lower}}",
-			expected: "__var | lower__",
+			expected: "{{ vars.var | lower }}",
 		},
 	}
 
@@ -154,14 +160,14 @@ func TestUT_ConvertPathWithDetails(t *testing.T) {
 
 	result, conversions := ConvertPathWithDetails(input)
 
-	assert.Equal(t, "__project_name__/src/__module | lower__.go", result)
+	assert.Equal(t, "{{ vars.project_name }}/src/{{ vars.module | lower }}.go", result)
 	assert.Len(t, conversions, 2)
 
 	assert.Equal(t, "{{ cookiecutter.project_name }}", conversions[0].From)
-	assert.Equal(t, "__project_name__", conversions[0].To)
+	assert.Equal(t, "{{ vars.project_name }}", conversions[0].To)
 
 	assert.Equal(t, "{{ cookiecutter.module | lower }}", conversions[1].From)
-	assert.Equal(t, "__module | lower__", conversions[1].To)
+	assert.Equal(t, "{{ vars.module | lower }}", conversions[1].To)
 }
 
 func TestUT_HasCookiecutterPlaceholders(t *testing.T) {
@@ -173,8 +179,8 @@ func TestUT_HasCookiecutterPlaceholders(t *testing.T) {
 		{"has placeholder", "{{ cookiecutter.var }}", true},
 		{"has placeholder with filter", "{{ cookiecutter.var | lower }}", true},
 		{"no placeholder", "src/main.go", false},
-		{"similar but different", "{{ vars.project }}", false},
-		{"TAG placeholder", "__var__", false},
+		{"vars namespace not cookiecutter", "{{ vars.project }}", false},
+		{"python dunder not a placeholder", "__init__.py", false},
 	}
 
 	for _, tt := range tests {

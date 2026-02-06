@@ -41,8 +41,8 @@ func createTestTemplate(t *testing.T) string {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
 
-	// Create template structure: __project_name__/
-	projectDir := filepath.Join(dir, "__project_name__")
+	// Create template structure: {{ vars.project_name }}/
+	projectDir := filepath.Join(dir, "{{ vars.project_name }}")
 	require.NoError(t, os.MkdirAll(projectDir, 0o755))
 
 	// Create a template file
@@ -202,9 +202,9 @@ func TestIT_Scaffold_PathPlaceholders(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
 
 	// Create directory structure with placeholders
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "__project_name | snake__", "internal", "__module_name | plural__"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name | snake }}", "internal", "{{ vars.module_name | plural }}"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "__project_name | snake__", "internal", "__module_name | plural__", "__module_name__.go.tmpl"),
+		filepath.Join(dir, "{{ vars.project_name | snake }}", "internal", "{{ vars.module_name | plural }}", "{{ vars.module_name }}.go.tmpl"),
 		[]byte("package {{ vars.module_name | plural }}\n"),
 		0o644,
 	))
@@ -472,8 +472,8 @@ func TestIT_Scaffold_PathTraversalPrevention(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
 
 	// Create a template file with path that would escape output dir
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "__bad_var__"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "__bad_var__", "evil.txt"), []byte("content"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.bad_var }}"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "{{ vars.bad_var }}", "evil.txt"), []byte("content"), 0o644))
 
 	outputDir := filepath.Join(t.TempDir(), "output")
 	opts := Options{

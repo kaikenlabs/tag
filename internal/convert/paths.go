@@ -12,8 +12,8 @@ var cookiecutterPathRegex = regexp.MustCompile(
 )
 
 // ConvertPath converts a path from Cookiecutter format to TAG format.
-// {{ cookiecutter.var }} becomes __var__
-// {{ cookiecutter.var | filter }} becomes __var | filter__
+// {{ cookiecutter.var }} becomes {{ vars.var }}
+// {{ cookiecutter.var | filter }} becomes {{ vars.var | filter }}
 func ConvertPath(path string) (string, bool) {
 	converted := false
 
@@ -31,9 +31,9 @@ func ConvertPath(path string) (string, bool) {
 		}
 
 		if filterName != "" {
-			return "__" + varName + " | " + filterName + "__"
+			return "{{ vars." + varName + " | " + filterName + " }}"
 		}
-		return "__" + varName + "__"
+		return "{{ vars." + varName + " }}"
 	})
 
 	return result, converted
@@ -65,9 +65,9 @@ func ConvertPathWithDetails(path string) (string, []PathConversion) {
 
 		var replacement string
 		if filterName != "" {
-			replacement = "__" + varName + " | " + filterName + "__"
+			replacement = "{{ vars." + varName + " | " + filterName + " }}"
 		} else {
-			replacement = "__" + varName + "__"
+			replacement = "{{ vars." + varName + " }}"
 		}
 
 		conversions = append([]PathConversion{{

@@ -12,7 +12,7 @@ import (
 
 // PathProcessor handles path placeholder substitution.
 type PathProcessor interface {
-	// ProcessPath processes a path, replacing __var__ and __var | filter__ placeholders.
+	// ProcessPath processes a path, replacing {{ vars.name }} and {{ vars.name | filter }} placeholders.
 	ProcessPath(path string, vars map[string]any) (string, error)
 }
 
@@ -24,12 +24,13 @@ func NewPathProcessor() *DefaultPathProcessor {
 	return &DefaultPathProcessor{}
 }
 
-// placeholderRegex matches __var__ and __var | filter__ patterns.
-// Examples: __project_name__, __project_name | snake__, __var|filter__
-var placeholderRegex = regexp.MustCompile(`__([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|\s*([a-zA-Z_][a-zA-Z0-9_]*))?\s*__`)
+// placeholderRegex matches {{ vars.name }} and {{ vars.name | filter }} patterns.
+// Also supports {{ cookiecutter.name }} as an alias for compatibility.
+// Examples: {{ vars.project_name }}, {{ vars.project_name | snake }}, {{ cookiecutter.name }}
+var placeholderRegex = regexp.MustCompile(`\{\{\s*(?:vars|cookiecutter)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|\s*([a-zA-Z_][a-zA-Z0-9_]*))?\s*\}\}`)
 
 // ProcessPath replaces placeholders in a path with variable values.
-// Supports both __var__ and __var | filter__ syntax.
+// Supports {{ vars.name }}, {{ vars.name | filter }}, and {{ cookiecutter.name }} syntax.
 func (p *DefaultPathProcessor) ProcessPath(path string, vars map[string]any) (string, error) {
 	// Split path into segments to process each part
 	segments := strings.Split(path, string(filepath.Separator))
