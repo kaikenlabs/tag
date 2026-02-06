@@ -172,18 +172,17 @@ func scaffoldAction(c *cli.Context) error {
 func handleCookiecutterDetection(c *cli.Context, ccErr *scaffold.ErrCookiecutterDetected, templateRef, templateDir string, opts scaffold.Options) error {
 	// In non-interactive mode, fail with helpful error
 	if c.Bool("no-input") || !scaffold.IsTTY() {
-		return app.Errorf("This appears to be a Cookiecutter template (found %s).\n"+
+		return app.Errorf("This appears to be a Cookiecutter template.\n"+
 			"Cannot convert in non-interactive mode.\n"+
 			"Run without --no-input to convert interactively, or use:\n"+
 			"  tag convert cookiecutter %s",
-			ccErr.CookiecutterPath, templateRef)
+			templateRef)
 	}
 
 	// Prompt for conversion
 	prompter := scaffold.NewInteractivePrompter()
 	confirmed, err := prompter.Confirm(
-		fmt.Sprintf("This appears to be a Cookiecutter template (found %s). Convert to TAG format?",
-			ccErr.CookiecutterPath),
+		"This appears to be a Cookiecutter template. Convert to TAG format?",
 		true, // default yes
 	)
 	if err != nil {
@@ -193,8 +192,8 @@ func handleCookiecutterDetection(c *cli.Context, ccErr *scaffold.ErrCookiecutter
 		return app.Errorf("Conversion declined. Use 'tag convert cookiecutter %s' to convert manually.", templateRef)
 	}
 
-	// Generate default output directory name
-	defaultDestination := suggestConvertedTemplateName(templateRef)
+	// Generate default output directory name (in current directory)
+	defaultDestination := "./" + suggestConvertedTemplateName(templateRef)
 
 	// Prompt for output directory
 	destination, err := prompter.Input("Output directory for converted template", defaultDestination, false)
@@ -226,6 +225,19 @@ func handleCookiecutterDetection(c *cli.Context, ccErr *scaffold.ErrCookiecutter
 		fmt.Printf("  Warnings: %d (review after scaffolding)\n", len(result.Warnings))
 	}
 	fmt.Println()
+
+	// Prompt for project output directory if not already specified
+	if opts.OutputDir == "" && opts.ProjectName == "" {
+		defaultProject := "./my-project"
+		projectDir, err := prompter.Input("Output directory for scaffolded project", defaultProject, false)
+		if err != nil {
+			return app.Errorf("prompt failed: %w", err)
+		}
+		if projectDir == "" {
+			projectDir = defaultProject
+		}
+		opts.OutputDir = projectDir
+	}
 
 	// Update opts to use the converted template directory
 	opts.TemplateDir = result.Destination
