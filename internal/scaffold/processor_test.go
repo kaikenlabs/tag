@@ -350,6 +350,46 @@ func TestUT_IsTemplateFile(t *testing.T) {
 	}
 }
 
+func TestUT_PathProcessor_NestedTemplates(t *testing.T) {
+	// Test derived variables where a variable's value is itself a template expression
+	processor := NewPathProcessor()
+	vars := map[string]any{
+		"package_display_name": "My Cool Package",
+		// package_name's value is a template expression (like Cookiecutter derived variables)
+		"package_name": "{{ vars.package_display_name.lower().replace(' ', '_').replace('-', '_') }}",
+	}
+
+	tests := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "simple variable with template value",
+			path:     "{{ vars.package_name }}",
+			expected: "my_cool_package",
+		},
+		{
+			name:     "nested template in path",
+			path:     "src/{{ vars.package_name }}/main.py",
+			expected: "src/my_cool_package/main.py",
+		},
+		{
+			name:     "multiple nested references",
+			path:     "{{ vars.package_name }}/src/{{ vars.package_name }}/__init__.py",
+			expected: "my_cool_package/src/my_cool_package/__init__.py",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processor.ProcessPath(tt.path, vars)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestUT_PathProcessor_WhitespaceAroundFilter(t *testing.T) {
 	processor := NewPathProcessor()
 	vars := map[string]any{

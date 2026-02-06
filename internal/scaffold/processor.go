@@ -56,7 +56,12 @@ func (p *DefaultPathProcessor) ProcessPath(path string, vars map[string]any) (st
 	return filepath.Join(processedSegments...), nil
 }
 
+// maxRenderIterations limits recursive template rendering to prevent infinite loops.
+const maxRenderIterations = 5
+
 // processSegment processes Jinja2 expressions in a single path segment.
+// Handles nested templates (when a variable's value contains another template expression)
+// by re-rendering until no more placeholders remain.
 func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]any) (string, error) {
 	// Quick check: if no {{ }} present, return as-is
 	if !placeholderDetectRegex.MatchString(segment) {
@@ -69,13 +74,28 @@ func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]an
 		"cookiecutter": vars, // Alias for compatibility
 	}
 
-	// Use the template engine to render the segment
-	result, err := p.engine.ExecuteToString(segment, ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to process path segment %q: %w", segment, err)
+	result := segment
+	for i := 0; i < maxRenderIterations; i++ {
+		// If no more placeholders, we're done
+		if !placeholderDetectRegex.MatchString(result) {
+			break
+		}
+
+		// Render the current result
+		rendered, err := p.engine.ExecuteToString(result, ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to process path segment %q: %w", segment, err)
+		}
+		rendered = strings.TrimSpace(rendered)
+
+		// If rendering didn't change anything, we're done (prevents infinite loops)
+		if rendered == result {
+			break
+		}
+		result = rendered
 	}
 
-	return strings.TrimSpace(result), nil
+	return result, nil
 }
 
 // simpleVarRegex extracts simple variable names from {{ vars.name }} or {{ cookiecutter.name }} patterns.
