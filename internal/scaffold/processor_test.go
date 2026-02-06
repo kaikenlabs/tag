@@ -138,16 +138,16 @@ func TestUT_PathProcessor_WithFilter(t *testing.T) {
 	}
 }
 
-func TestUT_PathProcessor_InvalidVar(t *testing.T) {
+func TestUT_PathProcessor_UndefinedVar(t *testing.T) {
 	processor := NewPathProcessor()
 	vars := map[string]any{
 		"project_name": "my_project",
 	}
 
-	_, err := processor.ProcessPath("{{ vars.unknown_var }}/file.go", vars)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "undefined variable")
-	assert.Contains(t, err.Error(), "unknown_var")
+	// Gonja returns empty string for undefined variables (consistent with content templates)
+	result, err := processor.ProcessPath("{{ vars.unknown_var }}/file.go", vars)
+	require.NoError(t, err)
+	assert.Equal(t, "file.go", result) // Empty segment is skipped
 }
 
 func TestUT_PathProcessor_InvalidFilter(t *testing.T) {
@@ -158,7 +158,7 @@ func TestUT_PathProcessor_InvalidFilter(t *testing.T) {
 
 	_, err := processor.ProcessPath("{{ vars.project_name | invalid_filter }}", vars)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown or unsupported filter")
+	assert.Contains(t, err.Error(), "filter")
 	assert.Contains(t, err.Error(), "invalid_filter")
 }
 
@@ -186,6 +186,48 @@ func TestUT_PathProcessor_MultiplePlaceholdersInSegment(t *testing.T) {
 	result, err := processor.ProcessPath("{{ vars.prefix }}-{{ vars.suffix }}/handler.go", vars)
 	require.NoError(t, err)
 	assert.Equal(t, "api-v1/handler.go", result)
+}
+
+func TestUT_PathProcessor_ComplexExpressions(t *testing.T) {
+	processor := NewPathProcessor()
+	vars := map[string]any{
+		"package_display_name": "My Cool Package",
+	}
+
+	tests := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "lower method",
+			path:     "{{ vars.package_display_name.lower() }}",
+			expected: "my cool package",
+		},
+		{
+			name:     "replace filter",
+			path:     "{{ vars.package_display_name | replace(' ', '_') }}",
+			expected: "My_Cool_Package",
+		},
+		{
+			name:     "chained filters (recommended approach)",
+			path:     "{{ cookiecutter.package_display_name | lower | replace(' ', '_') | replace('-', '_') }}",
+			expected: "my_cool_package",
+		},
+		{
+			name:     "upper method",
+			path:     "{{ vars.package_display_name.upper() }}",
+			expected: "MY COOL PACKAGE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processor.ProcessPath(tt.path, vars)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestUT_ExtractPlaceholders(t *testing.T) {

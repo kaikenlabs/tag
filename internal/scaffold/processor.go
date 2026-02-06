@@ -6,31 +6,37 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/gobuffalo/flect"
-	"github.com/kaikenlabs/tag/internal/formats"
+	"github.com/kaikenlabs/tag/internal/template"
 )
 
 // PathProcessor handles path placeholder substitution.
 type PathProcessor interface {
-	// ProcessPath processes a path, replacing {{ vars.name }} and {{ vars.name | filter }} placeholders.
+	// ProcessPath processes a path, replacing Jinja2 expressions like {{ vars.name }}.
 	ProcessPath(path string, vars map[string]any) (string, error)
 }
 
-// DefaultPathProcessor implements PathProcessor using the filter registry.
-type DefaultPathProcessor struct{}
+// DefaultPathProcessor implements PathProcessor using the Gonja template engine.
+type DefaultPathProcessor struct {
+	engine *template.Engine
+}
 
 // NewPathProcessor creates a new path processor.
 func NewPathProcessor() *DefaultPathProcessor {
-	return &DefaultPathProcessor{}
+	engine, err := template.NewEngine()
+	if err != nil {
+		// This should never fail with default options
+		panic(fmt.Sprintf("failed to create template engine: %v", err))
+	}
+	return &DefaultPathProcessor{engine: engine}
 }
 
-// placeholderRegex matches {{ vars.name }} and {{ vars.name | filter }} patterns.
-// Also supports {{ cookiecutter.name }} as an alias for compatibility.
-// Examples: {{ vars.project_name }}, {{ vars.project_name | snake }}, {{ cookiecutter.name }}
-var placeholderRegex = regexp.MustCompile(`\{\{\s*(?:vars|cookiecutter)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|\s*([a-zA-Z_][a-zA-Z0-9_]*))?\s*\}\}`)
+// placeholderDetectRegex detects if a string contains Jinja2-style placeholders.
+// This is a simple check - the actual parsing is done by Gonja.
+var placeholderDetectRegex = regexp.MustCompile(`\{\{.+\}\}`)
 
 // ProcessPath replaces placeholders in a path with variable values.
-// Supports {{ vars.name }}, {{ vars.name | filter }}, and {{ cookiecutter.name }} syntax.
+// Supports any valid Jinja2 expression including method calls.
+// Examples: {{ vars.name }}, {{ vars.name | snake }}, {{ cookiecutter.name.lower() }}
 func (p *DefaultPathProcessor) ProcessPath(path string, vars map[string]any) (string, error) {
 	// Split path into segments to process each part
 	segments := strings.Split(path, string(filepath.Separator))
@@ -50,89 +56,36 @@ func (p *DefaultPathProcessor) ProcessPath(path string, vars map[string]any) (st
 	return filepath.Join(processedSegments...), nil
 }
 
-// processSegment processes placeholders in a single path segment.
+// processSegment processes Jinja2 expressions in a single path segment.
 func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]any) (string, error) {
-	var lastErr error
-
-	result := placeholderRegex.ReplaceAllStringFunc(segment, func(match string) string {
-		if lastErr != nil {
-			return match // Skip if we already have an error
-		}
-
-		// Parse the placeholder
-		submatches := placeholderRegex.FindStringSubmatch(match)
-		if len(submatches) < 2 {
-			return match
-		}
-
-		varName := submatches[1]
-		filterName := ""
-		if len(submatches) >= 3 && submatches[2] != "" {
-			filterName = submatches[2]
-		}
-
-		// Look up the variable
-		value, ok := vars[varName]
-		if !ok {
-			lastErr = fmt.Errorf("undefined variable: %s", varName)
-			return match
-		}
-
-		// Convert value to string
-		strValue := fmt.Sprintf("%v", value)
-
-		// Apply filter if specified
-		if filterName != "" {
-			filtered, err := applyPathFilter(strValue, filterName)
-			if err != nil {
-				lastErr = fmt.Errorf("filter %q on variable %q: %w", filterName, varName, err)
-				return match
-			}
-			strValue = filtered
-		}
-
-		return strValue
-	})
-
-	if lastErr != nil {
-		return "", lastErr
+	// Quick check: if no {{ }} present, return as-is
+	if !placeholderDetectRegex.MatchString(segment) {
+		return segment, nil
 	}
 
-	return result, nil
-}
-
-// Whitelist of safe filters for path processing.
-// These filters only transform strings and don't have side effects.
-var safePathFilters = map[string]func(string) string{
-	"snake":       formats.CaseSnake,
-	"snake_case":  formats.CaseSnake,
-	"pascal":      formats.CasePascal,
-	"pascal_case": formats.CasePascal,
-	"camel":       formats.CaseCamel,
-	"camel_case":  formats.CaseCamel,
-	"kebab":       formats.CaseKebab,
-	"kebab_case":  formats.CaseKebab,
-	"lower":       strings.ToLower,
-	"upper":       strings.ToUpper,
-	"plural":      flect.Pluralize,
-	"pluralize":   flect.Pluralize,
-	"singular":    flect.Singularize,
-	"singularize": flect.Singularize,
-}
-
-// applyPathFilter applies a filter to a string value.
-// Only filters in the whitelist are allowed for path processing.
-func applyPathFilter(value, filterName string) (string, error) {
-	filterFn, ok := safePathFilters[filterName]
-	if !ok {
-		return "", fmt.Errorf("unknown or unsupported filter: %s (supported: snake, pascal, camel, kebab, lower, upper, plural, singular)", filterName)
+	// Build context with both "vars" and "cookiecutter" namespaces
+	ctx := template.Context{
+		"vars":         vars,
+		"cookiecutter": vars, // Alias for compatibility
 	}
-	return filterFn(value), nil
+
+	// Use the template engine to render the segment
+	result, err := p.engine.ExecuteToString(segment, ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to process path segment %q: %w", segment, err)
+	}
+
+	return strings.TrimSpace(result), nil
 }
 
-// ExtractPlaceholders returns all placeholder variable names found in a path.
+// simpleVarRegex extracts simple variable names from {{ vars.name }} or {{ cookiecutter.name }} patterns.
+// This is used for ExtractPlaceholders - complex expressions are not fully parsed.
+var simpleVarRegex = regexp.MustCompile(`\{\{\s*(?:vars|cookiecutter)\.([a-zA-Z_][a-zA-Z0-9_]*)`)
+
+// ExtractPlaceholders returns variable names found in simple {{ vars.name }} patterns.
+// Note: This does not extract variables from complex expressions like method calls.
 func ExtractPlaceholders(path string) []string {
-	matches := placeholderRegex.FindAllStringSubmatch(path, -1)
+	matches := simpleVarRegex.FindAllStringSubmatch(path, -1)
 	vars := make([]string, 0, len(matches))
 	seen := make(map[string]bool)
 
@@ -146,9 +99,9 @@ func ExtractPlaceholders(path string) []string {
 	return vars
 }
 
-// HasPlaceholders checks if a path contains any placeholders.
+// HasPlaceholders checks if a path contains any Jinja2-style placeholders.
 func HasPlaceholders(path string) bool {
-	return placeholderRegex.MatchString(path)
+	return placeholderDetectRegex.MatchString(path)
 }
 
 // StripTemplateExtension removes the .tmpl extension from a filename.
