@@ -2,7 +2,10 @@ package commands
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
+	"github.com/kaikenlabs/tag/internal/convert"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -152,8 +155,63 @@ func scaffoldAction(c *cli.Context) error {
 	}
 
 	if err := s.Run(opts); err != nil {
+		// Check if this is a Cookiecutter template detection
+		var ccErr *scaffold.ErrCookiecutterDetected
+		if errors.As(err, &ccErr) {
+			return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts)
+		}
 		return app.Errorf("scaffolding failed: %w", err)
 	}
 
+	return nil
+}
+
+// handleCookiecutterDetection handles the case when a Cookiecutter template is detected.
+func handleCookiecutterDetection(c *cli.Context, ccErr *scaffold.ErrCookiecutterDetected, templateRef, templateDir string, opts scaffold.Options) error {
+	// In non-interactive mode, fail with helpful error
+	if c.Bool("no-input") || !scaffold.IsTTY() {
+		return app.Errorf("This appears to be a Cookiecutter template (found %s).\n"+
+			"Cannot convert in non-interactive mode.\n"+
+			"Run without --no-input to convert interactively, or use:\n"+
+			"  tag convert cookiecutter %s",
+			ccErr.CookiecutterPath, templateRef)
+	}
+
+	// Prompt for conversion
+	prompter := scaffold.NewInteractivePrompter()
+	confirmed, err := prompter.Confirm(
+		fmt.Sprintf("This appears to be a Cookiecutter template (found %s). Convert to TAG format?",
+			ccErr.CookiecutterPath),
+		true, // default yes
+	)
+	if err != nil {
+		return app.Errorf("prompt failed: %w", err)
+	}
+	if !confirmed {
+		return app.Errorf("Conversion declined. Use 'tag convert cookiecutter %s' to convert manually.", templateRef)
+	}
+
+	// Run in-place conversion
+	converter, err := convert.NewConverter()
+	if err != nil {
+		return app.Errorf("failed to create converter: %w", err)
+	}
+	ctx := context.Background()
+	if err := converter.ConvertInPlace(ctx, templateDir); err != nil {
+		return app.Errorf("conversion failed: %w", err)
+	}
+
+	fmt.Println("Created tag.template.json")
+	fmt.Println("Template ready")
+	fmt.Println()
+
+	// Retry scaffolding
+	s, err := scaffold.NewScaffold(opts)
+	if err != nil {
+		return app.Errorf("failed to reinitialize scaffold: %w", err)
+	}
+	if err := s.Run(opts); err != nil {
+		return app.Errorf("scaffolding failed: %w", err)
+	}
 	return nil
 }

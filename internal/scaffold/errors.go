@@ -95,6 +95,16 @@ func NewTemplateError(file, message string, err error) *TemplateError {
 	return &TemplateError{File: file, Message: message, Err: err}
 }
 
+// ErrCookiecutterDetected represents a Cookiecutter template detection.
+// It carries the path to the detected cookiecutter.json file.
+type ErrCookiecutterDetected struct {
+	CookiecutterPath string
+}
+
+func (e *ErrCookiecutterDetected) Error() string {
+	return fmt.Sprintf("cookiecutter template detected: %s", e.CookiecutterPath)
+}
+
 // ErrHookFailed is returned when a hook command fails.
 var ErrHookFailed = errors.New("hook command failed")
 

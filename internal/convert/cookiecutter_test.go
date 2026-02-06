@@ -256,3 +256,99 @@ func TestUT_Converter_DefaultDestination(t *testing.T) {
 	// Clean up
 	os.RemoveAll(result.Destination)
 }
+
+func TestUT_ConvertInPlace_CreatesTagTemplateJSON(t *testing.T) {
+	// Create a minimal cookiecutter template
+	srcDir := t.TempDir()
+
+	// Create cookiecutter.json
+	ccConfig := `{
+		"project_name": "test_project",
+		"author": "Test Author",
+		"use_docker": true
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "cookiecutter.json"), []byte(ccConfig), 0o644))
+
+	// Create a template file
+	templateDir := filepath.Join(srcDir, "{{ cookiecutter.project_name }}")
+	require.NoError(t, os.MkdirAll(templateDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templateDir, "main.go"),
+		[]byte("package main\n"),
+		0o644,
+	))
+
+	// Run in-place conversion
+	converter, err := NewConverter()
+	require.NoError(t, err)
+
+	err = converter.ConvertInPlace(context.Background(), srcDir)
+	require.NoError(t, err)
+
+	// Verify tag.template.json was created in the same directory
+	tagConfigPath := filepath.Join(srcDir, "tag.template.json")
+	_, err = os.Stat(tagConfigPath)
+	require.NoError(t, err)
+
+	tagConfig, err := os.ReadFile(tagConfigPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(tagConfig), "project_name")
+	assert.Contains(t, string(tagConfig), "author")
+	assert.Contains(t, string(tagConfig), "use_docker")
+
+	// Verify original template files were NOT copied (in-place means no file duplication)
+	// The {{ cookiecutter.project_name }} directory should still exist as-is
+	_, err = os.Stat(templateDir)
+	require.NoError(t, err)
+
+	// Verify cookiecutter.json is still there
+	_, err = os.Stat(filepath.Join(srcDir, "cookiecutter.json"))
+	require.NoError(t, err)
+}
+
+func TestUT_ConvertInPlace_MissingCookiecutterJSON(t *testing.T) {
+	srcDir := t.TempDir()
+	// Don't create cookiecutter.json
+
+	converter, err := NewConverter()
+	require.NoError(t, err)
+
+	err = converter.ConvertInPlace(context.Background(), srcDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoCookiecutterConfig)
+}
+
+func TestUT_ConvertInPlace_WithHooks(t *testing.T) {
+	srcDir := t.TempDir()
+
+	// Create cookiecutter.json
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "cookiecutter.json"), []byte(`{"name": "test"}`), 0o644))
+
+	// Create hooks
+	hooksDir := filepath.Join(srcDir, "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "pre_gen_project.sh"), []byte("#!/bin/bash\necho pre"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "post_gen_project.sh"), []byte("#!/bin/bash\necho post"), 0o755))
+
+	converter, err := NewConverter()
+	require.NoError(t, err)
+
+	err = converter.ConvertInPlace(context.Background(), srcDir)
+	require.NoError(t, err)
+
+	// Verify tag.template.json was created with hooks configuration
+	tagConfigPath := filepath.Join(srcDir, "tag.template.json")
+	tagConfig, err := os.ReadFile(tagConfigPath)
+	require.NoError(t, err)
+
+	// Should contain hooks configuration
+	assert.Contains(t, string(tagConfig), "hooks")
+	assert.Contains(t, string(tagConfig), "pre_scaffold")
+	assert.Contains(t, string(tagConfig), "post_scaffold")
+
+	// Original hooks should still be in place (not copied anywhere)
+	_, err = os.Stat(filepath.Join(hooksDir, "pre_gen_project.sh"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(hooksDir, "post_gen_project.sh"))
+	require.NoError(t, err)
+}
