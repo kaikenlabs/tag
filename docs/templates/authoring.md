@@ -8,18 +8,18 @@ A TAG template is a directory with the following structure:
 
 ```
 my-template/
-├── tag.template.json              # Template configuration (required)
-├── __project_name__/              # Project files with path placeholders
+├── tag.template.json                    # Template configuration (required)
+├── {{ vars.project_name }}/             # Project files with path placeholders
 │   ├── cmd/
-│   │   └── main.go.tmpl           # Processed as Jinja2 template
+│   │   └── main.go.tmpl                 # Processed as Jinja2 template
 │   ├── internal/
-│   │   └── __module_name__/       # Directory with placeholder
+│   │   └── {{ vars.module_name }}/      # Directory with placeholder
 │   │       └── service.go.tmpl
 │   ├── assets/
-│   │   └── logo.png               # Copied as-is (no .tmpl)
+│   │   └── logo.png                     # Copied as-is (no .tmpl)
 │   ├── README.md.tmpl
 │   └── .gitignore
-└── _generators/                   # Optional: becomes _templates/ in output
+└── _generators/                         # Optional: becomes _templates/ in output
     └── handler/
         └── handler.tmpl
 ```
@@ -29,8 +29,8 @@ my-template/
 | File Pattern | Processing |
 |--------------|------------|
 | `*.tmpl` | Parsed as Jinja2 template, `.tmpl` extension removed |
-| `__varname__` in path | Replaced with variable value |
-| `__varname \| filter__` in path | Replaced with filtered variable value |
+| `{{ vars.name }}` in path | Replaced with variable value |
+| `{{ vars.name \| filter }}` in path | Replaced with filtered variable value |
 | All other files | Copied as-is (binary-safe) |
 
 ## tag.template.json
@@ -113,38 +113,73 @@ See [tag.template.json Reference](../reference/tag.template.json.md) for complet
 | `number` | Numeric input | Port number, version |
 | `choice` | Selection from list | License, framework |
 
-### Private/Computed Variables
+### Private Variables
 
-Variables starting with `_` are not prompted and are treated as computed values:
+Variables starting with `_` are not prompted:
 
 ```json
 {
   "vars": {
     "project_name": "my-project",
-    "_project_slug": "{{ vars.project_name|snake }}"
+    "_internal_setting": "some-value"
   }
 }
 ```
 
-> **Note**: Computed variable expressions (like `{{ vars.project_name|snake }}`) are stored as literal strings in the configuration. They are NOT pre-evaluated before template rendering - the expression is passed through as-is and must be rendered in your templates if you want the computed value.
+Private variables are useful for internal configuration values that users shouldn't edit.
+
+### Derived Variables
+
+Derived variables have template expressions as their defaults that reference other variables. Following Cookiecutter's behavior, derived variables are **automatically skipped** during prompting—their values are computed during template rendering.
+
+```json
+{
+  "vars": {
+    "project_name": "my-project",
+    "package_name": "{{ vars.project_name | snake }}",
+    "docker_image": "{{ vars.project_name | kebab }}"
+  }
+}
+```
+
+In this example:
+- `project_name` will be prompted (regular variable)
+- `package_name` will NOT be prompted (derived from `project_name`)
+- `docker_image` will NOT be prompted (derived from `project_name`)
+
+**Detection rules:** A variable is considered derived if its default value is a string containing:
+- `{{ vars.` - TAG's variable namespace
+- `{{ cookiecutter.` - Cookiecutter compatibility namespace
+
+> **Note**: Derived variables are passed through as template expressions and evaluated during rendering. This allows complex computations like `{{ vars.name.lower().replace(' ', '_') }}`.
 
 ## Path Placeholders
 
-Use `__varname__` syntax in file and directory names:
+Use Jinja2-style `{{ vars.name }}` syntax in file and directory names:
 
 ### Basic Substitution
 
 ```
-__project_name__/           → my_awesome_project/
-__module_name__.go.tmpl     → users.go
+{{ vars.project_name }}/           → my_awesome_project/
+{{ vars.module_name }}.go.tmpl     → users.go
 ```
 
 ### With Filters
 
 ```
-__project_name | snake__/   → my_awesome_project/
-__project_name | pascal__/  → MyAwesomeProject/
-__model | plural__/         → users/
+{{ vars.project_name | snake }}/   → my_awesome_project/
+{{ vars.project_name | pascal }}/  → MyAwesomeProject/
+{{ vars.model | plural }}/         → users/
+```
+
+### Method Calls (Cookiecutter Compatibility)
+
+TAG also supports Python-style method calls for Cookiecutter compatibility:
+
+```
+{{ vars.name.lower() }}/                              → myproject/
+{{ vars.name.lower().replace(' ', '_') }}/            → my_project/
+{{ cookiecutter.name.lower().replace('-', '_') }}/    → my_project/
 ```
 
 ### Supported Path Filters
@@ -372,7 +407,7 @@ tag scaffold ./my-template test --no-input
 ```
 go-api-template/
 ├── tag.template.json
-├── __project_name__/
+├── {{ vars.project_name }}/
 │   ├── cmd/
 │   │   └── main.go.tmpl
 │   ├── internal/

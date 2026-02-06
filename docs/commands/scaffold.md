@@ -163,6 +163,57 @@ The replay system is useful for:
 - Re-running scaffolds after template updates
 - Sharing configurations across team members (copy the replay JSON files)
 
+## Cookiecutter Template Support
+
+TAG can automatically detect and convert Cookiecutter templates. When you run `tag scaffold` on a directory that contains `cookiecutter.json` but no `tag.template.json`, TAG will:
+
+1. Prompt you to confirm the conversion
+2. Ask for an output directory for the converted template
+3. Convert the template to TAG format
+4. Continue with scaffolding using the converted template
+
+```bash
+# Scaffold a Cookiecutter template (auto-detected)
+tag scaffold ./my-cookiecutter-template
+
+# Output:
+# This appears to be a Cookiecutter template. Convert to TAG format? [Y/n]
+# Output directory for converted template [./my-cookiecutter-template-tag]:
+# Converted template to: ./my-cookiecutter-template-tag
+# ...continues with normal scaffolding...
+```
+
+In non-interactive mode (`--no-input`), Cookiecutter templates cannot be auto-converted. Use `tag convert cookiecutter` first:
+
+```bash
+tag convert cookiecutter ./my-cookiecutter-template -o ./converted-template
+tag scaffold ./converted-template --no-input
+```
+
+## Derived Variables
+
+Derived variables (also called computed variables) are variables whose default value is a template expression that references other variables. Following Cookiecutter's behavior, derived variables are **not prompted** during interactive scaffolding—they are automatically computed from the values of other variables.
+
+**Example `tag.template.json`:**
+```json
+{
+  "vars": {
+    "package_display_name": "My Package",
+    "package_name": "{{ vars.package_display_name | lower | replace(' ', '_') }}",
+    "github_repo": "{{ vars.package_name }}"
+  }
+}
+```
+
+**User experience:**
+```
+Enter value for package_display_name [My Package]: Awesome Library
+# package_name is NOT prompted - computed as "awesome_library"
+# github_repo is NOT prompted - computed as "awesome_library"
+```
+
+This ensures users only need to provide "input" values, while computed values are derived automatically.
+
 ## Error Handling
 
 | Error | Cause | Solution |
@@ -171,6 +222,7 @@ The replay system is useful for:
 | "failed to resolve template" | Invalid reference or network error | Check the template reference format |
 | "output directory already exists" | Target directory exists | Use `--force` or choose a different output |
 | "missing required variable" | Required variable has no value | Provide value via `--meta` or prompts |
+| "This appears to be a Cookiecutter template" | Cookiecutter template in non-interactive mode | Use `tag convert cookiecutter` first |
 
 ## See Also
 
