@@ -131,7 +131,7 @@ func parseShorthand(input, prefix string, provider Provider, host string) (*Refe
 	}
 
 	owner := parts[0]
-	repo := parts[1]
+	repo := strings.TrimSuffix(parts[1], ".git") // Strip .git if present
 	subPath := ""
 
 	if len(parts) > 2 {

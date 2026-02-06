@@ -82,6 +82,44 @@ func TestUT_Parse_BitbucketShorthand(t *testing.T) {
 	assert.Equal(t, "https://bitbucket.org/myorg/myrepo.git", ref.URL)
 }
 
+func TestUT_Parse_ShorthandWithGitSuffix(t *testing.T) {
+	// Test that .git suffix is stripped from shorthand refs to avoid double .git in URL
+	tests := []struct {
+		name        string
+		input       string
+		expectedURL string
+		expectedRepo string
+	}{
+		{
+			name:         "github with .git",
+			input:        "gh:user/repo.git",
+			expectedURL:  "https://github.com/user/repo.git",
+			expectedRepo: "repo",
+		},
+		{
+			name:         "gitlab with .git",
+			input:        "gl:org/project.git",
+			expectedURL:  "https://gitlab.com/org/project.git",
+			expectedRepo: "project",
+		},
+		{
+			name:         "bitbucket with .git",
+			input:        "bb:team/myrepo.git",
+			expectedURL:  "https://bitbucket.org/team/myrepo.git",
+			expectedRepo: "myrepo",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ref, err := Parse(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedRepo, ref.Repo, "Repo should have .git stripped")
+			assert.Equal(t, tt.expectedURL, ref.URL, "URL should have single .git suffix")
+		})
+	}
+}
+
 func TestUT_Parse_VersionSuffix(t *testing.T) {
 	tests := []struct {
 		name            string
