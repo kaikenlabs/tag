@@ -21,7 +21,8 @@ func NewWithExecutor(executor template.TemplateExecutor, templates, sharedTempla
 	}
 }
 
-// New creates a new TemplateEngine that uses Gonja for template processing.
+// Deprecated: New creates a TemplateEngine that internally creates its own template.Engine.
+// Prefer NewWithExecutor to share a single engine across scaffold and generate paths.
 func New(dirPath string, sharedPath string, fileSuffix string) (TemplateEngine, error) {
 	// Initialize Gonja engine
 	gonjaEngine, err := template.NewEngine()
@@ -74,6 +75,9 @@ func (te *TemplateEngine) Parse(input InputData) ([]TemplateData, error) {
 // Stage 1: Extract and render metadata
 // Stage 2: Parse metadata into TemplateData
 // Stage 3: Render the template body
+//
+// Deprecated: This method is part of the legacy generate pipeline.
+// It will be replaced by direct TemplateExecutor calls in a future release.
 func (te *TemplateEngine) parseTemplate(tmplName, tmplContent string, input InputData) (TemplateData, error) {
 	// Stage 1: Extract metadata block and body
 	metaRaw, bodyRaw, err := template.ExtractMetadata(tmplContent)

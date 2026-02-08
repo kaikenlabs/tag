@@ -17,6 +17,10 @@ const (
 	emptyString           = ""
 )
 
+// New creates a Core engine for the legacy generate pipeline.
+//
+// Deprecated: New internally creates its own template.Engine and writer.Write.
+// Prefer constructing Core with injected TemplateExecutor and FileWriter interfaces.
 func New(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (Core, error) {
 	if dryRun {
 		slog.Info(chalk.Cyan("DRYRUN MODE"))

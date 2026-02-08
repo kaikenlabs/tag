@@ -15,7 +15,10 @@ const (
 	FileModeDefault = 0o644
 )
 
-// New - create a new writer
+// New creates a new writer.
+//
+// Deprecated: New returns a concrete Write value. Callers should program
+// against the FileWriter interface instead so the writer can be injected.
 func New(dryRun bool) Write {
 	return Write{
 		mx: sync.Mutex{},
@@ -61,10 +64,22 @@ func (w *Write) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	return w.fs.WriteFile(name, data, perm)
 }
 
-// AppendFile - append data to the end of file
+// AppendFile - append data to the end of file.
+// Validates that the target path stays within the current working directory
+// to prevent path traversal via malicious generator templates.
 func (w *Write) AppendFile(name string, data []byte) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
+
+	// Validate path containment against working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("cannot determine working directory: %w", err)
+	}
+	if err := validatePathWithinDir(name, cwd); err != nil {
+		return fmt.Errorf("path safety check failed: %w", err)
+	}
+
 	file, err := w.fs.OpenFile(name, os.O_APPEND|os.O_WRONLY, FileModeDefault)
 	if err != nil {
 		slog.Error("cannot open file", "file", name, "error", err)
@@ -78,10 +93,22 @@ func (w *Write) AppendFile(name string, data []byte) error {
 }
 
 // InjectIntoFile - inject before, or after a matcher for a source file.
-// If the matcher can't be found, don't do anything to the file
+// If the matcher can't be found, don't do anything to the file.
+// Validates that the target path stays within the current working directory
+// to prevent path traversal via malicious generator templates.
 func (w *Write) InjectIntoFile(name string, data []byte, inject Inject) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
+
+	// Validate path containment against working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("cannot determine working directory: %w", err)
+	}
+	if err := validatePathWithinDir(name, cwd); err != nil {
+		return fmt.Errorf("path safety check failed: %w", err)
+	}
+
 	source, err := w.fs.ReadFile(name)
 	if err != nil {
 		slog.Error("cannot inject data", "file", name, "error", err)

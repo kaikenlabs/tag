@@ -135,6 +135,122 @@ func TestUT_ValidatePathWithinDir(t *testing.T) {
 	}
 }
 
+func TestUT_AppendFile_PathContainment(t *testing.T) {
+	t.Run("rejects paths outside working directory", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+		openCalled := false
+		mockWr.OpenFileFunc = func(name string, flag int, perm fs.FileMode) (*os.File, error) {
+			openCalled = true
+			return nil, nil
+		}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.AppendFile("/etc/cron.d/backdoor", []byte("malicious"))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "path safety check failed")
+		assert.False(t, openCalled, "file should not have been opened")
+	})
+
+	t.Run("rejects dotdot traversal", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+		openCalled := false
+		mockWr.OpenFileFunc = func(name string, flag int, perm fs.FileMode) (*os.File, error) {
+			openCalled = true
+			return nil, nil
+		}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.AppendFile("../../etc/passwd", []byte("malicious"))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "path safety check failed")
+		assert.False(t, openCalled, "file should not have been opened")
+	})
+
+	t.Run("allows paths within working directory", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.AppendFile("mypackage/output.go", []byte("data"))
+		require.NoError(t, err)
+	})
+}
+
+func TestUT_InjectIntoFile_PathContainment(t *testing.T) {
+	t.Run("rejects paths outside working directory", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+		readCalled := false
+		mockWr.ReadFileFunc = func(name string) ([]byte, error) {
+			readCalled = true
+			return nil, nil
+		}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.InjectIntoFile("/etc/cron.d/backdoor", []byte("malicious"), Inject{
+			Matcher: "// marker",
+			Clause:  InjectAfter,
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "path safety check failed")
+		assert.False(t, readCalled, "file should not have been read")
+	})
+
+	t.Run("rejects dotdot traversal", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+		readCalled := false
+		mockWr.ReadFileFunc = func(name string) ([]byte, error) {
+			readCalled = true
+			return nil, nil
+		}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.InjectIntoFile("../../etc/passwd", []byte("malicious"), Inject{
+			Matcher: "// marker",
+			Clause:  InjectAfter,
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "path safety check failed")
+		assert.False(t, readCalled, "file should not have been read")
+	})
+
+	t.Run("allows paths within working directory", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+		mockWr.ReadFileFunc = func(name string) ([]byte, error) {
+			return []byte(" // marker "), nil
+		}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.InjectIntoFile("mypackage/output.go", []byte("data"), Inject{
+			Matcher: "// marker",
+			Clause:  InjectAfter,
+		})
+		require.NoError(t, err)
+	})
+}
+
 func TestWrite_AppendFile_should_return_ok(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 

@@ -5,6 +5,9 @@ import (
 )
 
 // TemplateEngine wraps the Gonja template engine for parsing TAG templates.
+//
+// Deprecated: TemplateEngine is part of the legacy generate pipeline.
+// New code should use template.TemplateExecutor directly via the scaffold package.
 type TemplateEngine struct {
 	gonjaEngine     template.TemplateExecutor
 	templates       map[string]string
