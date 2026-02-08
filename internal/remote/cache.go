@@ -208,6 +208,11 @@ func (c *FSCache) copyDir(src, dst string) error {
 	}
 
 	for _, entry := range entries {
+		// Skip symlinks to prevent copying files outside the source
+		if entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
@@ -233,6 +238,15 @@ func (c *FSCache) copyDir(src, dst string) error {
 
 // copyFile copies a single file.
 func (c *FSCache) copyFile(src, dst string) error {
+	// Use Lstat to detect symlinks (Stat would follow them)
+	linfo, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if linfo.Mode()&os.ModeSymlink != 0 {
+		return nil // Skip symlinks
+	}
+
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err

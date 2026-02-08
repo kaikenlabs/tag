@@ -100,6 +100,10 @@ Examples:
 				Name:  "no-save",
 				Usage: "Don't save variable values for future replay",
 			},
+			&cli.BoolFlag{
+				Name:  "allow-hooks",
+				Usage: "Allow pre/post scaffold hooks to run for remote templates (disabled by default for security)",
+			},
 		},
 		Action: scaffoldAction,
 	}
@@ -134,6 +138,9 @@ func scaffoldAction(c *cli.Context) error {
 		return app.Errorf("invalid meta flag: %w", err)
 	}
 
+	// Determine if the template is remote
+	isRemote := !remote.IsLocal(templateRef)
+
 	// Build options
 	opts := scaffold.Options{
 		TemplateDir: templateDir,
@@ -146,6 +153,8 @@ func scaffoldAction(c *cli.Context) error {
 		Replay:      c.Bool("replay"),
 		NoSave:      c.Bool("no-save"),
 		TemplateRef: templateRef, // Pass original reference for replay ID generation
+		AllowHooks:  c.Bool("allow-hooks"),
+		IsRemote:    isRemote,
 	}
 
 	// Create and run scaffold

@@ -45,6 +45,15 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 			return err
 		}
 
+		// Skip symlinks to prevent exfiltration of files outside the template
+		if d.Type()&os.ModeSymlink != 0 {
+			fmt.Printf("Warning: skipping symlink %s\n", srcPath)
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
 		// Get relative path from template root
 		relPath, err := filepath.Rel(templateRoot, srcPath)
 		if err != nil {
@@ -229,6 +238,11 @@ func copyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// Skip symlinks to prevent copying files outside the template
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
 		}
 
 		// Get relative path

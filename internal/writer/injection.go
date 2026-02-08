@@ -48,8 +48,12 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 		if idx == -1 {
 			return source, ErrNoMatchingExpression
 		}
+		var before string
+		if idx > 0 {
+			before = string(source[:(idx - 1)])
+		}
 		splitByMatcher = []string{
-			string(source[:(idx - 1)]),
+			before,
 			fmt.Sprintf("\n%s", string(source[idx:])),
 		}
 	}

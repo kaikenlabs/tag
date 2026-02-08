@@ -172,6 +172,8 @@ Hooks defined in `.tagconfig.json` run automatically:
 - **Pre-hooks**: Run before generation
 - **Post-hooks**: Run after generation (e.g., formatters, linters)
 
+Generate hooks use direct argv execution (no shell interpretation), which is safer than shell-based execution. Each hook has a **5-minute timeout** and output is limited to **1 MB**.
+
 ## Template Actions
 
 Templates support three actions via metadata:

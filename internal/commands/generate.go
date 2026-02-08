@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/urfave/cli/v2"
 )
 
@@ -83,7 +83,7 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 }
 
 func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
-	if err := runHooks(cfg.Hooks.Pre); err != nil {
+	if err := runHooks(cfg.Hooks.Pre, scaffold.HookPhasePreGen); err != nil {
 		return err
 	}
 
@@ -107,12 +107,12 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 		}
 	}
 
-	return runHooks(cfg.Hooks.Post)
+	return runHooks(cfg.Hooks.Post, scaffold.HookPhasePostGen)
 }
 
 func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args string, inBundle bool) error {
 	if !inBundle {
-		if err := runHooks(cfg.Hooks.Pre); err != nil {
+		if err := runHooks(cfg.Hooks.Pre, scaffold.HookPhasePreGen); err != nil {
 			return err
 		}
 	}
@@ -139,44 +139,37 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 	}
 
 	if !inBundle {
-		return runHooks(cfg.Hooks.Post)
+		return runHooks(cfg.Hooks.Post, scaffold.HookPhasePostGen)
 	}
 	return nil
 }
 
-func runHooks(hooks [][]string) error {
-	for _, hook := range hooks {
-		hookString := strings.Join(hook, " ")
-		slog.Info("running hook", "hook", hookString)
-		if err := runCommand(hook); err != nil {
-			return app.Errorf("failed to run hook %s: %w", hookString, err)
-		}
+func runHooks(hooks [][]string, phase scaffold.HookPhase) error {
+	if len(hooks) == 0 {
+		return nil
 	}
-	return nil
-}
 
-func runCommand(hook []string) error {
 	dir, err := os.Getwd()
 	if err != nil {
-		return err
+		return app.Errorf("failed to get working directory: %w", err)
 	}
 
-	// Determine the command path:
-	// - If it contains a path separator, resolve relative to working directory
-	// - Otherwise, let the OS resolve it via PATH
-	cmdPath := hook[0]
-	if strings.ContainsAny(cmdPath, "/\\") && !filepath.IsAbs(cmdPath) {
-		cmdPath = filepath.Join(dir, cmdPath)
+	runner := scaffold.NewArgvHookRunner()
+	results, err := runner.RunArgv(phase, hooks, dir, nil)
+
+	// Print output from executed hooks
+	for _, result := range results {
+		if result.Output != "" {
+			fmt.Print(result.Output)
+			if !strings.HasSuffix(result.Output, "\n") {
+				fmt.Println()
+			}
+		}
 	}
 
-	cmd := exec.Command(cmdPath, hook[1:]...)
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	if output != nil {
-		fmt.Println(string(output))
-	}
 	if err != nil {
-		return err
+		return app.Errorf("hook failed: %w", err)
 	}
+
 	return nil
 }

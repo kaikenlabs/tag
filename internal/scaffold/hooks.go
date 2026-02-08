@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -31,6 +32,10 @@ const (
 	HookPhasePre HookPhase = "pre_scaffold"
 	// HookPhasePost runs after file generation (working dir: output directory).
 	HookPhasePost HookPhase = "post_scaffold"
+	// HookPhasePreGen runs before code generation (working dir: project directory).
+	HookPhasePreGen HookPhase = "pre_generate"
+	// HookPhasePostGen runs after code generation (working dir: project directory).
+	HookPhasePostGen HookPhase = "post_generate"
 )
 
 // HookResult contains the result of executing a single hook command.
@@ -81,23 +86,28 @@ func (r *ShellHookRunner) Run(phase HookPhase, commands []string, workDir string
 
 // executeCommand runs a single command via the system shell with timeout.
 func (r *ShellHookRunner) executeCommand(cmdStr, workDir string, env []string) HookResult {
+	var cmdArgs []string
+	if runtime.GOOS == "windows" {
+		cmdArgs = []string{"cmd.exe", "/C", cmdStr}
+	} else {
+		cmdArgs = []string{"/bin/sh", "-c", cmdStr}
+	}
+	return execWithTimeout(cmdStr, cmdArgs, workDir, env)
+}
+
+// execWithTimeout runs a command with timeout, output limiting, and structured result handling.
+// cmdDisplay is the human-readable command string for results/errors.
+// cmdArgs is the argv array passed to exec.Command.
+func execWithTimeout(cmdDisplay string, cmdArgs []string, workDir string, env []string) HookResult {
 	result := HookResult{
-		Command: cmdStr,
+		Command: cmdDisplay,
 	}
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultHookTimeout)
 	defer cancel()
 
-	// Build the shell command based on OS
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd.exe", "/C", cmdStr)
-	} else {
-		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", cmdStr)
-	}
-
-	// Set working directory
+	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
 	cmd.Dir = workDir
 
 	// Set environment - ensure we always have a valid environment with PATH
@@ -168,6 +178,51 @@ func (l *limitedBuffer) String() string {
 
 // Ensure limitedBuffer implements io.Writer
 var _ io.Writer = (*limitedBuffer)(nil)
+
+// ArgvHookRunner executes hooks using direct argv arrays (no shell interpretation).
+// This is safer than ShellHookRunner as it prevents shell injection.
+type ArgvHookRunner struct{}
+
+// NewArgvHookRunner creates a new argv-based hook runner.
+func NewArgvHookRunner() *ArgvHookRunner {
+	return &ArgvHookRunner{}
+}
+
+// RunArgv executes commands sequentially using direct argv arrays.
+// Each command is a []string where the first element is the program and the rest are arguments.
+func (r *ArgvHookRunner) RunArgv(phase HookPhase, commands [][]string, workDir string, env []string) ([]HookResult, error) {
+	if len(commands) == 0 {
+		return nil, nil
+	}
+
+	results := make([]HookResult, 0, len(commands))
+
+	for _, argv := range commands {
+		if len(argv) == 0 {
+			continue
+		}
+
+		// Resolve relative command paths
+		cmdPath := argv[0]
+		if strings.ContainsAny(cmdPath, "/\\") && !filepath.IsAbs(cmdPath) {
+			cmdPath = filepath.Join(workDir, cmdPath)
+		}
+
+		execArgv := make([]string, len(argv))
+		execArgv[0] = cmdPath
+		copy(execArgv[1:], argv[1:])
+
+		cmdDisplay := strings.Join(argv, " ")
+		result := execWithTimeout(cmdDisplay, execArgv, workDir, env)
+		results = append(results, result)
+
+		if result.Err != nil {
+			return results, NewHookError(phase, cmdDisplay, result.Output, result.ExitCode, result.Err)
+		}
+	}
+
+	return results, nil
+}
 
 // BuildHookEnv creates environment variables for hook execution.
 // It merges the current environment with TAG-specific variables.
