@@ -159,7 +159,7 @@ func TestUT_FilterTitle(t *testing.T) {
 		expected string
 	}{
 		{"hello world", "Hello World"},
-		{"HELLO", "HELLO"},
+		{"HELLO", "Hello"}, // cases.Title correctly lowercases non-initial letters (matches Python/Jinja2)
 		{"", ""},
 	}
 

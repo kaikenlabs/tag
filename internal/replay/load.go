@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Load loads replay data for the given template source.
 // Returns ErrReplayNotFound if no replay file exists.
 // Returns ErrReplayCorrupt if the replay file exists but cannot be parsed.
 func Load(templateSource string) (*ReplayData, error) {
-	templateSource = trimSpace(templateSource)
+	templateSource = strings.TrimSpace(templateSource)
 	if templateSource == "" {
 		return nil, ErrEmptyTemplateSource
 	}
@@ -56,7 +57,7 @@ func Load(templateSource string) (*ReplayData, error) {
 
 // Exists checks if a replay file exists for the given template source.
 func Exists(templateSource string) bool {
-	templateSource = trimSpace(templateSource)
+	templateSource = strings.TrimSpace(templateSource)
 	if templateSource == "" {
 		return false
 	}
@@ -82,7 +83,7 @@ func Exists(templateSource string) bool {
 // GetReplayFilePath returns the full path to the replay file for the given template source.
 // This is useful for displaying to users or for cleanup operations.
 func GetReplayFilePath(templateSource string) (string, error) {
-	templateSource = trimSpace(templateSource)
+	templateSource = strings.TrimSpace(templateSource)
 	if templateSource == "" {
 		return "", ErrEmptyTemplateSource
 	}
@@ -107,7 +108,7 @@ func getReplayFilePath(templateID string) (string, error) {
 // Delete removes the replay file for the given template source.
 // Returns nil if the file doesn't exist.
 func Delete(templateSource string) error {
-	templateSource = trimSpace(templateSource)
+	templateSource = strings.TrimSpace(templateSource)
 	if templateSource == "" {
 		return ErrEmptyTemplateSource
 	}

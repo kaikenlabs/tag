@@ -15,7 +15,7 @@ func TestWrite_WriteFile_should_not_return_error(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.WriteFile("blood", []byte("hello world"), 0o700)
@@ -28,7 +28,7 @@ func TestWrite_WriteFile_write_error_should_return_error(t *testing.T) {
 		return fmt.Errorf("error")
 	}
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.WriteFile("blood", []byte("hello world"), 0o700)
@@ -39,7 +39,7 @@ func TestWrite_AppendFile_should_return_ok(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.AppendFile("blood", []byte("hello world"))
@@ -53,7 +53,7 @@ func TestWrite_AppendFile_open_file_error_should_return_error(t *testing.T) {
 	}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.AppendFile("blood", []byte("hello world"))
@@ -67,7 +67,7 @@ func TestWrite_AppendFile_write_file_error_should_return_error(t *testing.T) {
 	}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.AppendFile("blood", []byte("hello world"))
@@ -81,7 +81,7 @@ func TestWrite_InjectIntoFile_inject_after_should_return_no_error(t *testing.T) 
 	}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
@@ -98,7 +98,7 @@ func TestWrite_InjectIntoFile_read_file_error_should_return_error(t *testing.T) 
 	}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
@@ -115,7 +115,7 @@ func TestWrite_InjectIntoFile_inject_before_should_return_no_error(t *testing.T)
 	}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
@@ -132,7 +132,7 @@ func TestWrite_InjectIntoFile_missing_token_should_return_error(t *testing.T) {
 	}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
@@ -152,7 +152,7 @@ func TestWrite_InjectIntoFile_write_file_error_should_return_error(t *testing.T)
 	}
 
 	w := Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: &mockWr,
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{

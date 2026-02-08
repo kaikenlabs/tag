@@ -279,6 +279,17 @@ For maximum compatibility:
    │   └── post-scaffold.bat   # Windows
    ```
 
+## Security: Remote Templates
+
+For security, hooks are **disabled by default** when scaffolding from remote templates (e.g., `gh:user/repo`, Git URLs, zip URLs). This prevents untrusted templates from executing arbitrary commands on your machine.
+
+To allow hooks for a trusted remote template:
+```bash
+tag scaffold gh:trusted-org/template --allow-hooks
+```
+
+Local templates always run hooks since you control the template source.
+
 ## Debugging Hooks
 
 ### View Hook Output

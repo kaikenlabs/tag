@@ -1,10 +1,11 @@
 package convert
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/fileutil"
 )
 
 // HookKind identifies the type of hook script.
@@ -16,16 +17,10 @@ const (
 	HookKindBatch  HookKind = "batch"
 )
 
-// Standard Cookiecutter hook filenames.
-// This map is kept for documentation/reference of recognized hook patterns.
-var _ = map[string]struct{}{
-	"pre_gen_project.py":   {},
-	"post_gen_project.py":  {},
-	"pre_gen_project.sh":   {},
-	"post_gen_project.sh":  {},
-	"pre_gen_project.bat":  {},
-	"post_gen_project.bat": {},
-}
+// Recognized Cookiecutter hook filenames:
+//   pre_gen_project.py, post_gen_project.py
+//   pre_gen_project.sh, post_gen_project.sh
+//   pre_gen_project.bat, post_gen_project.bat
 
 // HooksProcessor handles detection and copying of Cookiecutter hooks.
 type HooksProcessor struct {
@@ -126,7 +121,7 @@ func (p *HooksProcessor) CopyHooks() ([]HookFinding, error) {
 			continue
 		}
 
-		if err := copyFileWithMode(srcPath, destPath); err != nil {
+		if err := copyHookFile(srcPath, destPath); err != nil {
 			return findings, err
 		}
 		findings[i].IsCopied = true
@@ -135,32 +130,12 @@ func (p *HooksProcessor) CopyHooks() ([]HookFinding, error) {
 	return findings, nil
 }
 
-// copyFileWithMode copies a file preserving its permissions.
-func copyFileWithMode(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return err
-	}
-
-	// Ensure destination directory exists
+// copyHookFile copies a file preserving its permissions, ensuring the parent directory exists.
+func copyHookFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcInfo.Mode())
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	return fileutil.CopyFile(src, dst)
 }
 
 // IsHooksDir checks if a path is the hooks directory.

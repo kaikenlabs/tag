@@ -31,6 +31,7 @@ The `scaffold` command creates a new project from a local or remote template. It
 | `--update` | `-u` | Force refresh of cached remote templates |
 | `--replay` | | Reuse saved values from a previous scaffold |
 | `--no-save` | | Don't save values for future replay |
+| `--allow-hooks` | | Allow hooks to run for remote templates (disabled by default) |
 
 ## Template Formats
 
@@ -213,6 +214,23 @@ Enter value for package_display_name [My Package]: Awesome Library
 ```
 
 This ensures users only need to provide "input" values, while computed values are derived automatically.
+
+## Hook Security
+
+For security, hooks defined in remote templates are **disabled by default**. A malicious remote template could use hooks to execute arbitrary commands on your machine.
+
+When hooks are skipped, TAG displays a warning:
+```
+Warning: This remote template defines hooks that have been skipped for security.
+  To allow hooks, re-run with --allow-hooks
+```
+
+To allow hooks for a trusted remote template:
+```bash
+tag scaffold gh:trusted-org/template --allow-hooks
+```
+
+Local templates always run hooks, since you control the template source.
 
 ## Error Handling
 

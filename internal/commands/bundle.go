@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -24,7 +23,7 @@ func BundleCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:      "new-bundle",
 		Aliases:   []string{"nb"},
-		Usage:     fmt.Sprintf("creates a new bunle with the specified %s", chalk.Yellow("bundle-name")),
+		Usage:     fmt.Sprintf("creates a new bundle with the specified %s", chalk.Yellow("bundle-name")),
 		Args:      true,
 		ArgsUsage: "<bundle-name>",
 		Action: func(c *cli.Context) error {
@@ -47,7 +46,7 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	bundleName := c.Args().Get(0)
 
 	slog.Info(chalk.Green("creating new bundle"), "path", cfg.Env.Path)
-	dirPath := path.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, BundleExtension))
+	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, BundleExtension))
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
 		return app.Errorf("error creating %s: %w", dirPath, err)
 	}

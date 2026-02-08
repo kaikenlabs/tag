@@ -34,6 +34,20 @@ func Test_mergeOutputs(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "inject before token at start of source",
+			args: args{
+				name:   "",
+				source: []byte("// token rest"),
+				data:   []byte("injected"),
+				inject: Inject{
+					Matcher: "// token",
+					Clause:  InjectBefore,
+				},
+			},
+			want:    []byte("injected\n// token rest"),
+			wantErr: false,
+		},
+		{
 			name: "inject after token",
 			args: args{
 				name:   "",

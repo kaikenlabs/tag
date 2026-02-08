@@ -5,7 +5,8 @@ import (
 	"bytes"
 	"regexp"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/kaikenlabs/tag/internal/fileutil"
 )
 
 // ContentAnalyzer detects Jinja2/Gonja incompatibilities in template content.
@@ -47,7 +48,7 @@ var (
 // Analyze scans content for Jinja2/Gonja incompatibilities.
 func (a *ContentAnalyzer) Analyze(path string, content []byte) []Incompatibility {
 	// Skip binary files
-	if !isTextContent(content) {
+	if !fileutil.IsTextContent(content) {
 		return nil
 	}
 
@@ -173,42 +174,6 @@ func (a *ContentAnalyzer) Analyze(path string, content []byte) []Incompatibility
 // AnalyzeString is a convenience method for analyzing string content.
 func (a *ContentAnalyzer) AnalyzeString(path, content string) []Incompatibility {
 	return a.Analyze(path, []byte(content))
-}
-
-// isTextContent checks if content appears to be text rather than binary.
-func isTextContent(content []byte) bool {
-	if len(content) == 0 {
-		return true
-	}
-
-	// Check first 8KB for binary indicators
-	checkLen := len(content)
-	if checkLen > 8192 {
-		checkLen = 8192
-	}
-	sample := content[:checkLen]
-
-	// Check for null bytes (strong binary indicator)
-	if bytes.Contains(sample, []byte{0}) {
-		return false
-	}
-
-	// Check if it's valid UTF-8
-	if !utf8.Valid(sample) {
-		// Not valid UTF-8, likely binary
-		return false
-	}
-
-	// Count non-printable characters
-	nonPrintable := 0
-	for _, b := range sample {
-		if b < 32 && b != '\n' && b != '\r' && b != '\t' {
-			nonPrintable++
-		}
-	}
-
-	// If more than 10% non-printable, likely binary
-	return float64(nonPrintable)/float64(len(sample)) < 0.1
 }
 
 // KnownGonjaFilters is a list of filters supported by Gonja.

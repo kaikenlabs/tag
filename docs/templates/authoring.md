@@ -31,6 +31,7 @@ my-template/
 | `*.tmpl` | Parsed as Jinja2 template, `.tmpl` extension removed |
 | `{{ vars.name }}` in path | Replaced with variable value |
 | `{{ vars.name \| filter }}` in path | Replaced with filtered variable value |
+| Symlinks | Skipped (not followed, warning printed) |
 | All other files | Copied as-is (binary-safe) |
 
 ## tag.template.json

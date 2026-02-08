@@ -158,7 +158,8 @@ func (f *ZipFetcher) extract(zipPath, destDir string) error {
 	}
 	defer r.Close()
 
-	var totalSize int64
+	// Track actual extracted bytes cumulatively (not from forged headers)
+	counter := &countingWriter{max: f.maxExtract}
 	fileCount := 0
 
 	for _, file := range r.File {
@@ -181,14 +182,8 @@ func (f *ZipFetcher) extract(zipPath, destDir string) error {
 			continue
 		}
 
-		// Check extracted size limit
-		totalSize += int64(file.UncompressedSize64)
-		if totalSize > f.maxExtract {
-			return fmt.Errorf("extracted size exceeds limit (%d bytes)", f.maxExtract)
-		}
-
-		// Extract file
-		if err := f.extractFile(file, destPath); err != nil {
+		// Extract file with cumulative size tracking
+		if err := f.extractFile(file, destPath, counter); err != nil {
 			return err
 		}
 	}
@@ -223,7 +218,8 @@ func (f *ZipFetcher) sanitizePath(destDir, filePath string) (string, error) {
 }
 
 // extractFile extracts a single file from the zip.
-func (f *ZipFetcher) extractFile(file *zip.File, destPath string) error {
+// The counter tracks cumulative bytes across all files and enforces the global limit.
+func (f *ZipFetcher) extractFile(file *zip.File, destPath string, counter *countingWriter) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
@@ -246,14 +242,30 @@ func (f *ZipFetcher) extractFile(file *zip.File, destPath string) error {
 	}
 	defer dst.Close()
 
-	// Copy with size limit
-	limited := io.LimitReader(src, f.maxExtract)
-	_, err = io.Copy(dst, limited)
+	// Copy through the counting writer to enforce cumulative size limit
+	counter.dst = dst
+	_, err = io.Copy(counter, src)
 	if err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
 
 	return nil
+}
+
+// countingWriter wraps a destination writer and tracks cumulative bytes written.
+// It returns an error if the cumulative total exceeds the maximum.
+type countingWriter struct {
+	dst   io.Writer
+	total int64
+	max   int64
+}
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	w.total += int64(len(p))
+	if w.total > w.max {
+		return 0, fmt.Errorf("extracted size exceeds limit (%d bytes)", w.max)
+	}
+	return w.dst.Write(p)
 }
 
 // unwrapSingleRoot checks if the extracted content has a single root directory

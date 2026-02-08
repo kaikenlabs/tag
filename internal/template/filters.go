@@ -7,6 +7,8 @@ import (
 	"github.com/gobuffalo/flect"
 	"github.com/kaikenlabs/tag/internal/formats"
 	"github.com/nikolalohinski/gonja/v2/exec"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // RegisterFilters registers all custom filters with the given filter set.
@@ -138,7 +140,7 @@ func filterTitle(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.
 	if err := params.Take(); err != nil {
 		return exec.AsValue(fmt.Errorf("title: %w", err))
 	}
-	return exec.AsValue(strings.Title(in.String())) //nolint:staticcheck // strings.Title is fine for basic use
+	return exec.AsValue(cases.Title(language.English).String(in.String()))
 }
 
 // Inflection filters

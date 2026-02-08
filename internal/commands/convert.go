@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -106,8 +105,7 @@ func convertCookiecutterAction(c *cli.Context) error {
 	}
 
 	// Run conversion
-	ctx := context.Background()
-	result, err := converter.Convert(ctx, opts)
+	result, err := converter.Convert(c.Context, opts)
 	if err != nil {
 		return app.Errorf("conversion failed: %w", err)
 	}
