@@ -30,9 +30,10 @@ func NewPathProcessor() *DefaultPathProcessor {
 	return &DefaultPathProcessor{engine: engine}
 }
 
-// placeholderDetectRegex detects if a string contains Jinja2-style placeholders.
+// placeholderDetectRegex detects if a string contains Jinja2-style template syntax.
+// Matches both {{ expressions }} and {% statements %} (e.g., conditionals).
 // This is a simple check - the actual parsing is done by Gonja.
-var placeholderDetectRegex = regexp.MustCompile(`\{\{.+\}\}`)
+var placeholderDetectRegex = regexp.MustCompile(`\{\{.+\}\}|\{%.+%\}`)
 
 // ProcessPath replaces placeholders in a path with variable values.
 // Supports any valid Jinja2 expression including method calls.
@@ -42,15 +43,27 @@ func (p *DefaultPathProcessor) ProcessPath(path string, vars map[string]any) (st
 	segments := strings.Split(path, string(filepath.Separator))
 	processedSegments := make([]string, 0, len(segments))
 
-	for _, segment := range segments {
+	for i, segment := range segments {
 		processed, err := p.processSegment(segment, vars)
 		if err != nil {
 			return "", NewPathError(path, "failed to process segment", err)
 		}
-		// Skip empty segments (from placeholders resolving to empty string)
+
+		// If the last segment renders to empty, return empty path to signal
+		// the entry should be skipped (conditional exclusion).
+		// Example: {% if vars.feature %}file.go{% endif %} with feature=false
+		if i == len(segments)-1 && processed == "" {
+			return "", nil
+		}
+
+		// Skip empty intermediate segments (from placeholders resolving to empty string)
 		if processed != "" {
 			processedSegments = append(processedSegments, processed)
 		}
+	}
+
+	if len(processedSegments) == 0 {
+		return "", nil
 	}
 
 	return filepath.Join(processedSegments...), nil
@@ -124,15 +137,3 @@ func HasPlaceholders(path string) bool {
 	return placeholderDetectRegex.MatchString(path)
 }
 
-// StripTemplateExtension removes the .tmpl extension from a filename.
-func StripTemplateExtension(filename string) string {
-	if strings.HasSuffix(filename, ".tmpl") {
-		return strings.TrimSuffix(filename, ".tmpl")
-	}
-	return filename
-}
-
-// IsTemplateFile checks if a file should be processed as a template.
-func IsTemplateFile(filename string) bool {
-	return strings.HasSuffix(filename, ".tmpl")
-}

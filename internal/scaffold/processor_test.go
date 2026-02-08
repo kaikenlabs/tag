@@ -300,6 +300,7 @@ func TestUT_HasPlaceholders(t *testing.T) {
 		{"has placeholder", "{{ vars.name }}", true},
 		{"has placeholder with filter", "{{ vars.name | snake }}", true},
 		{"cookiecutter alias", "{{ cookiecutter.name }}", true},
+		{"has conditional block", `{% if vars.feature %}file.go{% endif %}`, true},
 		{"no placeholder", "cmd/main.go", false},
 		{"python dunder not a placeholder", "__init__.py", false},
 		{"python main not a placeholder", "__main__.py", false},
@@ -312,40 +313,65 @@ func TestUT_HasPlaceholders(t *testing.T) {
 	}
 }
 
-func TestUT_StripTemplateExtension(t *testing.T) {
+
+func TestUT_PathProcessor_ConditionalFilename(t *testing.T) {
+	processor := NewPathProcessor()
+
 	tests := []struct {
 		name     string
-		filename string
+		path     string
+		vars     map[string]any
 		expected string
 	}{
-		{"has .tmpl", "main.go.tmpl", "main.go"},
-		{"no .tmpl", "main.go", "main.go"},
-		{"only .tmpl", ".tmpl", ""},
-		{"double extension", "config.yaml.tmpl", "config.yaml"},
+		{
+			name:     "conditional true",
+			path:     `{% if vars.use_http == "yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "yes"},
+			expected: "http.go",
+		},
+		{
+			name:     "conditional false - file excluded",
+			path:     `{% if vars.use_http == "yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "no"},
+			expected: "",
+		},
+		{
+			name:     "conditional in subdirectory - true",
+			path:     `handlers/{% if vars.use_http == "yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "yes"},
+			expected: "handlers/http.go",
+		},
+		{
+			name:     "conditional in subdirectory - false",
+			path:     `handlers/{% if vars.use_http == "yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "no"},
+			expected: "",
+		},
+		{
+			name:     "cookiecutter conditional true",
+			path:     `handlers/{% if cookiecutter.use_consumer == "yes" %}amqp.go{% endif %}`,
+			vars:     map[string]any{"use_consumer": "yes"},
+			expected: "handlers/amqp.go",
+		},
+		{
+			name:     "cookiecutter conditional false",
+			path:     `handlers/{% if cookiecutter.use_consumer == "yes" %}amqp.go{% endif %}`,
+			vars:     map[string]any{"use_consumer": "no"},
+			expected: "",
+		},
+		{
+			name:     "no-space comparison operator",
+			path:     `{% if cookiecutter.use_http=="yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "yes"},
+			expected: "http.go",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, StripTemplateExtension(tt.filename))
-		})
-	}
-}
-
-func TestUT_IsTemplateFile(t *testing.T) {
-	tests := []struct {
-		name     string
-		filename string
-		expected bool
-	}{
-		{"is template", "main.go.tmpl", true},
-		{"not template", "main.go", false},
-		{"only .tmpl", ".tmpl", true},
-		{"yaml template", "config.yaml.tmpl", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, IsTemplateFile(tt.filename))
+			result, err := processor.ProcessPath(tt.path, tt.vars)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

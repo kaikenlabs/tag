@@ -60,11 +60,11 @@ func TestIT_ConvertCookiecutter_FullTemplate(t *testing.T) {
 	require.NoError(t, err, "converted directory should exist")
 
 	// Verify files exist in converted directory
-	_, err = os.Stat(filepath.Join(convertedProjectDir, "README.md.tmpl"))
-	require.NoError(t, err, "README.md.tmpl should exist")
+	_, err = os.Stat(filepath.Join(convertedProjectDir, "README.md"))
+	require.NoError(t, err, "README.md should exist")
 
-	_, err = os.Stat(filepath.Join(convertedProjectDir, "src", "main.py.tmpl"))
-	require.NoError(t, err, "src/main.py.tmpl should exist")
+	_, err = os.Stat(filepath.Join(convertedProjectDir, "src", "main.py"))
+	require.NoError(t, err, "src/main.py should exist")
 
 	// Verify hooks were copied
 	_, err = os.Stat(filepath.Join(destDir, "hooks", "pre_gen_project.py"))
@@ -218,7 +218,7 @@ func TestIT_ConvertCookiecutter_ContentPreserved(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read converted file and verify content is preserved
-	readmePath := filepath.Join(destDir, "{{ vars.project_slug }}", "README.md.tmpl")
+	readmePath := filepath.Join(destDir, "{{ vars.project_slug }}", "README.md")
 	content, err := os.ReadFile(readmePath)
 	require.NoError(t, err)
 
