@@ -77,7 +77,10 @@ func convertVariable(name string, value any) (VariableConversion, any, string) {
 		conv.OriginalType = "string"
 		conv.TagType = "string"
 		conv.Default = v
-		return conv, v, ""
+		// Convert cookiecutter namespace to vars namespace in default values
+		// This handles derived variables like: "{{cookiecutter.name.lower()}}"
+		convertedValue, _ := ConvertPath(v)
+		return conv, convertedValue, ""
 
 	case bool:
 		conv.OriginalType = "boolean"

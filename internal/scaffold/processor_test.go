@@ -21,28 +21,38 @@ func TestUT_PathProcessor_SimpleVar(t *testing.T) {
 	}{
 		{
 			name:     "single placeholder",
-			path:     "__project_name__",
+			path:     "{{ vars.project_name }}",
 			expected: "my_project",
 		},
 		{
 			name:     "placeholder in path",
-			path:     "__project_name__/cmd/main.go",
+			path:     "{{ vars.project_name }}/cmd/main.go",
 			expected: "my_project/cmd/main.go",
 		},
 		{
 			name:     "placeholder in filename",
-			path:     "internal/__module_name__.go",
+			path:     "internal/{{ vars.module_name }}.go",
 			expected: "internal/users.go",
 		},
 		{
 			name:     "multiple placeholders",
-			path:     "__project_name__/internal/__module_name__/service.go",
+			path:     "{{ vars.project_name }}/internal/{{ vars.module_name }}/service.go",
 			expected: "my_project/internal/users/service.go",
 		},
 		{
 			name:     "no placeholders",
 			path:     "cmd/main.go",
 			expected: "cmd/main.go",
+		},
+		{
+			name:     "python __init__.py not a placeholder",
+			path:     "{{ vars.project_name }}/src/__init__.py",
+			expected: "my_project/src/__init__.py",
+		},
+		{
+			name:     "cookiecutter alias",
+			path:     "{{ cookiecutter.project_name }}/main.go",
+			expected: "my_project/main.go",
 		},
 	}
 
@@ -69,52 +79,52 @@ func TestUT_PathProcessor_WithFilter(t *testing.T) {
 	}{
 		{
 			name:     "snake filter",
-			path:     "__project_name | snake__",
+			path:     "{{ vars.project_name | snake }}",
 			expected: "my_project",
 		},
 		{
 			name:     "pascal filter",
-			path:     "__project_name | pascal__",
+			path:     "{{ vars.project_name | pascal }}",
 			expected: "MyProject",
 		},
 		{
 			name:     "camel filter",
-			path:     "__project_name | camel__",
+			path:     "{{ vars.project_name | camel }}",
 			expected: "myProject",
 		},
 		{
 			name:     "kebab filter",
-			path:     "__project_name | kebab__",
+			path:     "{{ vars.project_name | kebab }}",
 			expected: "my-project",
 		},
 		{
 			name:     "lower filter",
-			path:     "__project_name | lower__",
+			path:     "{{ vars.project_name | lower }}",
 			expected: "myproject",
 		},
 		{
 			name:     "upper filter",
-			path:     "__project_name | upper__",
+			path:     "{{ vars.project_name | upper }}",
 			expected: "MYPROJECT",
 		},
 		{
 			name:     "plural filter",
-			path:     "__model | plural__",
+			path:     "{{ vars.model | plural }}",
 			expected: "users",
 		},
 		{
 			name:     "singular filter from plural",
-			path:     "users/__model | singular__",
+			path:     "users/{{ vars.model | singular }}",
 			expected: "users/user",
 		},
 		{
 			name:     "filter without spaces",
-			path:     "__project_name|snake__",
+			path:     "{{vars.project_name|snake}}",
 			expected: "my_project",
 		},
 		{
 			name:     "filter in complex path",
-			path:     "__project_name | snake__/internal/__model | plural__/service.go",
+			path:     "{{ vars.project_name | snake }}/internal/{{ vars.model | plural }}/service.go",
 			expected: "my_project/internal/users/service.go",
 		},
 	}
@@ -128,16 +138,16 @@ func TestUT_PathProcessor_WithFilter(t *testing.T) {
 	}
 }
 
-func TestUT_PathProcessor_InvalidVar(t *testing.T) {
+func TestUT_PathProcessor_UndefinedVar(t *testing.T) {
 	processor := NewPathProcessor()
 	vars := map[string]any{
 		"project_name": "my_project",
 	}
 
-	_, err := processor.ProcessPath("__unknown_var__/file.go", vars)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "undefined variable")
-	assert.Contains(t, err.Error(), "unknown_var")
+	// Gonja returns empty string for undefined variables (consistent with content templates)
+	result, err := processor.ProcessPath("{{ vars.unknown_var }}/file.go", vars)
+	require.NoError(t, err)
+	assert.Equal(t, "file.go", result) // Empty segment is skipped
 }
 
 func TestUT_PathProcessor_InvalidFilter(t *testing.T) {
@@ -146,9 +156,9 @@ func TestUT_PathProcessor_InvalidFilter(t *testing.T) {
 		"project_name": "my_project",
 	}
 
-	_, err := processor.ProcessPath("__project_name | invalid_filter__", vars)
+	_, err := processor.ProcessPath("{{ vars.project_name | invalid_filter }}", vars)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown or unsupported filter")
+	assert.Contains(t, err.Error(), "filter")
 	assert.Contains(t, err.Error(), "invalid_filter")
 }
 
@@ -160,7 +170,7 @@ func TestUT_PathProcessor_EmptyValue(t *testing.T) {
 	}
 
 	// Empty value in path segment should collapse that segment
-	result, err := processor.ProcessPath("__project_name__/__module_name__/service.go", vars)
+	result, err := processor.ProcessPath("{{ vars.project_name }}/{{ vars.module_name }}/service.go", vars)
 	require.NoError(t, err)
 	// Note: empty segment is skipped, so result doesn't start with "/"
 	assert.Equal(t, "users/service.go", result)
@@ -173,9 +183,61 @@ func TestUT_PathProcessor_MultiplePlaceholdersInSegment(t *testing.T) {
 		"suffix": "v1",
 	}
 
-	result, err := processor.ProcessPath("__prefix__-__suffix__/handler.go", vars)
+	result, err := processor.ProcessPath("{{ vars.prefix }}-{{ vars.suffix }}/handler.go", vars)
 	require.NoError(t, err)
 	assert.Equal(t, "api-v1/handler.go", result)
+}
+
+func TestUT_PathProcessor_ComplexExpressions(t *testing.T) {
+	processor := NewPathProcessor()
+	vars := map[string]any{
+		"package_display_name": "My Cool Package",
+	}
+
+	tests := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "lower method",
+			path:     "{{ vars.package_display_name.lower() }}",
+			expected: "my cool package",
+		},
+		{
+			name:     "replace filter",
+			path:     "{{ vars.package_display_name | replace(' ', '_') }}",
+			expected: "My_Cool_Package",
+		},
+		{
+			name:     "chained filters (recommended approach)",
+			path:     "{{ cookiecutter.package_display_name | lower | replace(' ', '_') | replace('-', '_') }}",
+			expected: "my_cool_package",
+		},
+		{
+			name:     "upper method",
+			path:     "{{ vars.package_display_name.upper() }}",
+			expected: "MY COOL PACKAGE",
+		},
+		{
+			name:     "replace method with 2 args (Python style)",
+			path:     "{{ vars.package_display_name.replace(' ', '_') }}",
+			expected: "My_Cool_Package",
+		},
+		{
+			name:     "chained methods (Cookiecutter style)",
+			path:     "{{ cookiecutter.package_display_name.lower().replace(' ', '_').replace('-', '_') }}",
+			expected: "my_cool_package",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processor.ProcessPath(tt.path, vars)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestUT_ExtractPlaceholders(t *testing.T) {
@@ -186,17 +248,17 @@ func TestUT_ExtractPlaceholders(t *testing.T) {
 	}{
 		{
 			name:     "single placeholder",
-			path:     "__project_name__",
+			path:     "{{ vars.project_name }}",
 			expected: []string{"project_name"},
 		},
 		{
 			name:     "multiple placeholders",
-			path:     "__project_name__/__module_name__",
+			path:     "{{ vars.project_name }}/{{ vars.module_name }}",
 			expected: []string{"project_name", "module_name"},
 		},
 		{
 			name:     "placeholder with filter",
-			path:     "__project_name | snake__",
+			path:     "{{ vars.project_name | snake }}",
 			expected: []string{"project_name"},
 		},
 		{
@@ -206,7 +268,17 @@ func TestUT_ExtractPlaceholders(t *testing.T) {
 		},
 		{
 			name:     "duplicate placeholders",
-			path:     "__name__/__name__",
+			path:     "{{ vars.name }}/{{ vars.name }}",
+			expected: []string{"name"},
+		},
+		{
+			name:     "python dunder not a placeholder",
+			path:     "__init__.py",
+			expected: []string{},
+		},
+		{
+			name:     "cookiecutter alias",
+			path:     "{{ cookiecutter.name }}",
 			expected: []string{"name"},
 		},
 	}
@@ -225,11 +297,13 @@ func TestUT_HasPlaceholders(t *testing.T) {
 		path     string
 		expected bool
 	}{
-		{"has placeholder", "__name__", true},
-		{"has placeholder with filter", "__name | snake__", true},
+		{"has placeholder", "{{ vars.name }}", true},
+		{"has placeholder with filter", "{{ vars.name | snake }}", true},
+		{"cookiecutter alias", "{{ cookiecutter.name }}", true},
+		{"has conditional block", `{% if vars.feature %}file.go{% endif %}`, true},
 		{"no placeholder", "cmd/main.go", false},
-		{"similar but not placeholder", "__name", false},
-		{"similar but not placeholder 2", "name__", false},
+		{"python dunder not a placeholder", "__init__.py", false},
+		{"python main not a placeholder", "__main__.py", false},
 	}
 
 	for _, tt := range tests {
@@ -239,40 +313,105 @@ func TestUT_HasPlaceholders(t *testing.T) {
 	}
 }
 
-func TestUT_StripTemplateExtension(t *testing.T) {
+
+func TestUT_PathProcessor_ConditionalFilename(t *testing.T) {
+	processor := NewPathProcessor()
+
 	tests := []struct {
 		name     string
-		filename string
+		path     string
+		vars     map[string]any
 		expected string
 	}{
-		{"has .tmpl", "main.go.tmpl", "main.go"},
-		{"no .tmpl", "main.go", "main.go"},
-		{"only .tmpl", ".tmpl", ""},
-		{"double extension", "config.yaml.tmpl", "config.yaml"},
+		{
+			name:     "conditional true",
+			path:     `{% if vars.use_http == "yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "yes"},
+			expected: "http.go",
+		},
+		{
+			name:     "conditional false - file excluded",
+			path:     `{% if vars.use_http == "yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "no"},
+			expected: "",
+		},
+		{
+			name:     "conditional in subdirectory - true",
+			path:     `handlers/{% if vars.use_http == "yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "yes"},
+			expected: "handlers/http.go",
+		},
+		{
+			name:     "conditional in subdirectory - false",
+			path:     `handlers/{% if vars.use_http == "yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "no"},
+			expected: "",
+		},
+		{
+			name:     "cookiecutter conditional true",
+			path:     `handlers/{% if cookiecutter.use_consumer == "yes" %}amqp.go{% endif %}`,
+			vars:     map[string]any{"use_consumer": "yes"},
+			expected: "handlers/amqp.go",
+		},
+		{
+			name:     "cookiecutter conditional false",
+			path:     `handlers/{% if cookiecutter.use_consumer == "yes" %}amqp.go{% endif %}`,
+			vars:     map[string]any{"use_consumer": "no"},
+			expected: "",
+		},
+		{
+			name:     "no-space comparison operator",
+			path:     `{% if cookiecutter.use_http=="yes" %}http.go{% endif %}`,
+			vars:     map[string]any{"use_http": "yes"},
+			expected: "http.go",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, StripTemplateExtension(tt.filename))
+			result, err := processor.ProcessPath(tt.path, tt.vars)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestUT_IsTemplateFile(t *testing.T) {
+func TestUT_PathProcessor_NestedTemplates(t *testing.T) {
+	// Test derived variables where a variable's value is itself a template expression
+	processor := NewPathProcessor()
+	vars := map[string]any{
+		"package_display_name": "My Cool Package",
+		// package_name's value is a template expression (like Cookiecutter derived variables)
+		"package_name": "{{ vars.package_display_name.lower().replace(' ', '_').replace('-', '_') }}",
+	}
+
 	tests := []struct {
 		name     string
-		filename string
-		expected bool
+		path     string
+		expected string
 	}{
-		{"is template", "main.go.tmpl", true},
-		{"not template", "main.go", false},
-		{"only .tmpl", ".tmpl", true},
-		{"yaml template", "config.yaml.tmpl", true},
+		{
+			name:     "simple variable with template value",
+			path:     "{{ vars.package_name }}",
+			expected: "my_cool_package",
+		},
+		{
+			name:     "nested template in path",
+			path:     "src/{{ vars.package_name }}/main.py",
+			expected: "src/my_cool_package/main.py",
+		},
+		{
+			name:     "multiple nested references",
+			path:     "{{ vars.package_name }}/src/{{ vars.package_name }}/__init__.py",
+			expected: "my_cool_package/src/my_cool_package/__init__.py",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, IsTemplateFile(tt.filename))
+			result, err := processor.ProcessPath(tt.path, vars)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -288,11 +427,11 @@ func TestUT_PathProcessor_WhitespaceAroundFilter(t *testing.T) {
 		path     string
 		expected string
 	}{
-		{"no spaces", "__project_name|snake__", "my_project"},
-		{"space before pipe", "__project_name |snake__", "my_project"},
-		{"space after pipe", "__project_name| snake__", "my_project"},
-		{"spaces both sides", "__project_name | snake__", "my_project"},
-		{"multiple spaces", "__project_name  |  snake__", "my_project"},
+		{"no spaces", "{{vars.project_name|snake}}", "my_project"},
+		{"space before pipe", "{{ vars.project_name |snake }}", "my_project"},
+		{"space after pipe", "{{ vars.project_name| snake }}", "my_project"},
+		{"spaces both sides", "{{ vars.project_name | snake }}", "my_project"},
+		{"multiple spaces", "{{  vars.project_name  |  snake  }}", "my_project"},
 	}
 
 	for _, tt := range tests {

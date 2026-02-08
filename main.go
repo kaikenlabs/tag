@@ -55,7 +55,7 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:    flags.PathFlag,
-				Value:   "_templates",
+				Value:   ".tag.templates",
 				Usage:   "Creates the templates directory path at the root of the project.",
 				Aliases: []string{"tp"},
 				EnvVars: []string{"TAG_PATH"},

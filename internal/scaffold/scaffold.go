@@ -163,7 +163,7 @@ func (s *Scaffold) Run(opts Options) error {
 		return fmt.Errorf("failed to process template: %w", err)
 	}
 
-	// Step 10: Copy _generators to _templates
+	// Step 10: Copy _generators to .tag.templates
 	if err := CopyGenerators(opts.TemplateDir, outputDir); err != nil {
 		// Clean up on error
 		_ = os.RemoveAll(outputDir)

@@ -33,11 +33,14 @@ func NewVariableCollector(prompter Prompter) *DefaultVariableCollector {
 // Each layer overwrites the previous, with --meta having highest priority.
 func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectOptions) (map[string]any, error) {
 	vars := make(map[string]any)
+	// Track which variables were explicitly provided (from replay or values file)
+	// These should not be re-prompted even in interactive mode
+	explicitlyProvided := make(map[string]bool)
 
 	// Get sorted variable names for deterministic ordering
 	varNames := getSortedVarNames(config.Vars)
 
-	// Step 1: Apply defaults
+	// Step 1: Apply defaults (but don't mark them as explicitly provided)
 	for _, name := range varNames {
 		def := config.Vars[name]
 		if def.Default != nil {
@@ -75,6 +78,7 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 				// Unknown variable (template may have changed), store as-is
 				vars[k] = v
 			}
+			explicitlyProvided[k] = true
 		}
 	}
 
@@ -86,52 +90,34 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 		}
 		for k, v := range fileVars {
 			vars[k] = v
+			explicitlyProvided[k] = true
 		}
 	}
 
-	// Step 4: Interactive prompts for missing required variables (if TTY)
+	// Step 4: Interactive prompts for variables (if TTY)
+	// Prompt for all non-private, non-derived variables, even if they have defaults.
+	// Skip only if the value was explicitly provided via replay or values file.
 	if opts.IsTTY && !opts.NoPrompt {
 		for _, name := range varNames {
 			def := config.Vars[name]
 
-			// Skip private/computed variables
+			// Skip private/computed variables (start with _)
 			if def.IsPrivate(name) {
 				continue
 			}
 
-			// Skip if already has a value from previous steps
-			if _, hasValue := vars[name]; hasValue {
+			// Skip derived variables (default contains template expression)
+			// These are computed from other variables, following Cookiecutter behavior
+			if def.IsDerived() {
 				continue
 			}
 
-			// Skip non-required variables that have no default
-			if !def.Required {
+			// Skip if explicitly provided via replay or values file
+			if explicitlyProvided[name] {
 				continue
 			}
 
-			// Prompt for the variable
-			value, err := c.promptForVariable(name, def)
-			if err != nil {
-				return nil, err
-			}
-			vars[name] = value
-		}
-
-		// Also prompt for optional variables if user wants to provide values
-		for _, name := range varNames {
-			def := config.Vars[name]
-
-			// Skip private variables
-			if def.IsPrivate(name) {
-				continue
-			}
-
-			// Skip if already has a value
-			if _, hasValue := vars[name]; hasValue {
-				continue
-			}
-
-			// Prompt for optional variable with default
+			// Prompt for the variable (default will be pre-filled)
 			value, err := c.promptForVariable(name, def)
 			if err != nil {
 				return nil, err

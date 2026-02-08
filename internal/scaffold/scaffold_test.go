@@ -41,8 +41,8 @@ func createTestTemplate(t *testing.T) string {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
 
-	// Create template structure: __project_name__/
-	projectDir := filepath.Join(dir, "__project_name__")
+	// Create template structure: {{ vars.project_name }}/
+	projectDir := filepath.Join(dir, "{{ vars.project_name }}")
 	require.NoError(t, os.MkdirAll(projectDir, 0o755))
 
 	// Create a template file
@@ -60,7 +60,7 @@ func main() {
 `
 	cmdDir := filepath.Join(projectDir, "cmd")
 	require.NoError(t, os.MkdirAll(cmdDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(cmdDir, "main.go.tmpl"), []byte(mainTmpl), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cmdDir, "main.go"), []byte(mainTmpl), 0o644))
 
 	// Create README template
 	readmeTmpl := `# {{ vars.project_name }}
@@ -73,7 +73,7 @@ By {{ vars.author }}
 Run with Docker on port {{ vars.port }}
 {% endif %}
 `
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "README.md.tmpl"), []byte(readmeTmpl), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "README.md"), []byte(readmeTmpl), 0o644))
 
 	// Create a non-template file (binary-like)
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, ".gitignore"), []byte("*.exe\n*.o\n"), 0o644))
@@ -114,7 +114,7 @@ func TestIT_Scaffold_LocalTemplate(t *testing.T) {
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", "README.md"))
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", ".gitignore"))
 	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
-	assert.DirExists(t, filepath.Join(outputDir, "_templates", "handler"))
+	assert.DirExists(t, filepath.Join(outputDir, ".tag.templates", "handler"))
 
 	// Verify template was processed
 	mainContent, err := os.ReadFile(filepath.Join(outputDir, "awesome_project", "cmd", "main.go"))
@@ -156,7 +156,7 @@ bool: {{ vars.bool_var }}
 number: {{ vars.number_var }}
 choice: {{ vars.choice_var }}
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "output.txt.tmpl"), []byte(tmpl), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "output.txt"), []byte(tmpl), 0o644))
 
 	outputDir := filepath.Join(t.TempDir(), "output")
 	opts := Options{
@@ -202,9 +202,9 @@ func TestIT_Scaffold_PathPlaceholders(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
 
 	// Create directory structure with placeholders
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "__project_name | snake__", "internal", "__module_name | plural__"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name | snake }}", "internal", "{{ vars.module_name | plural }}"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "__project_name | snake__", "internal", "__module_name | plural__", "__module_name__.go.tmpl"),
+		filepath.Join(dir, "{{ vars.project_name | snake }}", "internal", "{{ vars.module_name | plural }}", "{{ vars.module_name }}.go"),
 		[]byte("package {{ vars.module_name | plural }}\n"),
 		0o644,
 	))
@@ -271,8 +271,8 @@ func TestIT_Scaffold_GeneratesTagconfig(t *testing.T) {
 
 	env, ok := tagconfig["env"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "_templates", env["TAG_PATH"])
-	assert.Equal(t, ".tmpl", env["TAG_EXTENSION"])
+	assert.Equal(t, ".tag.templates", env["TAG_PATH"])
+	assert.Nil(t, env["TAG_EXTENSION"], "TAG_EXTENSION should not be in config")
 }
 
 func TestIT_Scaffold_OutputExists_Error(t *testing.T) {
@@ -405,7 +405,7 @@ func TestIT_Scaffold_ProjectNameFromArg(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
 
 	// Create simple template
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "info.txt.tmpl"), []byte("{{ vars.project_name }}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "info.txt"), []byte("{{ vars.project_name }}\n"), 0o644))
 
 	outputDir := filepath.Join(t.TempDir(), "output")
 	opts := Options{
@@ -472,8 +472,8 @@ func TestIT_Scaffold_PathTraversalPrevention(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
 
 	// Create a template file with path that would escape output dir
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "__bad_var__"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "__bad_var__", "evil.txt"), []byte("content"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.bad_var }}"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "{{ vars.bad_var }}", "evil.txt"), []byte("content"), 0o644))
 
 	outputDir := filepath.Join(t.TempDir(), "output")
 	opts := Options{

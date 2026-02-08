@@ -41,6 +41,8 @@ TAG will:
 2. Prompt you for variable values interactively
 3. Generate your project with all files processed
 
+> **Tip:** TAG can also scaffold Cookiecutter templates directly! It will auto-detect and offer to convert them.
+
 ### 2. Create a Generator for Incremental Code Generation
 
 For adding code to existing projects, use generators:
@@ -52,7 +54,7 @@ tag init
 # Create a new generator
 tag new handler
 
-# Edit your generator templates in _templates/handler/
+# Edit your generator templates in .tag.templates/handler/
 # Then run:
 tag generate handler UserAuth
 ```

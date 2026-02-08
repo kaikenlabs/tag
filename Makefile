@@ -32,6 +32,11 @@ ci: log lint scan test ## Run ci tasks
 build: ## build go files
 	go build $(GO_BUILD_FLAGS) -o $(APP_NAME)
 
+install: build ## build and install to ~/.local/bin
+	@mkdir -p ~/.local/bin
+	@cp $(APP_NAME) ~/.local/bin/$(APP_NAME)
+	@echo "Installed $(APP_NAME) to ~/.local/bin/$(APP_NAME)"
+
 # HELP
 # This will output the help for each task
 # thanks to https://marmelab.com/blog/2016/02/29/auto-documented-makefile.html

@@ -29,6 +29,22 @@ func TestUT_ConvertCookiecutterConfig_StringDefaults(t *testing.T) {
 	assert.Equal(t, "John Doe", config.RawVars["author"])
 }
 
+func TestUT_ConvertCookiecutterConfig_DerivedVariables(t *testing.T) {
+	// Test that derived variables (with templated defaults) have their namespace converted
+	input := `{
+		"package_display_name": "My Package",
+		"package_name": "{{cookiecutter.package_display_name.lower().replace(' ', '_').replace('-', '_')}}",
+		"github_repo": "{{ cookiecutter.package_name }}"
+	}`
+
+	config, _, _, err := ConvertCookiecutterConfig([]byte(input))
+	require.NoError(t, err)
+
+	// Check that cookiecutter namespace was converted to vars namespace in defaults
+	assert.Equal(t, "{{vars.package_display_name.lower().replace(' ', '_').replace('-', '_')}}", config.RawVars["package_name"])
+	assert.Equal(t, "{{ vars.package_name }}", config.RawVars["github_repo"])
+}
+
 func TestUT_ConvertCookiecutterConfig_BooleanDefaults(t *testing.T) {
 	input := `{
 		"use_docker": true,

@@ -151,6 +151,52 @@ func (v VariableDef) IsPrivate(name string) bool {
 	return len(name) > 0 && name[0] == '_'
 }
 
+// IsDerived returns true if the variable's default is a template expression
+// that references other variables. Derived variables are not prompted;
+// their values are computed from other variables during rendering.
+// This follows Cookiecutter's behavior for derived variables.
+func (v VariableDef) IsDerived() bool {
+	if v.Default == nil {
+		return false
+	}
+	defaultStr, ok := v.Default.(string)
+	if !ok {
+		return false
+	}
+	// Check if default contains template expressions referencing variables
+	// Supports both {{ vars.name }} and {{ cookiecutter.name }} syntax
+	return containsTemplateExpression(defaultStr)
+}
+
+// containsTemplateExpression checks if a string contains Jinja2-style
+// template expressions that reference variables.
+func containsTemplateExpression(s string) bool {
+	// Look for {{ vars. or {{ cookiecutter. patterns
+	// Also handles whitespace variations like {{vars. or {{ cookiecutter.
+	for i := 0; i < len(s)-2; i++ {
+		if s[i] == '{' && s[i+1] == '{' {
+			// Found opening braces, look for vars. or cookiecutter.
+			rest := s[i+2:]
+			// Skip whitespace
+			j := 0
+			for j < len(rest) && (rest[j] == ' ' || rest[j] == '\t') {
+				j++
+			}
+			if j < len(rest) {
+				remaining := rest[j:]
+				if len(remaining) >= 5 && remaining[:5] == "vars." {
+					return true
+				}
+				// "cookiecutter." is 13 characters
+				if len(remaining) >= 13 && remaining[:13] == "cookiecutter." {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // GetPrompt returns the prompt message for the variable.
 // If no prompt is set, returns a default prompt based on the variable name.
 func (v VariableDef) GetPrompt(name string) string {

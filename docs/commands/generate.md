@@ -12,7 +12,7 @@ tag generate <generator|bundle> <name> [args] [flags]
 
 The `generate` command runs a generator (or bundle of generators) to add files to your existing project. Unlike `scaffold` which creates new projects, `generate` is for incremental code generation within an existing codebase.
 
-Generators are defined in the `_templates/` directory and can:
+Generators are defined in the `.tag.templates/` directory and can:
 - Create new files
 - Append to existing files
 - Inject content before/after markers in files
@@ -37,7 +37,7 @@ Generators are defined in the `_templates/` directory and can:
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--path` | `-tp` | `_templates` | Templates directory path |
+| `--path` | `-tp` | `.tag.templates` | Templates directory path |
 | `--shared` | `-sp` | `_shared` | Shared templates directory name |
 | `--extension` | `-x` | `.tmpl` | Template file extension |
 
@@ -84,7 +84,7 @@ tag generate handler User --dry-run
 
 ```bash
 # Custom templates directory
-tag generate handler User --path custom_templates
+tag generate handler User --path custom.tag.templates
 
 # Custom file extension
 tag generate handler User --extension .template
@@ -128,7 +128,7 @@ func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
 | Feature | Generator | Bundle |
 |---------|-----------|--------|
 | Creates | One or more related files | Multiple generators' output |
-| Location | `_templates/<name>/` | `_bundles/<name>/<name>.bundle.json` |
+| Location | `.tag.templates/<name>/` | `_bundles/<name>/<name>.bundle.json` |
 | Use case | Single concern (handler, model) | Full feature (CRUD, module) |
 
 ### Bundle File Format
@@ -150,7 +150,7 @@ Generator behavior can be configured via `.tagconfig.json` in your project root:
 ```json
 {
   "env": {
-    "TAG_PATH": "_templates",
+    "TAG_PATH": ".tag.templates",
     "TAG_EXTENSION": ".tmpl",
     "TAG_SHARED_PATH": "_shared",
     "TAG_BUNDLE_PATH": "_bundles"
@@ -213,7 +213,7 @@ before: "// END MARKER"
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "generator not found" | Generator directory doesn't exist | Check `_templates/` directory |
+| "generator not found" | Generator directory doesn't exist | Check `.tag.templates/` directory |
 | "cannot open bundle file" | Bundle file not found | Verify bundle exists in `_bundles/` |
 | "hook failed" | Pre/post hook returned error | Check hook command and permissions |
 

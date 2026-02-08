@@ -14,9 +14,12 @@ The `convert cookiecutter` command converts existing [Cookiecutter](https://cook
 
 The conversion process:
 1. Converts `cookiecutter.json` to `tag.template.json`
-2. Renames path placeholders from `{{ cookiecutter.var }}` to `__var__` syntax
-3. Copies and analyzes hook scripts
-4. Reports any content incompatibilities between Jinja2 and Gonja
+2. Converts path placeholders from `{{ cookiecutter.var }}` to `{{ vars.var }}` syntax
+3. Preserves derived variables (those referencing other variables)
+4. Copies and analyzes hook scripts
+5. Reports any content incompatibilities between Jinja2 and Gonja
+
+> **Note**: You can also use `tag scaffold` directly on a Cookiecutter template—TAG will auto-detect it and offer to convert interactively. See [Auto-Detection](#auto-detection) below.
 
 ## Arguments
 
@@ -101,8 +104,24 @@ See: https://tag.kaikenlabs.com/docs/migration
 
 | Before | After |
 |--------|-------|
-| `{{ cookiecutter.project_name }}/` | `__project_name__/` |
-| `{{ cookiecutter.var | lower }}/` | `__var | lower__/` |
+| `{{ cookiecutter.project_name }}/` | `{{ vars.project_name }}/` |
+| `{{ cookiecutter.var \| lower }}/` | `{{ vars.var \| lower }}/` |
+
+### Derived Variables
+
+Variables with template expressions as defaults (e.g., `"{{ cookiecutter.name | lower }}"`) are converted to use the `vars` namespace. These derived variables:
+- Are NOT prompted during scaffolding (following Cookiecutter behavior)
+- Are automatically computed from other variables
+- Preserve the original computation logic
+
+Example:
+```json
+// Cookiecutter format:
+"package_name": "{{ cookiecutter.display_name.lower().replace(' ', '_') }}"
+
+// Converted TAG format:
+"package_name": "{{ vars.display_name.lower().replace(' ', '_') }}"
+```
 
 ### Template Content
 
@@ -165,8 +184,28 @@ Cookiecutter hooks (Python scripts in `hooks/`) are copied but require manual re
 | "failed to initialize converter" | Invalid template structure | Verify it's a valid Cookiecutter template |
 | "cookiecutter.json not found" | Missing config file | Ensure `cookiecutter.json` exists in template root |
 
+## Auto-Detection
+
+When running `tag scaffold` on a Cookiecutter template (a directory with `cookiecutter.json` but no `tag.template.json`), TAG automatically offers to convert it:
+
+```bash
+$ tag scaffold ./my-cookiecutter-template
+
+This appears to be a Cookiecutter template. Convert to TAG format? [Y/n] y
+Output directory for converted template [./my-cookiecutter-template-tag]:
+Converted template to: ./my-cookiecutter-template-tag
+  Variables: 8, Files: 25
+
+Output directory for scaffolded project [./my-project]:
+Enter value for project_name [my_project]: awesome-app
+...
+```
+
+This allows seamless use of Cookiecutter templates without a separate conversion step. In non-interactive mode (`--no-input`), auto-conversion is disabled and you must convert explicitly first.
+
 ## See Also
 
+- [Scaffold Command](../commands/scaffold.md) - Using templates (includes Cookiecutter auto-detection)
 - [Template Authoring](../templates/authoring.md) - TAG template structure
 - [Migration Guide](../migration/v1-to-v2.md) - Detailed migration information
 - [tag.template.json Reference](../reference/tag.template.json.md) - Configuration format

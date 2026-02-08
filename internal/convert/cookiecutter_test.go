@@ -102,7 +102,7 @@ func main() {
 	assert.Contains(t, string(tagConfig), "use_docker")
 
 	// Verify directory was renamed
-	convertedProjectDir := filepath.Join(destDir, "__project_name__")
+	convertedProjectDir := filepath.Join(destDir, "{{ vars.project_name }}")
 	_, err = os.Stat(convertedProjectDir)
 	require.NoError(t, err)
 }

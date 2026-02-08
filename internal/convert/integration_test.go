@@ -54,17 +54,17 @@ func TestIT_ConvertCookiecutter_FullTemplate(t *testing.T) {
 	assert.Contains(t, string(tagConfigData), "use_docker")
 	assert.Contains(t, string(tagConfigData), "open_source_license")
 
-	// Verify directory was converted
-	convertedProjectDir := filepath.Join(destDir, "__project_slug__")
+	// Verify directory was converted ({{ cookiecutter.project_slug }} -> {{ vars.project_slug }})
+	convertedProjectDir := filepath.Join(destDir, "{{ vars.project_slug }}")
 	_, err = os.Stat(convertedProjectDir)
 	require.NoError(t, err, "converted directory should exist")
 
 	// Verify files exist in converted directory
-	_, err = os.Stat(filepath.Join(convertedProjectDir, "README.md.tmpl"))
-	require.NoError(t, err, "README.md.tmpl should exist")
+	_, err = os.Stat(filepath.Join(convertedProjectDir, "README.md"))
+	require.NoError(t, err, "README.md should exist")
 
-	_, err = os.Stat(filepath.Join(convertedProjectDir, "src", "main.py.tmpl"))
-	require.NoError(t, err, "src/main.py.tmpl should exist")
+	_, err = os.Stat(filepath.Join(convertedProjectDir, "src", "main.py"))
+	require.NoError(t, err, "src/main.py should exist")
 
 	// Verify hooks were copied
 	_, err = os.Stat(filepath.Join(destDir, "hooks", "pre_gen_project.py"))
@@ -181,18 +181,18 @@ func TestIT_ConvertCookiecutter_PathConversion(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// The original directory {{ cookiecutter.project_slug }} should be converted to __project_slug__
+	// The original directory {{ cookiecutter.project_slug }} should be converted to {{ vars.project_slug }}
 	entries, err := os.ReadDir(destDir)
 	require.NoError(t, err)
 
 	hasConvertedDir := false
 	for _, entry := range entries {
-		if entry.Name() == "__project_slug__" && entry.IsDir() {
+		if entry.Name() == "{{ vars.project_slug }}" && entry.IsDir() {
 			hasConvertedDir = true
 			break
 		}
 	}
-	assert.True(t, hasConvertedDir, "should have __project_slug__ directory")
+	assert.True(t, hasConvertedDir, "should have {{ vars.project_slug }} directory")
 
 	// Verify original cookiecutter path does NOT exist
 	_, err = os.Stat(filepath.Join(destDir, "{{ cookiecutter.project_slug }}"))
@@ -218,7 +218,7 @@ func TestIT_ConvertCookiecutter_ContentPreserved(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read converted file and verify content is preserved
-	readmePath := filepath.Join(destDir, "__project_slug__", "README.md.tmpl")
+	readmePath := filepath.Join(destDir, "{{ vars.project_slug }}", "README.md")
 	content, err := os.ReadFile(readmePath)
 	require.NoError(t, err)
 

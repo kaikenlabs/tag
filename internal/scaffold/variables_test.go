@@ -192,8 +192,137 @@ func TestUT_VariableCollector_SkipPrivateVars(t *testing.T) {
 
 	// Private var should get its default
 	assert.Equal(t, "computed", vars["_private_var"])
-	// Should not prompt for private vars
-	// (Only prompt for optional vars without values, which is the public one)
+	// Should not prompt for private vars (but should prompt for public_var)
+	assert.Equal(t, 1, mockPrompter.CallCount["Input"]) // Only public_var prompted
+}
+
+func TestUT_VariableCollector_PromptForVarsWithDefaults(t *testing.T) {
+	// This test verifies that variables WITH defaults are still prompted in interactive mode
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Enter value for project_name"] = "user_provided_value"
+	mockPrompter.InputResults["Enter value for author"] = "Jane Doe"
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "default_project"},
+			"author":       {Type: VarTypeString, Default: "John Doe"},
+		},
+	}
+
+	opts := CollectOptions{
+		NoPrompt: false,
+		IsTTY:    true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// Both variables should be prompted even though they have defaults
+	assert.Equal(t, "user_provided_value", vars["project_name"])
+	assert.Equal(t, "Jane Doe", vars["author"])
+	assert.Equal(t, 2, mockPrompter.CallCount["Input"])
+}
+
+func TestUT_VariableCollector_ValuesFileSkipsPrompt(t *testing.T) {
+	// This test verifies that variables provided via values file are NOT re-prompted
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Enter value for prompted_var"] = "prompted_value"
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"file_var":     {Type: VarTypeString, Default: "default"},
+			"prompted_var": {Type: VarTypeString, Default: "default"},
+		},
+	}
+
+	// Create a temp values file that provides file_var
+	tempDir := t.TempDir()
+	valuesFile := filepath.Join(tempDir, "values.json")
+	err := os.WriteFile(valuesFile, []byte(`{"file_var": "from_file"}`), 0o644)
+	require.NoError(t, err)
+
+	opts := CollectOptions{
+		ValuesFile: valuesFile,
+		NoPrompt:   false,
+		IsTTY:      true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// file_var should come from values file (not prompted)
+	assert.Equal(t, "from_file", vars["file_var"])
+	// prompted_var should be prompted since it wasn't in values file
+	assert.Equal(t, "prompted_value", vars["prompted_var"])
+	// Only one prompt should have happened
+	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
+}
+
+func TestUT_VariableCollector_SkipDerivedVars(t *testing.T) {
+	// This test verifies that derived variables (whose defaults contain template expressions)
+	// are NOT prompted, following Cookiecutter behavior
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Enter value for package_display_name"] = "My Package"
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"package_display_name": {Type: VarTypeString, Default: "Package Name"},
+			// Derived variable - should not be prompted
+			"package_name": {Type: VarTypeString, Default: "{{ vars.package_display_name.lower().replace(' ', '_') }}"},
+			// Another derived variable
+			"github_repo": {Type: VarTypeString, Default: "{{vars.package_name}}"},
+		},
+	}
+
+	opts := CollectOptions{
+		NoPrompt: false,
+		IsTTY:    true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// package_display_name should be prompted (user input)
+	assert.Equal(t, "My Package", vars["package_display_name"])
+	// package_name should NOT be prompted - keeps template expression as default
+	assert.Equal(t, "{{ vars.package_display_name.lower().replace(' ', '_') }}", vars["package_name"])
+	// github_repo should NOT be prompted - keeps template expression as default
+	assert.Equal(t, "{{vars.package_name}}", vars["github_repo"])
+	// Only one prompt should have happened (for package_display_name)
+	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
+}
+
+func TestUT_VariableCollector_DerivedVarsWithCookiecutterNamespace(t *testing.T) {
+	// Test that cookiecutter namespace is also recognized for derived variables
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Enter value for project_name"] = "My Project"
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "Default Project"},
+			// Derived using cookiecutter namespace (from conversion)
+			"project_slug": {Type: VarTypeString, Default: "{{ cookiecutter.project_name | snake }}"},
+		},
+	}
+
+	opts := CollectOptions{
+		NoPrompt: false,
+		IsTTY:    true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// project_name should be prompted
+	assert.Equal(t, "My Project", vars["project_name"])
+	// project_slug should NOT be prompted (derived)
+	assert.Equal(t, "{{ cookiecutter.project_name | snake }}", vars["project_slug"])
+	// Only project_name was prompted
+	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
 }
 
 func TestUT_VariableCollector_TypeCoercion(t *testing.T) {

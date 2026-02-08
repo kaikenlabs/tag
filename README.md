@@ -143,7 +143,7 @@ Templates are configured via `tag.template.json`:
 
 ## Generator Templates
 
-For incremental code generation, create templates in `_templates/`:
+For incremental code generation, create templates in `.tag.templates/`:
 
 ```
 ---
@@ -165,17 +165,37 @@ Generators support three actions:
 
 ## Cookiecutter Migration
 
-Convert existing Cookiecutter templates:
+TAG can automatically detect and convert Cookiecutter templates when scaffolding:
 
 ```bash
+# Auto-detection - TAG will prompt to convert
+tag scaffold ./my-cookiecutter-template
+
+# Or convert explicitly
 tag convert cookiecutter gh:user/cookiecutter-django ./django-tag
 ```
 
 The converter:
 - Transforms `cookiecutter.json` to `tag.template.json`
-- Renames path placeholders (`{{ cookiecutter.var }}` → `__var__`)
+- Converts path placeholders (`{{ cookiecutter.var }}` → `{{ vars.var }}`)
+- Preserves derived variables (computed from other variables)
 - Reports Jinja2/Gonja syntax differences
 - Copies and analyzes hooks
+
+### Derived Variables
+
+Following Cookiecutter's behavior, derived variables (those whose defaults reference other variables) are **not prompted** during scaffolding—they're computed automatically:
+
+```json
+{
+  "vars": {
+    "display_name": "My Package",
+    "package_name": "{{ vars.display_name | lower | replace(' ', '_') }}"
+  }
+}
+```
+
+Only `display_name` is prompted; `package_name` is computed as `my_package`.
 
 ## Commands
 
@@ -193,7 +213,7 @@ The converter:
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--dry-run` | `-d` | false | Preview without writing |
-| `--path` | `-tp` | `_templates` | Templates directory |
+| `--path` | `-tp` | `.tag.templates` | Templates directory |
 | `--shared` | `-sp` | `_shared` | Shared templates directory |
 | `--extension` | `-x` | `.tmpl` | Template file extension |
 

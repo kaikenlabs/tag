@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/kaikenlabs/tag/internal/template"
 )
@@ -71,9 +73,14 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 			return NewPathError(relPath, "failed to process path", err)
 		}
 
-		// Strip .tmpl extension from the processed path
-		if IsTemplateFile(processedPath) {
-			processedPath = StripTemplateExtension(processedPath)
+		// Skip entries where the path rendered to empty (conditional exclusion).
+		// This happens when a filename has a conditional block like
+		// {% if vars.feature %}file.go{% endif %} and the condition is false.
+		if processedPath == "" {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 
 		// Build full destination path
@@ -98,6 +105,7 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 }
 
 // processFile processes a single file from the template.
+// Text files are rendered through the template engine; binary files are copied as-is.
 func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template.Context, d fs.DirEntry) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
@@ -113,23 +121,22 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 	// Sanitize file mode to remove dangerous permission bits
 	mode := sanitizeFileMode(srcInfo.Mode())
 
-	if IsTemplateFile(srcPath) {
-		// Process as template
-		return w.processTemplate(srcPath, destPath, ctx, mode)
-	}
-
-	// Copy as binary
-	return w.copyFile(srcPath, destPath, mode)
-}
-
-// processTemplate processes a .tmpl file through the template engine.
-func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, ctx template.Context, mode fs.FileMode) error {
-	// Read template content
+	// Read file content to determine if it's text or binary
 	content, err := os.ReadFile(srcPath)
 	if err != nil {
-		return NewTemplateError(srcPath, "failed to read template", err)
+		return fmt.Errorf("failed to read file %s: %w", srcPath, err)
 	}
 
+	if isTextContent(content) {
+		return w.processTemplate(srcPath, destPath, content, ctx, mode)
+	}
+
+	// Copy binary file as-is
+	return os.WriteFile(destPath, content, mode)
+}
+
+// processTemplate processes a text file through the template engine.
+func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content []byte, ctx template.Context, mode fs.FileMode) error {
 	// Parse and execute template
 	tmpl, err := w.engine.ParseString(string(content))
 	if err != nil {
@@ -149,25 +156,38 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, ctx temp
 	return nil
 }
 
-// copyFile copies a file as binary (no template processing).
-func (w *DefaultOutputWriter) copyFile(srcPath, destPath string, mode fs.FileMode) error {
-	src, err := os.Open(srcPath)
-	if err != nil {
-		return fmt.Errorf("failed to open source file %s: %w", srcPath, err)
-	}
-	defer src.Close()
-
-	dst, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file %s: %w", destPath, err)
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, src); err != nil {
-		return fmt.Errorf("failed to copy file %s: %w", srcPath, err)
+// isTextContent checks if content appears to be text rather than binary.
+func isTextContent(content []byte) bool {
+	if len(content) == 0 {
+		return true
 	}
 
-	return nil
+	// Check first 8KB for binary indicators
+	sample := content
+	if len(sample) > 8192 {
+		sample = sample[:8192]
+	}
+
+	// Null bytes are a strong binary indicator
+	if bytes.Contains(sample, []byte{0}) {
+		return false
+	}
+
+	// Must be valid UTF-8
+	if !utf8.Valid(sample) {
+		return false
+	}
+
+	// Count non-printable characters (excluding common whitespace)
+	nonPrintable := 0
+	for _, b := range sample {
+		if b < 32 && b != '\n' && b != '\r' && b != '\t' {
+			nonPrintable++
+		}
+	}
+
+	// If more than 10% non-printable, likely binary
+	return float64(nonPrintable)/float64(len(sample)) < 0.1
 }
 
 // buildTemplateContext builds the template context from variables.
@@ -188,19 +208,19 @@ func buildTemplateContext(vars map[string]any) template.Context {
 	return ctx
 }
 
-// CopyGenerators copies the _generators directory to _templates in the output.
+// CopyGenerators copies the _generators directory to .tag.templates in the output.
 func CopyGenerators(templateRoot, outputDir string) error {
 	generatorsDir := filepath.Join(templateRoot, "_generators")
 
 	// Check if _generators exists
 	if _, err := os.Stat(generatorsDir); os.IsNotExist(err) {
-		// No _generators directory, create empty _templates
-		templatesDir := filepath.Join(outputDir, "_templates")
+		// No _generators directory, create empty .tag.templates
+		templatesDir := filepath.Join(outputDir, ".tag.templates")
 		return os.MkdirAll(templatesDir, 0o755)
 	}
 
-	// Copy _generators to _templates
-	templatesDir := filepath.Join(outputDir, "_templates")
+	// Copy _generators to .tag.templates
+	templatesDir := filepath.Join(outputDir, ".tag.templates")
 	return copyDir(generatorsDir, templatesDir)
 }
 
@@ -288,8 +308,7 @@ func sanitizeFileMode(mode fs.FileMode) fs.FileMode {
 func GenerateTagConfig(outputDir string) error {
 	config := map[string]any{
 		"env": map[string]string{
-			"TAG_PATH":        "_templates",
-			"TAG_EXTENSION":   ".tmpl",
+			"TAG_PATH":        ".tag.templates",
 			"TAG_SHARED_PATH": "_shared",
 			"TAG_BUNDLE_PATH": "_bundles",
 		},

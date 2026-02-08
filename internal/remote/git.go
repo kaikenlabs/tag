@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 )
 
 // GitFetcher fetches templates from Git repositories.
@@ -46,7 +47,7 @@ func (f *GitFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 		}
 	}()
 
-	// Clone the repository
+	// Clone the repository (falls back to SSH on HTTPS auth failure)
 	repo, err := f.clone(ctx, ref, tmpDir)
 	if err != nil {
 		return "", err
@@ -88,6 +89,8 @@ func (f *GitFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 }
 
 // clone performs the Git clone operation.
+// If HTTPS auth fails and the ref has a known provider with SSH support,
+// it falls back to cloning via SSH (git@host:owner/repo.git).
 func (f *GitFetcher) clone(ctx context.Context, ref *Reference, destDir string) (*git.Repository, error) {
 	// Get auth if available
 	auth, err := f.auth.GitAuth(ref)
@@ -95,8 +98,35 @@ func (f *GitFetcher) clone(ctx context.Context, ref *Reference, destDir string) 
 		return nil, &FetchError{Ref: ref, Message: "auth setup failed", Err: err}
 	}
 
+	repo, err := f.doClone(ctx, ref.URL, ref, destDir, auth)
+	if err != nil && isAuthError(err) && canFallbackToSSH(ref) {
+		// HTTPS auth failed — retry with SSH
+		sshURL := fmt.Sprintf("git@%s:%s/%s.git", ref.Host, ref.Owner, ref.Repo)
+		fallbackRef := &Reference{URL: sshURL, Provider: ref.Provider}
+		sshAuth, sshErr := f.auth.GitAuth(fallbackRef)
+		if sshErr == nil {
+			// Clean destDir for retry (clone requires empty directory)
+			os.RemoveAll(destDir)
+			if mkErr := os.MkdirAll(destDir, 0o755); mkErr != nil {
+				return nil, &FetchError{Ref: ref, Message: "cannot recreate temp directory", Err: mkErr}
+			}
+
+			// Build full ref for clone with version/subpath info
+			cloneRef := *ref
+			cloneRef.URL = sshURL
+			repo, err = f.doClone(ctx, sshURL, &cloneRef, destDir, sshAuth)
+		}
+	}
+	if err != nil {
+		return nil, f.wrapCloneError(ref, err)
+	}
+	return repo, nil
+}
+
+// doClone performs the actual git clone with the given URL and auth.
+func (f *GitFetcher) doClone(ctx context.Context, url string, ref *Reference, destDir string, auth transport.AuthMethod) (*git.Repository, error) {
 	opts := &git.CloneOptions{
-		URL:   ref.URL,
+		URL:   url,
 		Depth: 1, // Shallow clone for efficiency
 		Auth:  auth,
 	}
@@ -118,13 +148,24 @@ func (f *GitFetcher) clone(ctx context.Context, ref *Reference, destDir string) 
 			opts.SingleBranch = false
 			repo, err = git.PlainCloneContext(ctx, destDir, false, opts)
 		}
-
-		if err != nil {
-			return nil, f.wrapCloneError(ref, err)
-		}
 	}
+	return repo, err
+}
 
-	return repo, nil
+// canFallbackToSSH returns true if the reference has enough info to construct an SSH URL.
+func canFallbackToSSH(ref *Reference) bool {
+	return ref.Host != "" && ref.Owner != "" && ref.Repo != "" && !isSSHURL(ref.URL)
+}
+
+// isAuthError checks if an error is an authentication failure.
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "authentication") ||
+		strings.Contains(errStr, "401") ||
+		strings.Contains(errStr, "403")
 }
 
 // checkout checks out a specific version (tag, branch, or commit).

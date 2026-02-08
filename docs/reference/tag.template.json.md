@@ -247,9 +247,40 @@ Variables starting with `_` are private (not prompted):
 
 Private variables:
 - Not shown in interactive prompts
-- Stored as literal strings in the configuration
-- The Jinja2 expressions shown above are NOT pre-evaluated
-- To use computed values, reference them in templates or use template filters inline
+- Computed during template rendering
+- Useful for internal computed values that users shouldn't edit
+
+### Derived Variables
+
+Derived variables have a template expression as their default value that references other variables. Following Cookiecutter's behavior, derived variables are **automatically skipped** during interactive prompting—their values are computed from other variables during template rendering.
+
+```json
+{
+  "vars": {
+    "package_display_name": "My Package",
+    "package_name": "{{ vars.package_display_name | lower | replace(' ', '_') }}",
+    "github_repo": "{{ vars.package_name }}"
+  }
+}
+```
+
+In this example:
+- `package_display_name` will be prompted (it's a regular variable)
+- `package_name` will NOT be prompted (derived from `package_display_name`)
+- `github_repo` will NOT be prompted (derived from `package_name`)
+
+**User prompt sequence:**
+```
+Enter value for package_display_name [My Package]: Awesome Library
+```
+
+The `package_name` will be computed as `awesome_library` and `github_repo` will also be `awesome_library`.
+
+**Detection rules:** A variable is considered derived if its default value is a string containing:
+- `{{ vars.` - TAG's variable namespace
+- `{{ cookiecutter.` - Cookiecutter compatibility namespace
+
+This automatic detection ensures converted Cookiecutter templates work seamlessly with TAG's prompting system.
 
 ## Hooks Configuration
 

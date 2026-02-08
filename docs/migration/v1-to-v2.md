@@ -330,7 +330,7 @@ Replace all Go template variable references:
 
 ```bash
 # Find patterns to update
-grep -r "{{ \." _templates/
+grep -r "{{ \." .tag.templates/
 
 # Common replacements:
 # {{ .Name }} → {{ name }}
@@ -342,7 +342,7 @@ grep -r "{{ \." _templates/
 
 ```bash
 # Find function calls
-grep -r "case\|pluralise\|singularise" _templates/
+grep -r "case\|pluralise\|singularise" .tag.templates/
 
 # Replace patterns:
 # {{ caseSnake .X }} → {{ x|snake }}
@@ -353,7 +353,7 @@ grep -r "case\|pluralise\|singularise" _templates/
 
 ```bash
 # Find Go template control flow
-grep -r "{{ if\|{{ range\|{{ end }}" _templates/
+grep -r "{{ if\|{{ range\|{{ end }}" .tag.templates/
 
 # Replace:
 # {{ if .X }}...{{ end }} → {% if x %}...{% endif %}
@@ -364,7 +364,7 @@ grep -r "{{ if\|{{ range\|{{ end }}" _templates/
 
 ```bash
 # Find Go template comments
-grep -r "{{/\*" _templates/
+grep -r "{{/\*" .tag.templates/
 
 # Replace:
 # {{/* comment */}} → {# comment #}
