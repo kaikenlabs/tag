@@ -84,7 +84,7 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 func getBundleTemplate(name string) ([]byte, error) {
 	newBundle := engine.Bundle{
 		Name: name,
-		Generators: []engine.Generators{
+		Generators: []engine.GeneratorRef{
 			{
 				Name: "myGenerator",
 			},

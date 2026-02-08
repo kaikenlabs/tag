@@ -7,6 +7,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/parser"
+	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/writer"
 )
 
@@ -56,13 +57,13 @@ func (c *Core) Generate(data Data) error {
 	for _, item := range parsedOutput {
 		var action string
 		switch item.Action {
-		case parser.ActionAppend:
+		case template.ActionAppend:
 			if err := c.fwr.AppendFile(item.To, item.Output); err != nil {
 				slog.Error("cannot append to file", "file", item.To, "error", err)
 				return err
 			}
 			action = chalk.Yellow("modified")
-		case parser.ActionInject:
+		case template.ActionInject:
 			if err := c.fwr.InjectIntoFile(item.To, item.Output, writer.Inject{
 				Matcher: item.InjectMatcher,
 				Clause:  writer.InjectClause(item.InjectClause),

@@ -22,43 +22,14 @@ type TemplateData struct {
 	ParseData
 }
 
-// ParseActions represents the type of file operation.
-type ParseActions string
-
-const (
-	ActionCreate ParseActions = "Create"
-	ActionAppend ParseActions = "Append"
-	ActionInject ParseActions = "Inject"
-)
-
-// InjectClause represents where to inject content.
-type InjectClause string
-
-const (
-	InjectBefore InjectClause = "Before"
-	InjectAfter  InjectClause = "After"
-)
-
 // ParseData holds the parsing configuration and user input.
 type ParseData struct {
-	Action        ParseActions
-	InjectClause  InjectClause
+	Action        template.Action       // File operation: Create, Append, or Inject
+	InjectClause  template.InjectClause // Before or After (for inject action)
 	InjectMatcher string
 	Args          string            // Free-form arguments string
-	N             NameOptions       // Pre-computed name variants (deprecated, use template context)
 	Meta          map[string]string // User-provided metadata from --meta flags
 	Notes         string
-}
-
-// NameOptions contains pre-computed name variants.
-// Deprecated: Use template.NameOptions and the "n" context namespace instead.
-type NameOptions struct {
-	PascalCase string
-	CamelCase  string
-	SnakeCase  string
-	KebabCase  string
-	LowerCase  string
-	UpperCase  string
 }
 
 // InputData represents the input provided by the engine for template parsing.

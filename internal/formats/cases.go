@@ -44,13 +44,11 @@ func CaseCamel(str string) string {
 
 // parseAgainstMatchers run matchers against a string + transform
 func parseAgainstMatchers(str, sep string) string {
-	expression := fmt.Sprintf("${1}%s${2}", sep)
 	if matchSymbol.Match([]byte(str)) {
-		return matchSymbol.ReplaceAllString(str, expression)
+		return matchSymbol.ReplaceAllString(str, sep)
 	}
-	tmp := matchFirstCap.ReplaceAllString(str, expression)
-
-	return tmp
+	expression := fmt.Sprintf("${1}%s${2}", sep)
+	return matchFirstCap.ReplaceAllString(str, expression)
 }
 
 // lowercaseFirst converts the first letter to lower case
