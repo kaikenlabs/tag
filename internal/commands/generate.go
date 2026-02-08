@@ -71,6 +71,15 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 
 	generatorOrBundleName := c.Args().Get(0)
 	targetName := c.Args().Get(1)
+
+	// Validate names for path safety
+	if err := ValidateNameSafe(generatorOrBundleName); err != nil {
+		return app.Errorf("invalid generator/bundle name: %w", err)
+	}
+	if err := ValidateNameSafe(targetName); err != nil {
+		return app.Errorf("invalid target name: %w", err)
+	}
+
 	var args string
 	if c.Args().Len() > 2 {
 		args = c.Args().Get(2)
@@ -88,6 +97,10 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	}
 
 	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), generatorName, generatorName+BundleExtension)
+
+	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
+		return app.Errorf("path safety check failed: %w", err)
+	}
 
 	data, err := os.ReadFile(dirPath)
 	if err != nil {
@@ -118,6 +131,11 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 	}
 
 	dirPath := filepath.Join(cfg.Env.Path, generatorName)
+
+	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
+		return app.Errorf("path safety check failed: %w", err)
+	}
+
 	_, err := os.ReadDir(dirPath)
 	if err != nil {
 		return app.Errorf("generator %s not found in: %s", generatorName, cfg.Env.Path)

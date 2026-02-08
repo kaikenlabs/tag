@@ -218,7 +218,7 @@ type Options struct {
 	Replay      bool              // Use saved replay values (--replay flag)
 	NoSave      bool              // Don't save inputs for replay (--no-save flag)
 	TemplateRef string            // Original template reference (for replay ID generation)
-	AllowHooks  bool              // Allow hooks to run for remote templates (--allow-hooks flag)
+	AcceptHooks bool              // Accept hooks without prompting (--accept-hooks flag)
 	IsRemote    bool              // Whether the template source is remote
 }
 

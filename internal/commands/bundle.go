@@ -45,8 +45,16 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	}
 	bundleName := c.Args().Get(0)
 
+	if err := ValidateNameSafe(bundleName); err != nil {
+		return app.Errorf("invalid bundle name: %w", err)
+	}
+
 	slog.Info(chalk.Green("creating new bundle"), "path", cfg.Env.Path)
 	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, BundleExtension))
+
+	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
+		return app.Errorf("path safety check failed: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
 		return app.Errorf("error creating %s: %w", dirPath, err)
 	}

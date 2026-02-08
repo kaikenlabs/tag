@@ -1,7 +1,6 @@
 package writer
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -29,39 +28,33 @@ func (i *Inject) Validate() error {
 	return nil
 }
 
-// mergeInjection - injects data before, or after a matcher within a source file.
-// if we can't find the matcher, don't do anything to the source file
+// mergeInjection injects data before or after the first occurrence of a matcher within source.
+// If the matcher is not found, the source is returned unchanged with an error.
 func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error) {
-	var splitByMatcher []string
 	if err := inject.Validate(); err != nil {
 		return source, err
 	}
 
-	switch inject.Clause {
-	case InjectAfter:
-		splitByMatcher = strings.SplitAfter(string(source), inject.Matcher)
-		if len(splitByMatcher) != 2 {
-			return source, ErrNoMatchingExpression
-		}
-	case InjectBefore:
-		idx := strings.Index(string(source), inject.Matcher)
-		if idx == -1 {
-			return source, ErrNoMatchingExpression
-		}
-		var before string
-		if idx > 0 {
-			before = string(source[:(idx - 1)])
-		}
-		splitByMatcher = []string{
-			before,
-			fmt.Sprintf("\n%s", string(source[idx:])),
-		}
+	src := string(source)
+	idx := strings.Index(src, inject.Matcher)
+	if idx == -1 {
+		return source, ErrNoMatchingExpression
 	}
 
-	formatedOutput := strings.Join([]string{
-		splitByMatcher[0],
-		string(dataInjection),
-		splitByMatcher[1],
-	}, "")
-	return []byte(formatedOutput), nil
+	var before, after string
+	switch inject.Clause {
+	case InjectBefore:
+		before = src[:idx]
+		after = src[idx:]
+	case InjectAfter:
+		end := idx + len(inject.Matcher)
+		before = src[:end]
+		after = src[end:]
+	}
+
+	var result strings.Builder
+	result.WriteString(before)
+	result.Write(dataInjection)
+	result.WriteString(after)
+	return []byte(result.String()), nil
 }

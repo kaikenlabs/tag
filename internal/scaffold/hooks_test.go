@@ -419,6 +419,178 @@ func TestUT_LimitedBuffer_DiscardsAfterTruncation(t *testing.T) {
 	assert.Equal(t, snapshot, buf.String())
 }
 
+// --- Unit Tests for ConfirmHooks ---
+
+// MockPrompterForHooks records calls and returns preset values.
+type MockPrompterForHooks struct {
+	ConfirmResult bool
+	ConfirmErr    error
+	ConfirmCalls  int
+}
+
+func (m *MockPrompterForHooks) Input(label, defaultValue string, secret bool) (string, error) {
+	return defaultValue, nil
+}
+
+func (m *MockPrompterForHooks) Select(label string, options []string, defaultIndex int) (string, error) {
+	if defaultIndex >= 0 && defaultIndex < len(options) {
+		return options[defaultIndex], nil
+	}
+	return options[0], nil
+}
+
+func (m *MockPrompterForHooks) Confirm(label string, defaultValue bool) (bool, error) {
+	m.ConfirmCalls++
+	return m.ConfirmResult, m.ConfirmErr
+}
+
+func (m *MockPrompterForHooks) Number(label string, defaultValue float64) (float64, error) {
+	return defaultValue, nil
+}
+
+func TestUT_ConfirmHooks_AcceptHooksFlag_SkipsPrompt(t *testing.T) {
+	hooks := &HooksConfig{
+		PreScaffold: []string{"echo pre"},
+	}
+	prompter := &MockPrompterForHooks{}
+
+	allowed, err := ConfirmHooks(hooks, true, false, prompter)
+
+	require.NoError(t, err)
+	assert.True(t, allowed)
+	assert.Equal(t, 0, prompter.ConfirmCalls, "should not prompt when AcceptHooks is true")
+}
+
+func TestUT_ConfirmHooks_NoInputFlag_SkipsHooks(t *testing.T) {
+	hooks := &HooksConfig{
+		PreScaffold: []string{"echo pre"},
+	}
+	prompter := &MockPrompterForHooks{}
+
+	allowed, err := ConfirmHooks(hooks, false, true, prompter)
+
+	require.NoError(t, err)
+	assert.False(t, allowed)
+	assert.Equal(t, 0, prompter.ConfirmCalls, "should not prompt when NoInput is true")
+}
+
+func TestUT_ConfirmHooks_InteractiveConfirmed(t *testing.T) {
+	hooks := &HooksConfig{
+		PreScaffold:  []string{"echo pre"},
+		PostScaffold: []string{"echo post"},
+	}
+	prompter := &MockPrompterForHooks{ConfirmResult: true}
+
+	allowed, err := ConfirmHooks(hooks, false, false, prompter)
+
+	require.NoError(t, err)
+	assert.True(t, allowed)
+	assert.Equal(t, 1, prompter.ConfirmCalls)
+}
+
+func TestUT_ConfirmHooks_InteractiveDenied(t *testing.T) {
+	hooks := &HooksConfig{
+		PreScaffold: []string{"echo pre"},
+	}
+	prompter := &MockPrompterForHooks{ConfirmResult: false}
+
+	allowed, err := ConfirmHooks(hooks, false, false, prompter)
+
+	require.NoError(t, err)
+	assert.False(t, allowed)
+	assert.Equal(t, 1, prompter.ConfirmCalls)
+}
+
+func TestUT_ConfirmHooks_NilHooks_ReturnsFalse(t *testing.T) {
+	prompter := &MockPrompterForHooks{}
+
+	allowed, err := ConfirmHooks(nil, false, false, prompter)
+
+	require.NoError(t, err)
+	assert.False(t, allowed)
+	assert.Equal(t, 0, prompter.ConfirmCalls)
+}
+
+func TestUT_ConfirmHooks_EmptyHooks_ReturnsFalse(t *testing.T) {
+	hooks := &HooksConfig{}
+	prompter := &MockPrompterForHooks{}
+
+	allowed, err := ConfirmHooks(hooks, false, false, prompter)
+
+	require.NoError(t, err)
+	assert.False(t, allowed)
+	assert.Equal(t, 0, prompter.ConfirmCalls)
+}
+
+func TestUT_ConfirmHooks_AcceptHooksOverridesInteractive(t *testing.T) {
+	hooks := &HooksConfig{
+		PreScaffold: []string{"echo pre"},
+	}
+	prompter := &MockPrompterForHooks{}
+
+	// AcceptHooks=true should run even in interactive mode (no prompt)
+	allowed, err := ConfirmHooks(hooks, true, false, prompter)
+
+	require.NoError(t, err)
+	assert.True(t, allowed)
+	assert.Equal(t, 0, prompter.ConfirmCalls)
+}
+
+func TestUT_ConfirmHooks_PromptError(t *testing.T) {
+	hooks := &HooksConfig{
+		PreScaffold: []string{"echo pre"},
+	}
+	prompter := &MockPrompterForHooks{
+		ConfirmErr: assert.AnError,
+	}
+
+	_, err := ConfirmHooks(hooks, false, false, prompter)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to confirm hooks")
+}
+
+func TestIT_Scaffold_HooksSkippedInNoInputMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Create template with hooks that create marker files
+	templateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "test_project",
+		},
+		"hooks": map[string]any{
+			"post_scaffold": []string{"touch hook_ran.txt"},
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), configData, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "test.txt"), []byte("content"), 0o644))
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+		// AcceptHooks is false - hooks should be skipped
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Output should be created but hook marker should NOT exist
+	assert.DirExists(t, outputDir)
+	assert.FileExists(t, filepath.Join(outputDir, "test.txt"))
+	assert.NoFileExists(t, filepath.Join(outputDir, "hook_ran.txt"), "hooks should be skipped without --accept-hooks")
+}
+
 // --- Integration Tests for Scaffold with Hooks ---
 
 func TestIT_Scaffold_PreHookSuccess(t *testing.T) {
@@ -449,6 +621,7 @@ func TestIT_Scaffold_PreHookSuccess(t *testing.T) {
 		TemplateDir: templateDir,
 		OutputDir:   outputDir,
 		NoInput:     true,
+		AcceptHooks: true,
 	}
 
 	s, err := NewScaffold(opts)
@@ -489,6 +662,7 @@ func TestIT_Scaffold_PreHookFailure_NoOutputCreated(t *testing.T) {
 		TemplateDir: templateDir,
 		OutputDir:   outputDir,
 		NoInput:     true,
+		AcceptHooks: true,
 	}
 
 	s, err := NewScaffold(opts)
@@ -529,6 +703,7 @@ func TestIT_Scaffold_PostHookSuccess(t *testing.T) {
 		TemplateDir: templateDir,
 		OutputDir:   outputDir,
 		NoInput:     true,
+		AcceptHooks: true,
 	}
 
 	s, err := NewScaffold(opts)
@@ -570,6 +745,7 @@ func TestIT_Scaffold_PostHookFailure_OutputPreserved(t *testing.T) {
 		TemplateDir: templateDir,
 		OutputDir:   outputDir,
 		NoInput:     true,
+		AcceptHooks: true,
 	}
 
 	s, err := NewScaffold(opts)
@@ -615,6 +791,7 @@ func TestIT_Scaffold_HooksReceiveEnvironmentVariables(t *testing.T) {
 		TemplateDir: templateDir,
 		OutputDir:   outputDir,
 		NoInput:     true,
+		AcceptHooks: true,
 	}
 
 	s, err := NewScaffold(opts)
@@ -659,6 +836,7 @@ func TestIT_Scaffold_PreHooksRunInTemplateDirectory(t *testing.T) {
 		TemplateDir: templateDir,
 		OutputDir:   outputDir,
 		NoInput:     true,
+		AcceptHooks: true,
 	}
 
 	s, err := NewScaffold(opts)
@@ -698,6 +876,7 @@ func TestIT_Scaffold_PostHooksRunInOutputDirectory(t *testing.T) {
 		TemplateDir: templateDir,
 		OutputDir:   outputDir,
 		NoInput:     true,
+		AcceptHooks: true,
 	}
 
 	s, err := NewScaffold(opts)
@@ -741,6 +920,7 @@ func TestIT_Scaffold_MultipleHooksExecuteInOrder(t *testing.T) {
 		TemplateDir: templateDir,
 		OutputDir:   outputDir,
 		NoInput:     true,
+		AcceptHooks: true,
 	}
 
 	s, err := NewScaffold(opts)

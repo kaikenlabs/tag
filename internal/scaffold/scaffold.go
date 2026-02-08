@@ -149,11 +149,10 @@ func (s *Scaffold) Run(opts Options) error {
 	// Step 6: Build hook environment
 	hookEnv := BuildHookEnv(vars, templateDirAbs, outputDir)
 
-	// Step 7: Check hook safety for remote templates
-	hooksAllowed := !opts.IsRemote || opts.AllowHooks
-	if !hooksAllowed && config.Hooks != nil && (len(config.Hooks.PreScaffold) > 0 || len(config.Hooks.PostScaffold) > 0) {
-		fmt.Println("Warning: This remote template defines hooks that have been skipped for security.")
-		fmt.Println("  To allow hooks, re-run with --allow-hooks")
+	// Step 7: Check hook confirmation
+	hooksAllowed, err := ConfirmHooks(config.Hooks, opts.AcceptHooks, opts.NoInput, s.Prompter)
+	if err != nil {
+		return fmt.Errorf("hook confirmation failed: %w", err)
 	}
 
 	// Step 8: Run pre-scaffold hooks (before creating output directory)
