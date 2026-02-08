@@ -257,10 +257,10 @@ func BuildHookEnv(vars map[string]any, templateDir, outputDir string) []string {
 		env = append(env, fmt.Sprintf("TAG_PROJECT_NAME=%s", stringifyValue(projectName)))
 	}
 
-	// Add all user variables with TAG_VAR_ prefix
+	// Add all user variables with TAG_VAR_ prefix (sanitized)
 	for name, value := range vars {
 		envKey := formatEnvKey(name)
-		envValue := stringifyValue(value)
+		envValue := sanitizeEnvValue(name, stringifyValue(value))
 		env = append(env, fmt.Sprintf("%s=%s", envKey, envValue))
 	}
 
@@ -284,6 +284,31 @@ func formatEnvKey(name string) string {
 	}
 
 	return result.String()
+}
+
+const (
+	// MaxEnvValueLen is the maximum length for a single environment variable value.
+	MaxEnvValueLen = 4096
+
+	// envDangerousChars are characters in env values that could be dangerous
+	// if hook scripts use unquoted shell expansions.
+	envDangerousChars = ";|&$`"
+)
+
+// sanitizeEnvValue validates and sanitizes an environment variable value.
+// It truncates overly long values and strips newlines to prevent header injection.
+func sanitizeEnvValue(name, value string) string {
+	// Truncate overly long values
+	if len(value) > MaxEnvValueLen {
+		value = value[:MaxEnvValueLen]
+		fmt.Printf("Warning: variable %q value truncated to %d bytes for hook environment\n", name, MaxEnvValueLen)
+	}
+
+	// Strip newlines to prevent environment variable injection
+	value = strings.ReplaceAll(value, "\n", " ")
+	value = strings.ReplaceAll(value, "\r", " ")
+
+	return value
 }
 
 // stringifyValue converts a variable value to a string for environment variables.

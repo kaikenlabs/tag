@@ -160,6 +160,48 @@ func TestUT_BuildHookEnv_IncludesSystemEnv(t *testing.T) {
 	assert.True(t, hasPath, "should include system PATH")
 }
 
+// --- Unit Tests for sanitizeEnvValue ---
+
+func TestUT_SanitizeEnvValue_Normal(t *testing.T) {
+	result := sanitizeEnvValue("test", "hello world")
+	assert.Equal(t, "hello world", result)
+}
+
+func TestUT_SanitizeEnvValue_StripsNewlines(t *testing.T) {
+	result := sanitizeEnvValue("test", "line1\nline2\rline3")
+	assert.Equal(t, "line1 line2 line3", result)
+}
+
+func TestUT_SanitizeEnvValue_TruncatesLongValues(t *testing.T) {
+	longValue := strings.Repeat("a", MaxEnvValueLen+100)
+	result := sanitizeEnvValue("test", longValue)
+	assert.Len(t, result, MaxEnvValueLen)
+}
+
+func TestUT_SanitizeEnvValue_EmptyString(t *testing.T) {
+	result := sanitizeEnvValue("test", "")
+	assert.Equal(t, "", result)
+}
+
+func TestUT_BuildHookEnv_SanitizesValues(t *testing.T) {
+	vars := map[string]any{
+		"project_name": "test\ninjection",
+	}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	// Newlines should be replaced with spaces
+	for _, e := range env {
+		if strings.HasPrefix(e, "TAG_VAR_PROJECT_NAME=") {
+			value := strings.TrimPrefix(e, "TAG_VAR_PROJECT_NAME=")
+			assert.NotContains(t, value, "\n")
+			assert.Equal(t, "test injection", value)
+			return
+		}
+	}
+	t.Error("TAG_VAR_PROJECT_NAME not found in env")
+}
+
 // --- Unit Tests for formatEnvKey ---
 
 func TestUT_FormatEnvKey(t *testing.T) {
