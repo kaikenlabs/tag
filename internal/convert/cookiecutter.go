@@ -10,6 +10,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // Converter handles the conversion of Cookiecutter templates to TAG format.
@@ -45,7 +46,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	}
 
 	// 2. Verify it's a Cookiecutter template
-	cookiecutterPath := filepath.Join(templateDir, "cookiecutter.json")
+	cookiecutterPath := filepath.Join(templateDir, types.CookiecutterConfigFile)
 	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) {
 		return nil, ErrNoCookiecutterConfig
 	}
@@ -133,7 +134,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 			return nil, fmt.Errorf("failed to generate tag.template.json: %w", err)
 		}
 
-		tagConfigPath := filepath.Join(destDir, "tag.template.json")
+		tagConfigPath := filepath.Join(destDir, types.TemplateConfigFile)
 		if err := os.WriteFile(tagConfigPath, tagJSON, 0o644); err != nil {
 			return nil, fmt.Errorf("failed to write tag.template.json: %w", err)
 		}
@@ -182,7 +183,7 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 		}
 
 		// Skip cookiecutter.json (we handle it separately)
-		if relPath == "cookiecutter.json" {
+		if relPath == types.CookiecutterConfigFile {
 			return nil
 		}
 
@@ -272,7 +273,7 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 // Unlike Convert(), this does not copy files to a new directory.
 func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) error {
 	// Verify it's a Cookiecutter template
-	cookiecutterPath := filepath.Join(templateDir, "cookiecutter.json")
+	cookiecutterPath := filepath.Join(templateDir, types.CookiecutterConfigFile)
 	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) {
 		return ErrNoCookiecutterConfig
 	}
@@ -310,7 +311,7 @@ func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) erro
 		return fmt.Errorf("failed to generate tag.template.json: %w", err)
 	}
 
-	tagConfigPath := filepath.Join(templateDir, "tag.template.json")
+	tagConfigPath := filepath.Join(templateDir, types.TemplateConfigFile)
 	if err := os.WriteFile(tagConfigPath, tagJSON, 0o644); err != nil {
 		return fmt.Errorf("failed to write tag.template.json: %w", err)
 	}

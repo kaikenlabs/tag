@@ -213,7 +213,7 @@ func (s *Scaffold) Run(opts Options) error {
 
 // loadAndValidateConfig loads tag.template.json and validates it against the schema.
 func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, error) {
-	configPath := filepath.Join(templateDir, "tag.template.json")
+	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
 
 	// Check if config file exists and its size
 	info, err := os.Stat(configPath)

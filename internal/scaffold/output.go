@@ -65,13 +65,13 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 		}
 
 		// Skip tag.template.json
-		if d.Name() == "tag.template.json" && filepath.Dir(relPath) == "." {
+		if d.Name() == types.TemplateConfigFile && filepath.Dir(relPath) == "." {
 			return nil
 		}
 
 		// Skip _generators directory (will be handled separately)
 		// Match exact directory name, not prefix (e.g., don't skip "_generators-old")
-		if relPath == "_generators" || strings.HasPrefix(relPath, "_generators"+string(filepath.Separator)) {
+		if relPath == types.GeneratorsDir || strings.HasPrefix(relPath, types.GeneratorsDir+string(filepath.Separator)) {
 			return nil
 		}
 
@@ -184,17 +184,17 @@ func buildTemplateContext(vars map[string]any) template.Context {
 
 // CopyGenerators copies the _generators directory to .tag.templates in the output.
 func CopyGenerators(templateRoot, outputDir string) error {
-	generatorsDir := filepath.Join(templateRoot, "_generators")
+	generatorsDir := filepath.Join(templateRoot, types.GeneratorsDir)
 
 	// Check if _generators exists
 	if _, err := os.Stat(generatorsDir); os.IsNotExist(err) {
 		// No _generators directory, create empty .tag.templates
-		templatesDir := filepath.Join(outputDir, ".tag.templates")
+		templatesDir := filepath.Join(outputDir, types.TemplatesDir)
 		return os.MkdirAll(templatesDir, types.DirMode)
 	}
 
 	// Copy _generators to .tag.templates
-	templatesDir := filepath.Join(outputDir, ".tag.templates")
+	templatesDir := filepath.Join(outputDir, types.TemplatesDir)
 	return copyDir(generatorsDir, templatesDir)
 }
 
@@ -267,9 +267,9 @@ func sanitizeFileMode(mode fs.FileMode) fs.FileMode {
 func GenerateTagConfig(outputDir string) error {
 	config := map[string]any{
 		"env": map[string]string{
-			"TAG_PATH":        ".tag.templates",
-			"TAG_SHARED_PATH": "_shared",
-			"TAG_BUNDLE_PATH": "_bundles",
+			"TAG_PATH":        types.TemplatesDir,
+			"TAG_SHARED_PATH": types.SharedDir,
+			"TAG_BUNDLE_PATH": types.BundlesDir,
 		},
 		"hooks": map[string][]string{
 			"pre":  {},
