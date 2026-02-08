@@ -31,32 +31,32 @@ func Green(msg string) string {
 	return colourTerminalOutput(msg, green)
 }
 
-// Yellow - colour green
+// Yellow - colour yellow
 func Yellow(msg string) string {
 	return colourTerminalOutput(msg, yellow)
 }
 
-// Blue - colour green
+// Blue - colour blue
 func Blue(msg string) string {
 	return colourTerminalOutput(msg, blue)
 }
 
-// Purple - colour green
+// Purple - colour purple
 func Purple(msg string) string {
 	return colourTerminalOutput(msg, purple)
 }
 
-// Cyan - colour green
+// Cyan - colour cyan
 func Cyan(msg string) string {
 	return colourTerminalOutput(msg, cyan)
 }
 
-// Gray - colour green
+// Gray - colour gray
 func Gray(msg string) string {
 	return colourTerminalOutput(msg, gray)
 }
 
-// White - colour green
+// White - colour white
 func White(msg string) string {
 	return colourTerminalOutput(msg, white)
 }
