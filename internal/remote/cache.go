@@ -3,10 +3,11 @@ package remote
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/kaikenlabs/tag/internal/fileutil"
 )
 
 // DefaultCacheDir is the default cache directory relative to user home.
@@ -236,7 +237,7 @@ func (c *FSCache) copyDir(src, dst string) error {
 	return nil
 }
 
-// copyFile copies a single file.
+// copyFile copies a single file, skipping symlinks for security.
 func (c *FSCache) copyFile(src, dst string) error {
 	// Use Lstat to detect symlinks (Stat would follow them)
 	linfo, err := os.Lstat(src)
@@ -247,28 +248,7 @@ func (c *FSCache) copyFile(src, dst string) error {
 		return nil // Skip symlinks
 	}
 
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return err
-	}
-
-	// Sanitize permissions (remove setuid, setgid, sticky bits)
-	mode := srcInfo.Mode() & 0o777
-
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	return fileutil.CopyFile(src, dst)
 }
 
 // Cleanup removes expired cache entries.

@@ -1,16 +1,14 @@
 package scaffold
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/template"
 )
 
@@ -136,7 +134,7 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 		return fmt.Errorf("failed to read file %s: %w", srcPath, err)
 	}
 
-	if isTextContent(content) {
+	if fileutil.IsTextContent(content) {
 		return w.processTemplate(srcPath, destPath, content, ctx, mode)
 	}
 
@@ -163,40 +161,6 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 	}
 
 	return nil
-}
-
-// isTextContent checks if content appears to be text rather than binary.
-func isTextContent(content []byte) bool {
-	if len(content) == 0 {
-		return true
-	}
-
-	// Check first 8KB for binary indicators
-	sample := content
-	if len(sample) > 8192 {
-		sample = sample[:8192]
-	}
-
-	// Null bytes are a strong binary indicator
-	if bytes.Contains(sample, []byte{0}) {
-		return false
-	}
-
-	// Must be valid UTF-8
-	if !utf8.Valid(sample) {
-		return false
-	}
-
-	// Count non-printable characters (excluding common whitespace)
-	nonPrintable := 0
-	for _, b := range sample {
-		if b < 32 && b != '\n' && b != '\r' && b != '\t' {
-			nonPrintable++
-		}
-	}
-
-	// If more than 10% non-printable, likely binary
-	return float64(nonPrintable)/float64(len(sample)) < 0.1
 }
 
 // buildTemplateContext builds the template context from variables.
@@ -257,32 +221,12 @@ func copyDir(src, dst string) error {
 			return os.MkdirAll(destPath, 0o755)
 		}
 
-		// Get source file info
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-
-		// Copy file
-		srcFile, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer srcFile.Close()
-
 		// Ensure parent directory exists
 		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 			return err
 		}
 
-		dstFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
-		if err != nil {
-			return err
-		}
-		defer dstFile.Close()
-
-		_, err = io.Copy(dstFile, srcFile)
-		return err
+		return fileutil.CopyFile(path, destPath)
 	})
 }
 

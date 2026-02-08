@@ -3,11 +3,11 @@ package convert
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 )
@@ -252,7 +252,7 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 			}
 
 			// Copy file
-			if err := copyFile(path, destPath); err != nil {
+			if err := fileutil.CopyFile(path, destPath); err != nil {
 				return fmt.Errorf("failed to copy %s: %w", relPath, err)
 			}
 		}
@@ -312,25 +312,3 @@ func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) erro
 	return nil
 }
 
-// copyFile copies a file from src to dst.
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return err
-	}
-
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcInfo.Mode())
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	return err
-}
