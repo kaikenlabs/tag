@@ -163,8 +163,9 @@ func (c *Converter) resolveSource(ctx context.Context, source string) (string, e
 }
 
 // processTemplateFiles walks the template directory and converts files.
+// Uses filepath.WalkDir instead of filepath.Walk to avoid following symlinked directories.
 func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffold.TemplateConfig, result *Result, dryRun bool) error {
-	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+	return filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -187,7 +188,7 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 
 		// Skip hooks directory (handled separately)
 		if IsHooksDir(relPath) {
-			if info.IsDir() {
+			if d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
@@ -196,14 +197,15 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 		// Skip .git directory only (preserve other dotfiles like .gitignore, .github)
 		baseName := filepath.Base(relPath)
 		if baseName == ".git" {
-			if info.IsDir() {
+			if d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
 		// Skip symlinks for security (prevent traversal attacks)
-		if info.Mode()&os.ModeSymlink != 0 {
+		// WalkDir does not follow symlinked directories, but we still skip symlinked files
+		if d.Type()&os.ModeSymlink != 0 {
 			result.Warnings = append(result.Warnings,
 				fmt.Sprintf("skipped symlink: %s (symlinks not copied for security)", relPath))
 			return nil
@@ -212,7 +214,7 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 		// Convert path placeholders
 		convertedPath, pathChanged := ConvertPath(relPath)
 		if pathChanged {
-			if info.IsDir() {
+			if d.IsDir() {
 				result.DirsRenamed++
 			} else {
 				result.FilesRenamed++
@@ -221,9 +223,13 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 
 		destPath := filepath.Join(destDir, convertedPath)
 
-		if info.IsDir() {
+		if d.IsDir() {
 			// Create directory
 			if !dryRun {
+				info, err := d.Info()
+				if err != nil {
+					return fmt.Errorf("failed to get directory info %s: %w", destPath, err)
+				}
 				if err := os.MkdirAll(destPath, info.Mode()); err != nil {
 					return fmt.Errorf("failed to create directory %s: %w", destPath, err)
 				}
@@ -311,4 +317,3 @@ func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) erro
 
 	return nil
 }
-
