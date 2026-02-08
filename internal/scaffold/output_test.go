@@ -694,6 +694,59 @@ func TestUT_BuildTemplateContext(t *testing.T) {
 	assert.Equal(t, "test", rootName)
 }
 
+// --- openAndReadRegularFile (TOCTOU protection) ---
+
+func TestUT_OpenAndReadRegularFile_RegularFile(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "regular.txt")
+	require.NoError(t, os.WriteFile(filePath, []byte("hello world"), 0o644))
+
+	content, mode, err := openAndReadRegularFile(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, "hello world", string(content))
+	assert.Equal(t, fs.FileMode(0o644), mode&0o777)
+}
+
+func TestUT_OpenAndReadRegularFile_Symlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	require.NoError(t, os.WriteFile(target, []byte("secret"), 0o644))
+
+	link := filepath.Join(dir, "link.txt")
+	require.NoError(t, os.Symlink(target, link))
+
+	_, _, err := openAndReadRegularFile(link)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "symlink detected")
+}
+
+func TestUT_OpenAndReadRegularFile_NonExistent(t *testing.T) {
+	_, _, err := openAndReadRegularFile("/nonexistent/path/file.txt")
+	require.Error(t, err)
+}
+
+func TestUT_OpenAndReadRegularFile_SanitizesMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file mode tests not reliable on Windows")
+	}
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "setuid.sh")
+	require.NoError(t, os.WriteFile(filePath, []byte("#!/bin/sh"), 0o755))
+	require.NoError(t, os.Chmod(filePath, fs.ModeSetuid|0o755))
+
+	_, mode, err := openAndReadRegularFile(filePath)
+	require.NoError(t, err)
+	// Setuid should be stripped
+	assert.Equal(t, fs.FileMode(0), mode&fs.ModeSetuid)
+	// Execute should be preserved
+	assert.NotEqual(t, fs.FileMode(0), mode&0o111)
+}
+
 // --- test helpers ---
 
 // testDirEntry wraps os.FileInfo to implement fs.DirEntry for tests.

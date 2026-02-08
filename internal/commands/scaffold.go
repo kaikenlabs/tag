@@ -104,6 +104,10 @@ Examples:
 				Name:  "accept-hooks",
 				Usage: "Accept and run pre/post scaffold hooks without prompting for confirmation",
 			},
+			&cli.BoolFlag{
+				Name:  "allow-recursive-render",
+				Usage: "Allow template syntax in variable values to be rendered (SECURITY: enables recursive template rendering)",
+			},
 		},
 		Action: scaffoldAction,
 	}
@@ -143,18 +147,19 @@ func scaffoldAction(c *cli.Context) error {
 
 	// Build options
 	opts := scaffold.Options{
-		TemplateDir: templateDir,
-		OutputDir:   c.String("output"),
-		ProjectName: projectName,
-		ValuesFile:  c.String("values"),
-		Meta:        meta,
-		NoInput:     c.Bool("no-input"),
-		Force:       c.Bool("force"),
-		Replay:      c.Bool("replay"),
-		NoSave:      c.Bool("no-save"),
-		TemplateRef: templateRef, // Pass original reference for replay ID generation
-		AcceptHooks: c.Bool("accept-hooks"),
-		IsRemote:    isRemote,
+		TemplateDir:          templateDir,
+		OutputDir:            c.String("output"),
+		ProjectName:          projectName,
+		ValuesFile:           c.String("values"),
+		Meta:                 meta,
+		NoInput:              c.Bool("no-input"),
+		Force:                c.Bool("force"),
+		Replay:               c.Bool("replay"),
+		NoSave:               c.Bool("no-save"),
+		TemplateRef:          templateRef, // Pass original reference for replay ID generation
+		AcceptHooks:          c.Bool("accept-hooks"),
+		IsRemote:             isRemote,
+		AllowRecursiveRender: c.Bool("allow-recursive-render"),
 	}
 
 	// Create and run scaffold

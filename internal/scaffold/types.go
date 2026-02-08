@@ -208,18 +208,19 @@ func (v VariableDef) GetPrompt(name string) string {
 
 // Options represents scaffold command options.
 type Options struct {
-	TemplateDir string            // Path to template directory
-	OutputDir   string            // Output directory (-o flag)
-	ProjectName string            // Project name argument
-	ValuesFile  string            // Path to values JSON file (--values flag)
-	Meta        map[string]string // Individual variable overrides (-m/--meta flags)
-	NoInput     bool              // Skip interactive prompts (--no-input flag)
-	Force       bool              // Overwrite existing output (--force flag)
-	Replay      bool              // Use saved replay values (--replay flag)
-	NoSave      bool              // Don't save inputs for replay (--no-save flag)
-	TemplateRef string            // Original template reference (for replay ID generation)
-	AcceptHooks bool              // Accept hooks without prompting (--accept-hooks flag)
-	IsRemote    bool              // Whether the template source is remote
+	TemplateDir          string            // Path to template directory
+	OutputDir            string            // Output directory (-o flag)
+	ProjectName          string            // Project name argument
+	ValuesFile           string            // Path to values JSON file (--values flag)
+	Meta                 map[string]string // Individual variable overrides (-m/--meta flags)
+	NoInput              bool              // Skip interactive prompts (--no-input flag)
+	Force                bool              // Overwrite existing output (--force flag)
+	Replay               bool              // Use saved replay values (--replay flag)
+	NoSave               bool              // Don't save inputs for replay (--no-save flag)
+	TemplateRef          string            // Original template reference (for replay ID generation)
+	AcceptHooks          bool              // Accept hooks without prompting (--accept-hooks flag)
+	IsRemote             bool              // Whether the template source is remote
+	AllowRecursiveRender bool              // Allow recursive template rendering in variable values (--allow-recursive-render flag)
 }
 
 // CollectOptions contains options for variable collection.
