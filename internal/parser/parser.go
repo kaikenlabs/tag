@@ -128,8 +128,8 @@ func (te *TemplateEngine) parseTemplate(tmplName, tmplContent string, input Inpu
 		To:     metadata.To,
 		Output: parsedBody,
 		ParseData: ParseData{
-			Action:        convertAction(metadata.Action),
-			InjectClause:  convertInjectClause(metadata.InjectClause),
+			Action:        metadata.Action,
+			InjectClause:  metadata.InjectClause,
 			InjectMatcher: metadata.InjectMatcher,
 			Notes:         metadata.Notes,
 			Meta:          mergeMetadata(input.Meta, metadata.Extra),
@@ -209,30 +209,6 @@ func mergeMetadata(cliMeta map[string]string, templateMeta map[string]string) ma
 	return result
 }
 
-// convertAction converts template.Action to parser.ParseActions.
-func convertAction(action template.Action) ParseActions {
-	switch action {
-	case template.ActionAppend:
-		return ActionAppend
-	case template.ActionInject:
-		return ActionInject
-	default:
-		return ActionCreate
-	}
-}
-
-// convertInjectClause converts template.InjectClause to parser.InjectClause.
-func convertInjectClause(clause template.InjectClause) InjectClause {
-	switch clause {
-	case template.InjectBefore:
-		return InjectBefore
-	case template.InjectAfter:
-		return InjectAfter
-	default:
-		return ""
-	}
-}
-
 // withTemplates loads templates from a directory.
 func withTemplates(dirPath string, fileSuffix string) (map[string]string, error) {
 	rootTemplates := map[string]string{}
@@ -264,11 +240,11 @@ func orderTemplateData(data []TemplateData) []TemplateData {
 
 	for _, tmp := range data {
 		switch tmp.Action {
-		case ActionCreate:
+		case template.ActionCreate:
 			create = append(create, tmp)
-		case ActionInject:
+		case template.ActionInject:
 			inject = append(inject, tmp)
-		case ActionAppend:
+		case template.ActionAppend:
 			app = append(app, tmp)
 		}
 	}

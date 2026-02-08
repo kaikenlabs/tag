@@ -151,3 +151,129 @@ func TestCaseKebab(t *testing.T) {
 		})
 	}
 }
+
+func TestUT_CaseSnake_SymbolEdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		str  string
+		want string
+	}{
+		{
+			name: "multiple spaces",
+			str:  "hello world foo",
+			want: "hello_world_foo",
+		},
+		{
+			name: "mixed hyphens and spaces",
+			str:  "hello-world foo",
+			want: "hello_world_foo",
+		},
+		{
+			name: "mixed underscores and hyphens",
+			str:  "hello_world-foo",
+			want: "hello_world_foo",
+		},
+		{
+			name: "consecutive hyphens",
+			str:  "hello--world",
+			want: "hello__world",
+		},
+		{
+			name: "leading space",
+			str:  " hello",
+			want: "_hello",
+		},
+		{
+			name: "trailing space",
+			str:  "hello ",
+			want: "hello_",
+		},
+		{
+			name: "single word no symbols",
+			str:  "hello",
+			want: "hello",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, CaseSnake(tt.str))
+		})
+	}
+}
+
+func TestUT_CasePascal_SymbolEdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		str  string
+		want string
+	}{
+		{
+			name: "multiple underscores",
+			str:  "hello_world_foo",
+			want: "HelloWorldFoo",
+		},
+		{
+			name: "mixed hyphens and spaces",
+			str:  "hello-world foo",
+			want: "HelloWorldFoo",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, CasePascal(tt.str))
+		})
+	}
+}
+
+func TestUT_CaseCamel_SymbolEdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		str  string
+		want string
+	}{
+		{
+			name: "multiple underscores",
+			str:  "hello_world_foo",
+			want: "helloWorldFoo",
+		},
+		{
+			name: "with hyphens",
+			str:  "hello-world-foo",
+			want: "helloWorldFoo",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, CaseCamel(tt.str))
+		})
+	}
+}
+
+func TestUT_CaseKebab_SymbolEdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		str  string
+		want string
+	}{
+		{
+			name: "from spaces",
+			str:  "hello world foo",
+			want: "hello-world-foo",
+		},
+		{
+			name: "from underscores",
+			str:  "hello_world_foo",
+			want: "hello-world-foo",
+		},
+		{
+			name: "consecutive spaces",
+			str:  "hello  world",
+			want: "hello--world",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, CaseKebab(tt.str))
+		})
+	}
+}

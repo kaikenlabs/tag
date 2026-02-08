@@ -16,11 +16,12 @@ type Data struct {
 	MetaArgs []string
 }
 
-type Generators struct {
+// GeneratorRef is a reference to a generator by name within a bundle configuration.
+type GeneratorRef struct {
 	Name string `json:"name" yaml:"name"`
 }
 
 type Bundle struct {
-	Name       string       `json:"name" yaml:"name"`
-	Generators []Generators `json:"generators" yaml:"generators"`
+	Name       string         `json:"name" yaml:"name"`
+	Generators []GeneratorRef `json:"generators" yaml:"generators"`
 }

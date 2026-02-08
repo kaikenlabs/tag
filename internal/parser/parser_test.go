@@ -236,7 +236,7 @@ content
 
 	data, err := te.Parse(InputData{Name: "test"})
 	require.NoError(t, err)
-	assert.Equal(t, ActionCreate, data[0].Action)
+	assert.Equal(t, template.ActionCreate, data[0].Action)
 }
 
 func TestUT_Parse_ActionAppend(t *testing.T) {
@@ -252,7 +252,7 @@ appended content
 
 	data, err := te.Parse(InputData{Name: "test"})
 	require.NoError(t, err)
-	assert.Equal(t, ActionAppend, data[0].Action)
+	assert.Equal(t, template.ActionAppend, data[0].Action)
 }
 
 func TestUT_Parse_ActionInjectAfter(t *testing.T) {
@@ -269,8 +269,8 @@ injected content
 
 	data, err := te.Parse(InputData{Name: "test"})
 	require.NoError(t, err)
-	assert.Equal(t, ActionInject, data[0].Action)
-	assert.Equal(t, InjectAfter, data[0].InjectClause)
+	assert.Equal(t, template.ActionInject, data[0].Action)
+	assert.Equal(t, template.InjectAfter, data[0].InjectClause)
 	assert.Equal(t, "// marker", data[0].InjectMatcher)
 }
 
@@ -288,8 +288,8 @@ injected content
 
 	data, err := te.Parse(InputData{Name: "test"})
 	require.NoError(t, err)
-	assert.Equal(t, ActionInject, data[0].Action)
-	assert.Equal(t, InjectBefore, data[0].InjectClause)
+	assert.Equal(t, template.ActionInject, data[0].Action)
+	assert.Equal(t, template.InjectBefore, data[0].InjectClause)
 	assert.Equal(t, "// marker", data[0].InjectMatcher)
 }
 
@@ -375,9 +375,9 @@ create`,
 	require.Len(t, data, 3)
 
 	// Should be ordered: Create, Inject, Append
-	assert.Equal(t, ActionCreate, data[0].Action)
-	assert.Equal(t, ActionInject, data[1].Action)
-	assert.Equal(t, ActionAppend, data[2].Action)
+	assert.Equal(t, template.ActionCreate, data[0].Action)
+	assert.Equal(t, template.ActionInject, data[1].Action)
+	assert.Equal(t, template.ActionAppend, data[2].Action)
 }
 
 func TestUT_Parse_JinjaConditional(t *testing.T) {
@@ -472,7 +472,7 @@ func TestUT_NewWithExecutor_ParsesTemplate(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, data, 1)
 	assert.Equal(t, "output/service.go", data[0].To)
-	assert.Equal(t, ActionCreate, data[0].Action)
+	assert.Equal(t, template.ActionCreate, data[0].Action)
 	assert.Equal(t, "generated code", string(data[0].Output))
 }
 
