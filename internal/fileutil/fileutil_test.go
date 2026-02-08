@@ -87,6 +87,37 @@ func TestUT_CopyFile(t *testing.T) {
 		assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
 	})
 
+	t.Run("strips setuid setgid and sticky bits", func(t *testing.T) {
+		src := filepath.Join(tmpDir, "setuid_file")
+		dst := filepath.Join(tmpDir, "setuid_copy")
+
+		err := os.WriteFile(src, []byte("content"), 0o755)
+		require.NoError(t, err)
+
+		// Set setuid, setgid, and sticky bits on the source file
+		err = os.Chmod(src, 0o755|os.ModeSetuid|os.ModeSetgid|os.ModeSticky)
+		require.NoError(t, err)
+
+		// Verify source has dangerous bits set
+		srcInfo, err := os.Stat(src)
+		require.NoError(t, err)
+		assert.NotZero(t, srcInfo.Mode()&os.ModeSetuid, "source should have setuid bit")
+
+		err = CopyFile(src, dst)
+		require.NoError(t, err)
+
+		dstInfo, err := os.Stat(dst)
+		require.NoError(t, err)
+
+		// Verify dangerous bits are stripped
+		assert.Zero(t, dstInfo.Mode()&os.ModeSetuid, "setuid bit should be stripped")
+		assert.Zero(t, dstInfo.Mode()&os.ModeSetgid, "setgid bit should be stripped")
+		assert.Zero(t, dstInfo.Mode()&os.ModeSticky, "sticky bit should be stripped")
+
+		// Verify regular permissions are preserved
+		assert.Equal(t, os.FileMode(0o755), dstInfo.Mode().Perm())
+	})
+
 	t.Run("source not found returns error", func(t *testing.T) {
 		err := CopyFile(filepath.Join(tmpDir, "nonexistent"), filepath.Join(tmpDir, "out"))
 		assert.Error(t, err)

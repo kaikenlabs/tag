@@ -85,9 +85,9 @@ func TestUT_Parse_BitbucketShorthand(t *testing.T) {
 func TestUT_Parse_ShorthandWithGitSuffix(t *testing.T) {
 	// Test that .git suffix is stripped from shorthand refs to avoid double .git in URL
 	tests := []struct {
-		name        string
-		input       string
-		expectedURL string
+		name         string
+		input        string
+		expectedURL  string
 		expectedRepo string
 	}{
 		{
@@ -425,6 +425,70 @@ func TestUT_Parse_LocalZip(t *testing.T) {
 	assert.Equal(t, ReferenceTypeZip, ref.Type)
 	assert.Equal(t, ProviderGeneric, ref.Provider)
 	assert.Equal(t, zipPath, ref.URL)
+}
+
+func TestUT_ValidateSubPath(t *testing.T) {
+	tests := []struct {
+		name    string
+		subPath string
+		wantErr bool
+	}{
+		{name: "empty string", subPath: "", wantErr: false},
+		{name: "simple directory", subPath: "templates", wantErr: false},
+		{name: "nested directory", subPath: "templates/go/api", wantErr: false},
+		{name: "dotdot traversal", subPath: "../../etc/passwd", wantErr: true},
+		{name: "leading dotdot", subPath: "../secret", wantErr: true},
+		{name: "embedded dotdot", subPath: "a/../../b", wantErr: true},
+		{name: "dotdot only", subPath: "..", wantErr: true},
+		{name: "absolute path unix", subPath: "/etc/passwd", wantErr: true},
+		{name: "backslash separator", subPath: "a\\b\\c", wantErr: true},
+		{name: "dotdot with trailing slash", subPath: "../", wantErr: true},
+		{name: "single dot is valid", subPath: ".", wantErr: false},
+		{name: "normalized clean path", subPath: "a/b/../c", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSubPath(tt.subPath)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestUT_Parse_SubPath_Rejects_Traversal(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		errContains string
+	}{
+		{
+			name:        "shorthand with dotdot",
+			input:       "gh:user/repo/../../etc",
+			errContains: "path traversal",
+		},
+		{
+			name:        "shorthand version with dotdot subpath",
+			input:       "gh:user/repo@main/../../../etc",
+			errContains: "path traversal",
+		},
+		{
+			name:        "https URL with dotdot subpath",
+			input:       "https://github.com/user/repo/tree/main/../../etc",
+			errContains: "path traversal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.input)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errContains)
+		})
+	}
 }
 
 func TestUT_Parse_InvalidReference(t *testing.T) {

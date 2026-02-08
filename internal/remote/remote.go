@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -142,11 +144,31 @@ func (r *Resolver) applySubPath(basePath, subPath string) (string, error) {
 		return basePath, nil
 	}
 
-	// The cached path already contains the full template
-	// We need to find the subpath within it
-	fullPath := basePath
-	if subPath != "" {
-		fullPath = basePath + "/" + subPath
+	// Defense-in-depth: validate subpath even though it was checked at parse time
+	if err := validateSubPath(subPath); err != nil {
+		return "", &FetchError{
+			Ref:     &Reference{SubPath: subPath},
+			Message: fmt.Sprintf("invalid subpath: %v", err),
+		}
+	}
+
+	// Use filepath.Join instead of string concatenation for safe path construction
+	fullPath := filepath.Join(basePath, subPath)
+
+	// Verify the resolved path stays within basePath (containment check)
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve base path: %w", err)
+	}
+	absFull, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve full path: %w", err)
+	}
+	if !strings.HasPrefix(absFull, absBase+string(filepath.Separator)) && absFull != absBase {
+		return "", &FetchError{
+			Ref:     &Reference{SubPath: subPath},
+			Message: fmt.Sprintf("subpath %q escapes base directory", subPath),
+		}
 	}
 
 	info, err := os.Stat(fullPath)
