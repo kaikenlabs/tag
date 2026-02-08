@@ -11,6 +11,9 @@ import (
 	"github.com/kaikenlabs/tag/internal/template"
 )
 
+// MaxConfigFileSize is the maximum allowed size for tag.template.json (10 MB).
+const MaxConfigFileSize = 10 * 1024 * 1024
+
 // Scaffold orchestrates the scaffolding process.
 type Scaffold struct {
 	Validator   *schema.Validator
@@ -218,13 +221,21 @@ func (s *Scaffold) Run(opts Options) error {
 func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, error) {
 	configPath := filepath.Join(templateDir, "tag.template.json")
 
-	// Check if config file exists
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Check if this is a Cookiecutter template
-		if ccPath, isCookiecutter := IsCookiecutterTemplate(templateDir); isCookiecutter {
-			return nil, &ErrCookiecutterDetected{CookiecutterPath: ccPath}
+	// Check if config file exists and its size
+	info, err := os.Stat(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Check if this is a Cookiecutter template
+			if ccPath, isCookiecutter := IsCookiecutterTemplate(templateDir); isCookiecutter {
+				return nil, &ErrCookiecutterDetected{CookiecutterPath: ccPath}
+			}
+			return nil, fmt.Errorf("%w: %s", ErrConfigNotFound, configPath)
 		}
-		return nil, fmt.Errorf("%w: %s", ErrConfigNotFound, configPath)
+		return nil, fmt.Errorf("failed to stat config file: %w", err)
+	}
+
+	if info.Size() > MaxConfigFileSize {
+		return nil, fmt.Errorf("config file too large: %d bytes (max %d bytes)", info.Size(), MaxConfigFileSize)
 	}
 
 	// Read config file
