@@ -7,7 +7,7 @@ import (
 
 type Core struct {
 	parser parser.TemplateEngine
-	fwr    writer.Write
+	fwr    writer.FileWriter
 }
 
 type Data struct {

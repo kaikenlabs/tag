@@ -10,6 +10,17 @@ import (
 	"github.com/kaikenlabs/tag/internal/template"
 )
 
+// NewWithExecutor creates a TemplateEngine using the provided TemplateExecutor.
+// The caller is responsible for configuring the executor (e.g., setting loaders
+// for shared template resolution) before passing it in.
+func NewWithExecutor(executor template.TemplateExecutor, templates, sharedTemplates map[string]string) TemplateEngine {
+	return TemplateEngine{
+		gonjaEngine:     executor,
+		templates:       templates,
+		sharedTemplates: sharedTemplates,
+	}
+}
+
 // New creates a new TemplateEngine that uses Gonja for template processing.
 func New(dirPath string, sharedPath string, fileSuffix string) (TemplateEngine, error) {
 	// Initialize Gonja engine
@@ -32,18 +43,15 @@ func New(dirPath string, sharedPath string, fileSuffix string) (TemplateEngine, 
 		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
 	}
 
-	// Wire shared templates into Gonja's loader if any were loaded
+	// Wire shared templates into Gonja's loader if any were loaded.
+	// This must happen on the concrete engine before it is stored as the interface.
 	if len(sharedTemplates) > 0 {
 		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
 		gonjaEngine.SetLoader(loader)
 		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
 	}
 
-	return TemplateEngine{
-		gonjaEngine:     gonjaEngine,
-		templates:       templates,
-		sharedTemplates: sharedTemplates,
-	}, nil
+	return NewWithExecutor(gonjaEngine, templates, sharedTemplates), nil
 }
 
 // Parse processes all loaded templates with the given input data.
@@ -142,7 +150,7 @@ func (te *TemplateEngine) renderBody(tmplName, body string, ctx template.Context
 	return []byte(result), nil
 }
 
-// buildContext creates a Gonja context from the input data.
+// buildContext creates a Gonja context from the input data using ContextBuilder.
 func buildContext(input InputData) template.Context {
 	// Convert string metadata to any for vars
 	vars := make(map[string]any)
@@ -150,8 +158,10 @@ func buildContext(input InputData) template.Context {
 		vars[k] = v
 	}
 
-	// Create context with name, vars, and computed name options
-	return template.NewContext(input.Name, vars, nil)
+	return template.NewContextBuilder().
+		WithName(input.Name).
+		WithVars(vars).
+		Build()
 }
 
 // enrichContextWithMetadata adds extra metadata fields to the vars namespace.

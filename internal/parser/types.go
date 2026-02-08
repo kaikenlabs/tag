@@ -6,7 +6,7 @@ import (
 
 // TemplateEngine wraps the Gonja template engine for parsing TAG templates.
 type TemplateEngine struct {
-	gonjaEngine     *template.Engine
+	gonjaEngine     template.TemplateExecutor
 	templates       map[string]string
 	sharedTemplates map[string]string
 }
