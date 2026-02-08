@@ -30,8 +30,7 @@ type Hooks struct {
 
 // CheckConfig validates that a config exists and returns an error if not.
 func CheckConfig(cfg *Config) error {
-	var emptyConfig *Config
-	if cfg == emptyConfig {
+	if cfg == nil {
 		return app.Errorf("please run the 'init' command first or run this command from where the '%s' file is located", File)
 	}
 	return nil

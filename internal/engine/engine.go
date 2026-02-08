@@ -58,7 +58,7 @@ func (c *Core) Generate(data Data) error {
 		switch item.Action {
 		case parser.ActionAppend:
 			if err := c.fwr.AppendFile(item.To, item.Output); err != nil {
-				slog.Error("cannot appending to file", "file", item.To, "error", err)
+				slog.Error("cannot append to file", "file", item.To, "error", err)
 				return err
 			}
 			action = chalk.Yellow("modified")
