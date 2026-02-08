@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/nikolalohinski/gonja/v2/loaders"
 )
 
@@ -94,17 +95,7 @@ func (l *Loader) resolvePath(path string) (string, error) {
 	fullPath := filepath.Join(l.baseDir, cleanPath)
 
 	// Double-check the resolved path is within base directory
-	absBase, err := filepath.Abs(l.baseDir)
-	if err != nil {
-		return "", fmt.Errorf("invalid base directory: %w", err)
-	}
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
-	}
-
-	// Ensure the resolved path starts with the base directory
-	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
+	if err := fileutil.ValidatePathContainment(l.baseDir, fullPath); err != nil {
 		return "", fmt.Errorf("path escapes base directory: %s", path)
 	}
 
@@ -182,6 +173,15 @@ func LoadTemplateFiles(dir string, suffix string) (map[string]string, error) {
 		if err != nil {
 			return err
 		}
+
+		// Skip symlinks to prevent loading files outside the template directory
+		if d.Type()&os.ModeSymlink != 0 {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
 		if d.IsDir() {
 			return nil
 		}

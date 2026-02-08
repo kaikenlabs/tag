@@ -316,6 +316,22 @@ func TestUT_ZipFetcher_SkipsHiddenAndMacOS(t *testing.T) {
 	assert.Equal(t, "template", filepath.Base(path))
 }
 
+func TestUT_ZipFetcher_RejectsHTTP(t *testing.T) {
+	fetcher := NewZipFetcher()
+
+	ref := &Reference{
+		Original: "http://example.com/template.zip",
+		Type:     ReferenceTypeZip,
+		Provider: ProviderGeneric,
+		URL:      "http://example.com/template.zip",
+	}
+
+	_, err := fetcher.Fetch(context.Background(), ref)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "insecure HTTP")
+	assert.Contains(t, err.Error(), "HTTPS")
+}
+
 func TestIT_ZipFetcher_RemoteDownload(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -333,14 +349,15 @@ func TestIT_ZipFetcher_RemoteDownload(t *testing.T) {
 	zipContent, err := os.ReadFile(zipPath)
 	require.NoError(t, err)
 
-	// Create test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Create HTTPS test server (HTTP is rejected by HTTPS enforcement)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/zip")
 		_, _ = w.Write(zipContent)
 	}))
 	defer server.Close()
 
 	fetcher := NewZipFetcher()
+	fetcher.client = server.Client() // Trust test server's TLS certificate
 
 	ref := &Reference{
 		Original: server.URL + "/template.zip",
@@ -364,13 +381,14 @@ func TestIT_ZipFetcher_RemoteDownloadError(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	// Create test server that returns 404
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Create HTTPS test server that returns 404
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
 
 	fetcher := NewZipFetcher()
+	fetcher.client = server.Client() // Trust test server's TLS certificate
 
 	ref := &Reference{
 		Original: server.URL + "/notfound.zip",

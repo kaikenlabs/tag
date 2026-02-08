@@ -5,9 +5,9 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"strings"
 	"sync"
+
+	"github.com/kaikenlabs/tag/internal/fileutil"
 )
 
 const (
@@ -29,20 +29,7 @@ func New(dryRun bool) Write {
 // validatePathWithinDir ensures that path stays within the base directory.
 // This prevents path traversal attacks where template output paths could escape the working directory.
 func validatePathWithinDir(path, baseDir string) error {
-	absPath, err := filepath.Abs(filepath.Clean(path))
-	if err != nil {
-		return fmt.Errorf("failed to resolve absolute path: %w", err)
-	}
-	absBase, err := filepath.Abs(filepath.Clean(baseDir))
-	if err != nil {
-		return fmt.Errorf("failed to resolve absolute base: %w", err)
-	}
-
-	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
-		return fmt.Errorf("path %q escapes base directory %q", absPath, absBase)
-	}
-
-	return nil
+	return fileutil.ValidatePathContainment(baseDir, path)
 }
 
 // WriteFile thin wrapper to decouple dependency of write file.

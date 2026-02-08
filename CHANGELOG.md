@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING**: Template syntax (`{{ }}`, `{% %}`, `{# #}`) in user-provided variable values is no longer rendered during path processing. This prevents Server-Side Template Injection (SSTI) attacks. Derived variables (whose defaults are template expressions) are still resolved. Use `--allow-recursive-render` to restore the previous behavior if your templates rely on recursive rendering of user input.
+
+### Added
+
+- `--allow-recursive-render` flag for `tag scaffold` to opt in to the previous recursive rendering behavior
+- Unified path containment validation via `fileutil.ValidatePathContainment` with symlink resolution
+- Symlink detection in template file loading (`LoadTemplateFiles`)
+- HTTPS enforcement for remote ZIP template URLs (HTTP rejected)
+- TOCTOU-safe file operations in scaffold output writer (fd-based symlink verification)
+
+### Security
+
+- Fix SSTI vulnerability in path processor recursive rendering (#71)
+- Fix TOCTOU race condition in symlink check during scaffolding (#72)
+- Add symlink detection in template loader (#74)
+- Reject insecure HTTP URLs for ZIP template downloads (#74)
+- Consolidate path traversal validation with symlink resolution (#70)
+
 ## [2.0.0] - 2026-02-05
 
 ### Added

@@ -181,6 +181,58 @@ func TestUT_Loader_Integration_WithEngine(t *testing.T) {
 	assert.Equal(t, "Hello, World!", result)
 }
 
+func TestUT_LoadTemplateFiles_SkipsSymlinks(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a real template file
+	err := os.WriteFile(filepath.Join(tmpDir, "real.tmpl"), []byte("real content"), 0o644)
+	require.NoError(t, err)
+
+	// Create a target file outside the template dir
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "secret.tmpl")
+	err = os.WriteFile(outsideFile, []byte("secret content"), 0o644)
+	require.NoError(t, err)
+
+	// Create a symlink to the outside file
+	symlinkPath := filepath.Join(tmpDir, "linked.tmpl")
+	err = os.Symlink(outsideFile, symlinkPath)
+	require.NoError(t, err)
+
+	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	require.NoError(t, err)
+
+	// Should only contain the real file, not the symlinked one
+	assert.Len(t, templates, 1)
+	assert.Equal(t, "real content", templates["real.tmpl"])
+	assert.NotContains(t, templates, "linked.tmpl")
+}
+
+func TestUT_LoadTemplateFiles_SkipsSymlinkDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a real template file
+	err := os.WriteFile(filepath.Join(tmpDir, "real.tmpl"), []byte("real content"), 0o644)
+	require.NoError(t, err)
+
+	// Create a directory outside with templates
+	outsideDir := t.TempDir()
+	err = os.WriteFile(filepath.Join(outsideDir, "secret.tmpl"), []byte("secret"), 0o644)
+	require.NoError(t, err)
+
+	// Create a symlink to the outside directory
+	symlinkDir := filepath.Join(tmpDir, "linked-dir")
+	err = os.Symlink(outsideDir, symlinkDir)
+	require.NoError(t, err)
+
+	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	require.NoError(t, err)
+
+	// Should only contain the real file
+	assert.Len(t, templates, 1)
+	assert.Equal(t, "real content", templates["real.tmpl"])
+}
+
 func TestUT_Loader_PathTraversal_Rejected(t *testing.T) {
 	tmpDir := t.TempDir()
 	loader := NewLoader(tmpDir)

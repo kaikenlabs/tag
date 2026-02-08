@@ -49,6 +49,7 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 	// Create other components
 	collector := NewVariableCollector(prompter)
 	processor := NewPathProcessor(engine)
+	processor.SetAllowRecursiveRender(opts.AllowRecursiveRender)
 	writer := NewOutputWriter(engine, processor)
 
 	return &Scaffold{
@@ -74,6 +75,19 @@ func (s *Scaffold) Run(opts Options) error {
 	config, err := s.loadAndValidateConfig(opts.TemplateDir)
 	if err != nil {
 		return err
+	}
+
+	// Step 2b: Set derived variable names on the processor for SSTI protection.
+	// Derived variables have template expressions as defaults and need recursive
+	// rendering to resolve. Non-derived variables are escaped to prevent SSTI.
+	if processor, ok := s.Processor.(*DefaultPathProcessor); ok {
+		derivedNames := make(map[string]bool)
+		for name, def := range config.Vars {
+			if def.IsDerived() || def.IsPrivate(name) {
+				derivedNames[name] = true
+			}
+		}
+		processor.SetDerivedVarNames(derivedNames)
 	}
 
 	// Step 3: Collect variables

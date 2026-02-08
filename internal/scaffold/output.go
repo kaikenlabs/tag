@@ -3,6 +3,7 @@ package scaffold
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -32,6 +33,9 @@ func NewOutputWriter(engine template.TemplateRenderer, pathProcessor PathProcess
 		pathProcessor: pathProcessor,
 	}
 }
+
+// Ensure DefaultOutputWriter implements OutputWriter.
+var _ OutputWriter = (*DefaultOutputWriter)(nil)
 
 // Write processes the template directory and writes to the output directory.
 func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[string]any) error {
@@ -114,23 +118,19 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 
 // processFile processes a single file from the template.
 // Text files are rendered through the template engine; binary files are copied as-is.
-func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template.Context, d fs.DirEntry) error {
+//
+// Uses fd-based operations to prevent TOCTOU race conditions: the file is opened
+// and verified via Lstat + f.Stat + os.SameFile before reading, ensuring that the
+// file hasn't been swapped for a symlink between the directory walk and the read.
+func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template.Context, _ fs.DirEntry) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	// Get source file info for permissions
-	srcInfo, err := d.Info()
-	if err != nil {
-		return fmt.Errorf("failed to get file info: %w", err)
-	}
-
-	// Sanitize file mode to remove dangerous permission bits
-	mode := sanitizeFileMode(srcInfo.Mode())
-
-	// Read file content to determine if it's text or binary
-	content, err := os.ReadFile(srcPath)
+	// TOCTOU-safe file open: verify the file is regular (not a symlink) using
+	// fd-based checks rather than relying on the stale DirEntry from WalkDir.
+	content, mode, err := openAndReadRegularFile(srcPath)
 	if err != nil {
 		return fmt.Errorf("failed to read file %s: %w", srcPath, err)
 	}
@@ -141,6 +141,54 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 
 	// Copy binary file as-is
 	return os.WriteFile(destPath, content, mode)
+}
+
+// openAndReadRegularFile opens a file with TOCTOU-safe symlink verification.
+// It performs: Lstat → Open → f.Stat → os.SameFile verification → Read.
+// Returns the file content and sanitized file mode, or an error if the file
+// is a symlink or was swapped between check and open.
+func openAndReadRegularFile(path string) ([]byte, fs.FileMode, error) {
+	// Step 1: Lstat to check the path without following symlinks
+	lstatInfo, err := os.Lstat(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("lstat: %w", err)
+	}
+	if lstatInfo.Mode().Type()&os.ModeSymlink != 0 {
+		return nil, 0, fmt.Errorf("symlink detected: %s", path)
+	}
+	if !lstatInfo.Mode().IsRegular() {
+		return nil, 0, fmt.Errorf("not a regular file: %s", path)
+	}
+
+	// Step 2: Open the file to get a file descriptor
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("open: %w", err)
+	}
+	defer f.Close()
+
+	// Step 3: Stat the file descriptor (not the path)
+	fstatInfo, err := f.Stat()
+	if err != nil {
+		return nil, 0, fmt.Errorf("fstat: %w", err)
+	}
+
+	// Step 4: Verify the file descriptor matches what Lstat saw.
+	// If the file was swapped between Lstat and Open, these won't match.
+	if !os.SameFile(lstatInfo, fstatInfo) {
+		return nil, 0, fmt.Errorf("file changed between check and open (possible TOCTOU attack): %s", path)
+	}
+
+	// Step 5: Read from the verified file descriptor
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read: %w", err)
+	}
+
+	// Sanitize file mode to remove dangerous permission bits
+	mode := sanitizeFileMode(fstatInfo.Mode())
+
+	return content, mode, nil
 }
 
 // processTemplate processes a text file through the template engine.
@@ -224,27 +272,7 @@ func copyDir(src, dst string) error {
 // validatePathWithinDir ensures that path is within the base directory.
 // This prevents path traversal attacks where placeholders could escape the output dir.
 func validatePathWithinDir(path, baseDir string) error {
-	// Clean both paths to resolve any . or .. components
-	cleanPath := filepath.Clean(path)
-	cleanBase := filepath.Clean(baseDir)
-
-	// Get absolute paths
-	absPath, err := filepath.Abs(cleanPath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve absolute path: %w", err)
-	}
-	absBase, err := filepath.Abs(cleanBase)
-	if err != nil {
-		return fmt.Errorf("failed to resolve absolute base: %w", err)
-	}
-
-	// Check if path starts with base
-	// Add separator to avoid matching partial directory names (e.g., /foo vs /foobar)
-	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
-		return fmt.Errorf("path %q escapes base directory %q", absPath, absBase)
-	}
-
-	return nil
+	return fileutil.ValidatePathContainment(baseDir, path)
 }
 
 // sanitizeFileMode removes dangerous permission bits (setuid, setgid, sticky).

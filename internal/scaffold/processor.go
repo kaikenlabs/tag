@@ -17,12 +17,28 @@ type PathProcessor interface {
 
 // DefaultPathProcessor implements PathProcessor using the Gonja template engine.
 type DefaultPathProcessor struct {
-	engine template.TemplateRenderer
+	engine               template.TemplateRenderer
+	allowRecursiveRender bool
+	derivedVarNames      map[string]bool // Variables whose defaults are template expressions
 }
 
 // NewPathProcessor creates a new path processor with the given template renderer.
 func NewPathProcessor(engine template.TemplateRenderer) *DefaultPathProcessor {
 	return &DefaultPathProcessor{engine: engine}
+}
+
+// SetAllowRecursiveRender controls whether user-provided variable values containing
+// template syntax are rendered. When false (default), template delimiters in
+// non-derived variable values are escaped to prevent SSTI attacks. Derived variables
+// (whose defaults are template expressions) are always rendered regardless.
+func (p *DefaultPathProcessor) SetAllowRecursiveRender(allow bool) {
+	p.allowRecursiveRender = allow
+}
+
+// SetDerivedVarNames sets the list of derived variable names. These variables
+// have template expressions as defaults and need recursive rendering to resolve.
+func (p *DefaultPathProcessor) SetDerivedVarNames(names map[string]bool) {
+	p.derivedVarNames = names
 }
 
 // placeholderDetectRegex detects if a string contains Jinja2-style template syntax.
@@ -70,16 +86,26 @@ const maxRenderIterations = 5
 // processSegment processes Jinja2 expressions in a single path segment.
 // Handles nested templates (when a variable's value contains another template expression)
 // by re-rendering until no more placeholders remain.
+//
+// When allowRecursiveRender is false, template delimiters in non-derived variable
+// values are escaped to prevent Server-Side Template Injection (SSTI).
 func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]any) (string, error) {
 	// Quick check: if no {{ }} present, return as-is
 	if !placeholderDetectRegex.MatchString(segment) {
 		return segment, nil
 	}
 
+	// Build safe vars: escape template syntax in non-derived variable values
+	// when recursive render is disabled (default)
+	safeVars := vars
+	if !p.allowRecursiveRender {
+		safeVars = p.escapeNonDerivedVars(vars)
+	}
+
 	// Build context with both "vars" and "cookiecutter" namespaces
 	ctx := template.Context{
-		"vars":         vars,
-		"cookiecutter": vars, // Alias for compatibility
+		"vars":         safeVars,
+		"cookiecutter": safeVars, // Alias for compatibility
 	}
 
 	result := segment
@@ -104,6 +130,52 @@ func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]an
 	}
 
 	return result, nil
+}
+
+// escapeNonDerivedVars returns a copy of vars where template delimiters in
+// non-derived string values are escaped with sentinel tokens. This prevents
+// user-provided values containing {{ }}, {% %}, or {# #} from being
+// interpreted as template code during rendering.
+func (p *DefaultPathProcessor) escapeNonDerivedVars(vars map[string]any) map[string]any {
+	safe := make(map[string]any, len(vars))
+	for k, v := range vars {
+		if p.derivedVarNames[k] {
+			// Derived variables retain their template expressions
+			safe[k] = v
+			continue
+		}
+		if s, ok := v.(string); ok {
+			safe[k] = escapeTemplateSyntax(s)
+		} else {
+			safe[k] = v
+		}
+	}
+	return safe
+}
+
+// Sentinel tokens used to escape template delimiters in user-provided values.
+const (
+	sentinelOpenExpr     = "\x00TAG_LBRACE2\x00"
+	sentinelCloseExpr    = "\x00TAG_RBRACE2\x00"
+	sentinelOpenStmt     = "\x00TAG_LBRACE_PCT\x00"
+	sentinelCloseStmt    = "\x00TAG_PCT_RBRACE\x00"
+	sentinelOpenComment  = "\x00TAG_LBRACE_HASH\x00"
+	sentinelCloseComment = "\x00TAG_HASH_RBRACE\x00"
+)
+
+// escapeTemplateSyntax replaces Jinja2 template delimiters in a string with
+// sentinel tokens that won't be interpreted by the template engine.
+func escapeTemplateSyntax(s string) string {
+	if !strings.Contains(s, "{{") && !strings.Contains(s, "{%") && !strings.Contains(s, "{#") {
+		return s
+	}
+	s = strings.ReplaceAll(s, "{{", sentinelOpenExpr)
+	s = strings.ReplaceAll(s, "}}", sentinelCloseExpr)
+	s = strings.ReplaceAll(s, "{%", sentinelOpenStmt)
+	s = strings.ReplaceAll(s, "%}", sentinelCloseStmt)
+	s = strings.ReplaceAll(s, "{#", sentinelOpenComment)
+	s = strings.ReplaceAll(s, "#}", sentinelCloseComment)
+	return s
 }
 
 // simpleVarRegex extracts simple variable names from {{ vars.name }} or {{ cookiecutter.name }} patterns.

@@ -37,7 +37,16 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 	}
 
 	// Determine if remote or local
-	isRemote := strings.HasPrefix(ref.URL, "http://") || strings.HasPrefix(ref.URL, "https://")
+	urlLower := strings.ToLower(ref.URL)
+	isRemote := strings.HasPrefix(urlLower, "http://") || strings.HasPrefix(urlLower, "https://")
+
+	// Security: reject insecure HTTP URLs for remote downloads
+	if strings.HasPrefix(urlLower, "http://") {
+		return "", &FetchError{
+			Ref:     ref,
+			Message: "insecure HTTP URL rejected; use HTTPS instead",
+		}
+	}
 
 	var zipPath string
 	var tmpZip bool
