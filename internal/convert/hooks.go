@@ -16,16 +16,10 @@ const (
 	HookKindBatch  HookKind = "batch"
 )
 
-// Standard Cookiecutter hook filenames.
-// This map is kept for documentation/reference of recognized hook patterns.
-var _ = map[string]struct{}{
-	"pre_gen_project.py":   {},
-	"post_gen_project.py":  {},
-	"pre_gen_project.sh":   {},
-	"post_gen_project.sh":  {},
-	"pre_gen_project.bat":  {},
-	"post_gen_project.bat": {},
-}
+// Recognized Cookiecutter hook filenames:
+//   pre_gen_project.py, post_gen_project.py
+//   pre_gen_project.sh, post_gen_project.sh
+//   pre_gen_project.bat, post_gen_project.bat
 
 // HooksProcessor handles detection and copying of Cookiecutter hooks.
 type HooksProcessor struct {

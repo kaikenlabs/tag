@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -45,7 +44,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	slog.Info(chalk.Green("creating new generator"), "path", cfg.Env.Path)
-	dirPath := path.Join(cfg.Env.Path, generator, fmt.Sprintf("%s%s", generator, cfg.Env.Extension))
+	dirPath := filepath.Join(cfg.Env.Path, generator, fmt.Sprintf("%s%s", generator, cfg.Env.Extension))
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
 		return app.Errorf("error creating %s: %w", dirPath, err)
 	}

@@ -15,7 +15,7 @@ const (
 // New - create a new writer
 func New(dryRun bool) Write {
 	return Write{
-		mx: sync.RWMutex{},
+		mx: sync.Mutex{},
 		fs: setFileWriter(dryRun),
 	}
 }

@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -121,8 +120,7 @@ func scaffoldAction(c *cli.Context) error {
 		return app.Errorf("failed to create resolver: %w", err)
 	}
 
-	ctx := context.Background()
-	templateDir, err := resolver.Resolve(ctx, templateRef, remote.ResolveOptions{
+	templateDir, err := resolver.Resolve(c.Context, templateRef, remote.ResolveOptions{
 		ForceUpdate: c.Bool("update"),
 	})
 	if err != nil {
@@ -169,7 +167,7 @@ func scaffoldAction(c *cli.Context) error {
 }
 
 // handleCookiecutterDetection handles the case when a Cookiecutter template is detected.
-func handleCookiecutterDetection(c *cli.Context, ccErr *scaffold.ErrCookiecutterDetected, templateRef, templateDir string, opts scaffold.Options) error {
+func handleCookiecutterDetection(c *cli.Context, _ *scaffold.ErrCookiecutterDetected, templateRef, templateDir string, opts scaffold.Options) error {
 	// In non-interactive mode, fail with helpful error
 	if c.Bool("no-input") || !scaffold.IsTTY() {
 		return app.Errorf("This appears to be a Cookiecutter template.\n"+
@@ -209,8 +207,7 @@ func handleCookiecutterDetection(c *cli.Context, ccErr *scaffold.ErrCookiecutter
 	if err != nil {
 		return app.Errorf("failed to create converter: %w", err)
 	}
-	ctx := context.Background()
-	result, err := converter.Convert(ctx, convert.Options{
+	result, err := converter.Convert(c.Context, convert.Options{
 		Source:      templateDir,
 		Destination: destination,
 		Force:       c.Bool("force"),

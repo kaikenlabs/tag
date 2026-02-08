@@ -21,13 +21,12 @@ type DefaultPathProcessor struct {
 }
 
 // NewPathProcessor creates a new path processor.
-func NewPathProcessor() *DefaultPathProcessor {
+func NewPathProcessor() (*DefaultPathProcessor, error) {
 	engine, err := template.NewEngine()
 	if err != nil {
-		// This should never fail with default options
-		panic(fmt.Sprintf("failed to create template engine: %v", err))
+		return nil, fmt.Errorf("failed to create path processor: %w", err)
 	}
-	return &DefaultPathProcessor{engine: engine}
+	return &DefaultPathProcessor{engine: engine}, nil
 }
 
 // placeholderDetectRegex detects if a string contains Jinja2-style template syntax.

@@ -9,7 +9,7 @@ import (
 )
 
 type Write struct {
-	mx sync.RWMutex
+	mx sync.Mutex
 	fs fileReadWrite
 }
 

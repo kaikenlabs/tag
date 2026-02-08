@@ -7,8 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func mustNewPathProcessor(t *testing.T) *DefaultPathProcessor {
+	t.Helper()
+	p, err := NewPathProcessor()
+	require.NoError(t, err)
+	return p
+}
+
 func TestUT_PathProcessor_SimpleVar(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"project_name": "my_project",
 		"module_name":  "users",
@@ -66,7 +73,7 @@ func TestUT_PathProcessor_SimpleVar(t *testing.T) {
 }
 
 func TestUT_PathProcessor_WithFilter(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"project_name": "MyProject",
 		"model":        "user",
@@ -139,7 +146,7 @@ func TestUT_PathProcessor_WithFilter(t *testing.T) {
 }
 
 func TestUT_PathProcessor_UndefinedVar(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"project_name": "my_project",
 	}
@@ -151,7 +158,7 @@ func TestUT_PathProcessor_UndefinedVar(t *testing.T) {
 }
 
 func TestUT_PathProcessor_InvalidFilter(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"project_name": "my_project",
 	}
@@ -163,7 +170,7 @@ func TestUT_PathProcessor_InvalidFilter(t *testing.T) {
 }
 
 func TestUT_PathProcessor_EmptyValue(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"project_name": "",
 		"module_name":  "users",
@@ -177,7 +184,7 @@ func TestUT_PathProcessor_EmptyValue(t *testing.T) {
 }
 
 func TestUT_PathProcessor_MultiplePlaceholdersInSegment(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"prefix": "api",
 		"suffix": "v1",
@@ -189,7 +196,7 @@ func TestUT_PathProcessor_MultiplePlaceholdersInSegment(t *testing.T) {
 }
 
 func TestUT_PathProcessor_ComplexExpressions(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"package_display_name": "My Cool Package",
 	}
@@ -315,7 +322,7 @@ func TestUT_HasPlaceholders(t *testing.T) {
 
 
 func TestUT_PathProcessor_ConditionalFilename(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 
 	tests := []struct {
 		name     string
@@ -378,7 +385,7 @@ func TestUT_PathProcessor_ConditionalFilename(t *testing.T) {
 
 func TestUT_PathProcessor_NestedTemplates(t *testing.T) {
 	// Test derived variables where a variable's value is itself a template expression
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"package_display_name": "My Cool Package",
 		// package_name's value is a template expression (like Cookiecutter derived variables)
@@ -417,7 +424,7 @@ func TestUT_PathProcessor_NestedTemplates(t *testing.T) {
 }
 
 func TestUT_PathProcessor_WhitespaceAroundFilter(t *testing.T) {
-	processor := NewPathProcessor()
+	processor := mustNewPathProcessor(t)
 	vars := map[string]any{
 		"project_name": "MyProject",
 	}

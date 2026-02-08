@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -15,7 +16,7 @@ import (
 // The replay file is saved to ~/.tag/replay/<template-id>.json with permissions 0600.
 // The replay directory is created with permissions 0700.
 func Save(templateSource, version string, values map[string]any, secrets map[string]bool) error {
-	templateSource = trimSpace(templateSource)
+	templateSource = strings.TrimSpace(templateSource)
 	if templateSource == "" {
 		return ErrEmptyTemplateSource
 	}
@@ -102,21 +103,3 @@ func getReplayDir() (string, error) {
 	return filepath.Join(homeDir, ".tag", DefaultReplayDir), nil
 }
 
-// trimSpace is a helper to trim whitespace from strings.
-func trimSpace(s string) string {
-	// Using a simple implementation to avoid importing strings package
-	// just for TrimSpace
-	start := 0
-	end := len(s)
-	for start < end && isSpace(s[start]) {
-		start++
-	}
-	for end > start && isSpace(s[end-1]) {
-		end--
-	}
-	return s[start:end]
-}
-
-func isSpace(c byte) bool {
-	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
-}

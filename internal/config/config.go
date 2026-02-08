@@ -56,29 +56,23 @@ func LoadConfigFile() (*Config, error) {
 }
 
 func CreateConfigFile(c *cli.Context) error {
-	file, err := os.Create(File)
-	if err != nil {
-		return err
+	cfg := Config{
+		Env: Env{
+			Path:       c.String(flags.PathFlag),
+			Extension:  c.String(flags.ExtensionFlag),
+			SharedPath: c.String(flags.SharedPathFlag),
+			BundlePath: c.String(flags.BundlePathFlag),
+		},
+		Hooks: Hooks{
+			Pre:  [][]string{},
+			Post: [][]string{},
+		},
 	}
-	defer file.Close() // Remember to close the file
 
-	content := `
-{
-  "env":{
-    "TAG_PATH": "%s",
-    "TAG_EXTENSION": "%s",
-    "TAG_SHARED_PATH": "%s",
-    "TAG_BUNDLE_PATH": "%s"
-  },
-  "hooks": {
-    "pre": [],
-    "post":[]
-  }
-}
-`
-	_, err = file.WriteString(fmt.Sprintf(content, c.String(flags.PathFlag), c.String(flags.ExtensionFlag), c.String(flags.SharedPathFlag), c.String(flags.BundlePathFlag)))
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
-	return nil
+
+	return os.WriteFile(File, data, 0o644)
 }
