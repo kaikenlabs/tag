@@ -1,0 +1,32 @@
+{
+  "description": "Converted from Cookiecutter template",
+  "hooks": {
+    "post_scaffold": [
+      "sh hooks/post_gen_project.sh"
+    ]
+  },
+  "vars": {
+    "_private_version": "0.1.0",
+    "author": "Test Author",
+    "description": "A short description",
+    "license": {
+      "default": "MIT",
+      "options": [
+        "MIT",
+        "BSD-3",
+        "Apache-2.0"
+      ],
+      "type": "choice"
+    },
+    "port": {
+      "default": 8080,
+      "type": "number"
+    },
+    "project_name": "My Project",
+    "project_slug": "{{ vars.project_name|lower|replace(' ', '_') }}",
+    "use_docker": {
+      "default": true,
+      "type": "boolean"
+    }
+  }
+}
