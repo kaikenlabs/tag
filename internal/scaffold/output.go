@@ -117,11 +117,14 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 }
 
 // processFile processes a single file from the template.
-// Text files are rendered through the template engine; binary files are copied as-is.
+// Text files are rendered through the template engine; binary files are streamed as-is.
 //
 // Uses fd-based operations to prevent TOCTOU race conditions: the file is opened
 // and verified via Lstat + f.Stat + os.SameFile before reading, ensuring that the
 // file hasn't been swapped for a symlink between the directory walk and the read.
+//
+// Binary files are streamed via io.Copy to avoid loading large files entirely into memory.
+// Text detection uses an 8KB sample from the beginning of the file.
 func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template.Context, _ fs.DirEntry) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
@@ -130,24 +133,73 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 
 	// TOCTOU-safe file open: verify the file is regular (not a symlink) using
 	// fd-based checks rather than relying on the stale DirEntry from WalkDir.
-	content, mode, err := openAndReadRegularFile(srcPath)
+	f, mode, err := openRegularFile(srcPath)
 	if err != nil {
 		return fmt.Errorf("failed to read file %s: %w", srcPath, err)
 	}
+	defer f.Close()
 
-	if fileutil.IsTextContent(content) {
-		return w.processTemplate(srcPath, destPath, content, ctx, mode)
+	// Read a sample for text detection (same size as fileutil.IsTextContent uses)
+	sample := make([]byte, 8192)
+	n, readErr := f.Read(sample)
+	sample = sample[:n]
+
+	// Handle read errors (io.EOF is expected for small/empty files)
+	if readErr != nil && readErr != io.EOF {
+		return fmt.Errorf("failed to read file %s: %w", srcPath, readErr)
 	}
 
-	// Copy binary file as-is
-	return os.WriteFile(destPath, content, mode)
+	if fileutil.IsTextContent(sample) {
+		// Text file: read the rest of the content and process as template
+		var fullContent []byte
+		if readErr == io.EOF {
+			// Entire file fit in the sample
+			fullContent = sample
+		} else {
+			// Read remaining content and combine with sample
+			remainder, err := io.ReadAll(f)
+			if err != nil {
+				return fmt.Errorf("failed to read file %s: %w", srcPath, err)
+			}
+			fullContent = make([]byte, len(sample)+len(remainder))
+			copy(fullContent, sample)
+			copy(fullContent[len(sample):], remainder)
+		}
+		return w.processTemplate(srcPath, destPath, fullContent, ctx, mode)
+	}
+
+	// Binary file: stream to destination using io.Copy
+	return streamBinaryFile(f, destPath, sample, mode)
 }
 
-// openAndReadRegularFile opens a file with TOCTOU-safe symlink verification.
-// It performs: Lstat → Open → f.Stat → os.SameFile verification → Read.
-// Returns the file content and sanitized file mode, or an error if the file
-// is a symlink or was swapped between check and open.
-func openAndReadRegularFile(path string) ([]byte, fs.FileMode, error) {
+// streamBinaryFile writes a binary file to destPath by first writing the already-read
+// sample bytes, then streaming the remainder directly from the source file descriptor.
+func streamBinaryFile(src *os.File, destPath string, sample []byte, mode fs.FileMode) error {
+	dst, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file %s: %w", destPath, err)
+	}
+	defer dst.Close()
+
+	// Write the already-read sample bytes
+	if len(sample) > 0 {
+		if _, err := dst.Write(sample); err != nil {
+			return fmt.Errorf("failed to write to %s: %w", destPath, err)
+		}
+	}
+
+	// Stream the remainder directly from the source fd
+	if _, err := io.Copy(dst, src); err != nil {
+		return fmt.Errorf("failed to stream to %s: %w", destPath, err)
+	}
+
+	return nil
+}
+
+// openRegularFile opens a file with TOCTOU-safe symlink verification.
+// It performs: Lstat → Open → f.Stat → os.SameFile verification.
+// Returns the open file handle and sanitized file mode. The caller must close the file.
+func openRegularFile(path string) (*os.File, fs.FileMode, error) {
 	// Step 1: Lstat to check the path without following symlinks
 	lstatInfo, err := os.Lstat(path)
 	if err != nil {
@@ -165,28 +217,42 @@ func openAndReadRegularFile(path string) ([]byte, fs.FileMode, error) {
 	if err != nil {
 		return nil, 0, fmt.Errorf("open: %w", err)
 	}
-	defer f.Close()
 
 	// Step 3: Stat the file descriptor (not the path)
 	fstatInfo, err := f.Stat()
 	if err != nil {
+		f.Close()
 		return nil, 0, fmt.Errorf("fstat: %w", err)
 	}
 
 	// Step 4: Verify the file descriptor matches what Lstat saw.
 	// If the file was swapped between Lstat and Open, these won't match.
 	if !os.SameFile(lstatInfo, fstatInfo) {
+		f.Close()
 		return nil, 0, fmt.Errorf("file changed between check and open (possible TOCTOU attack): %s", path)
-	}
-
-	// Step 5: Read from the verified file descriptor
-	content, err := io.ReadAll(f)
-	if err != nil {
-		return nil, 0, fmt.Errorf("read: %w", err)
 	}
 
 	// Sanitize file mode to remove dangerous permission bits
 	mode := sanitizeFileMode(fstatInfo.Mode())
+
+	return f, mode, nil
+}
+
+// openAndReadRegularFile opens a file with TOCTOU-safe symlink verification and reads its content.
+// It performs: Lstat → Open → f.Stat → os.SameFile verification → Read.
+// Returns the file content and sanitized file mode, or an error if the file
+// is a symlink or was swapped between check and open.
+func openAndReadRegularFile(path string) ([]byte, fs.FileMode, error) {
+	f, mode, err := openRegularFile(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer f.Close()
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read: %w", err)
+	}
 
 	return content, mode, nil
 }

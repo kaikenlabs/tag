@@ -12,12 +12,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testCwd returns the current working directory for test helpers.
+func testCwd(t *testing.T) string {
+	t.Helper()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	return cwd
+}
+
+func TestUT_New_CachesGetwd(t *testing.T) {
+	w, err := New(false)
+	require.NoError(t, err)
+	assert.NotEmpty(t, w.cwd)
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	assert.Equal(t, cwd, w.cwd)
+}
+
 func TestWrite_WriteFile_should_not_return_error(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.WriteFile("blood", []byte("hello world"), 0o700)
 	require.NoError(t, err)
@@ -29,14 +48,17 @@ func TestWrite_WriteFile_write_error_should_return_error(t *testing.T) {
 		return fmt.Errorf("error")
 	}
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.WriteFile("blood", []byte("hello world"), 0o700)
 	assert.Error(t, err)
 }
 
 func TestUT_WriteFile_PathContainment(t *testing.T) {
+	cwd := testCwd(t)
+
 	t.Run("rejects paths outside working directory", func(t *testing.T) {
 		mockWr := fileReadWriteMock{}
 		writeCalled := false
@@ -46,8 +68,9 @@ func TestUT_WriteFile_PathContainment(t *testing.T) {
 		}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.WriteFile("/etc/cron.d/backdoor", []byte("malicious"), 0o750)
@@ -65,8 +88,9 @@ func TestUT_WriteFile_PathContainment(t *testing.T) {
 		}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.WriteFile("../../etc/passwd", []byte("malicious"), 0o750)
@@ -79,8 +103,9 @@ func TestUT_WriteFile_PathContainment(t *testing.T) {
 		mockWr := fileReadWriteMock{}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.WriteFile("mypackage/output.go", []byte("package mypackage"), 0o750)
@@ -136,6 +161,8 @@ func TestUT_ValidatePathWithinDir(t *testing.T) {
 }
 
 func TestUT_AppendFile_PathContainment(t *testing.T) {
+	cwd := testCwd(t)
+
 	t.Run("rejects paths outside working directory", func(t *testing.T) {
 		mockWr := fileReadWriteMock{}
 		openCalled := false
@@ -145,8 +172,9 @@ func TestUT_AppendFile_PathContainment(t *testing.T) {
 		}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.AppendFile("/etc/cron.d/backdoor", []byte("malicious"))
@@ -164,8 +192,9 @@ func TestUT_AppendFile_PathContainment(t *testing.T) {
 		}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.AppendFile("../../etc/passwd", []byte("malicious"))
@@ -178,8 +207,9 @@ func TestUT_AppendFile_PathContainment(t *testing.T) {
 		mockWr := fileReadWriteMock{}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.AppendFile("mypackage/output.go", []byte("data"))
@@ -188,6 +218,8 @@ func TestUT_AppendFile_PathContainment(t *testing.T) {
 }
 
 func TestUT_InjectIntoFile_PathContainment(t *testing.T) {
+	cwd := testCwd(t)
+
 	t.Run("rejects paths outside working directory", func(t *testing.T) {
 		mockWr := fileReadWriteMock{}
 		readCalled := false
@@ -197,8 +229,9 @@ func TestUT_InjectIntoFile_PathContainment(t *testing.T) {
 		}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.InjectIntoFile("/etc/cron.d/backdoor", []byte("malicious"), Inject{
@@ -219,8 +252,9 @@ func TestUT_InjectIntoFile_PathContainment(t *testing.T) {
 		}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.InjectIntoFile("../../etc/passwd", []byte("malicious"), Inject{
@@ -239,8 +273,9 @@ func TestUT_InjectIntoFile_PathContainment(t *testing.T) {
 		}
 
 		w := Write{
-			mx: sync.Mutex{},
-			fs: &mockWr,
+			mx:  sync.Mutex{},
+			fs:  &mockWr,
+			cwd: cwd,
 		}
 
 		err := w.InjectIntoFile("mypackage/output.go", []byte("data"), Inject{
@@ -255,8 +290,9 @@ func TestWrite_AppendFile_should_return_ok(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.AppendFile("blood", []byte("hello world"))
 	require.NoError(t, err)
@@ -269,8 +305,9 @@ func TestWrite_AppendFile_open_file_error_should_return_error(t *testing.T) {
 	}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.AppendFile("blood", []byte("hello world"))
 	assert.Error(t, err)
@@ -283,8 +320,9 @@ func TestWrite_AppendFile_write_file_error_should_return_error(t *testing.T) {
 	}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.AppendFile("blood", []byte("hello world"))
 	assert.Error(t, err)
@@ -297,8 +335,9 @@ func TestWrite_InjectIntoFile_inject_after_should_return_no_error(t *testing.T) 
 	}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// after",
@@ -314,8 +353,9 @@ func TestWrite_InjectIntoFile_read_file_error_should_return_error(t *testing.T) 
 	}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// after",
@@ -331,8 +371,9 @@ func TestWrite_InjectIntoFile_inject_before_should_return_no_error(t *testing.T)
 	}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// before",
@@ -348,8 +389,9 @@ func TestWrite_InjectIntoFile_missing_token_should_return_error(t *testing.T) {
 	}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// before",
@@ -368,8 +410,9 @@ func TestWrite_InjectIntoFile_write_file_error_should_return_error(t *testing.T)
 	}
 
 	w := Write{
-		mx: sync.Mutex{},
-		fs: &mockWr,
+		mx:  sync.Mutex{},
+		fs:  &mockWr,
+		cwd: testCwd(t),
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// before",

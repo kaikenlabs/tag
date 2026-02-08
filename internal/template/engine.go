@@ -1,7 +1,10 @@
 package template
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"sync"
 
 	"github.com/nikolalohinski/gonja/v2"
 	"github.com/nikolalohinski/gonja/v2/builtins"
@@ -10,12 +13,40 @@ import (
 	"github.com/nikolalohinski/gonja/v2/loaders"
 )
 
+// templateCache provides thread-safe caching of parsed Gonja templates.
+// Templates are keyed by SHA-256 hash of their content string.
+type templateCache struct {
+	mu    sync.RWMutex
+	items map[string]*exec.Template
+}
+
+// get retrieves a cached template by content hash. Returns nil if not found.
+func (c *templateCache) get(key string) *exec.Template {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.items[key]
+}
+
+// set stores a parsed template in the cache.
+func (c *templateCache) set(key string, tmpl *exec.Template) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.items[key] = tmpl
+}
+
+// contentHash computes a SHA-256 hash of the template content for use as a cache key.
+func contentHash(content string) string {
+	h := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(h[:])
+}
+
 // Engine wraps Gonja to provide a consistent template interface.
 type Engine struct {
 	config  *config.Config
 	env     *exec.Environment
 	baseDir string
 	loader  loaders.Loader
+	cache   *templateCache
 }
 
 // gonjaTemplate wraps a Gonja template to implement our Template interface.
@@ -28,7 +59,9 @@ type gonjaTemplate struct {
 // NewEngine creates a new template engine with the given options.
 // Returns an error if the engine cannot be initialized.
 func NewEngine(opts ...Option) (*Engine, error) {
-	e := &Engine{}
+	e := &Engine{
+		cache: &templateCache{items: make(map[string]*exec.Template)},
+	}
 
 	// Apply options
 	for _, opt := range opts {
@@ -92,7 +125,20 @@ func (e *Engine) ParseStringNamed(content, name string) (Template, error) {
 }
 
 // parseWithName parses a template with a given name for error reporting.
+// Parsed templates are cached by content hash to avoid re-parsing identical content.
 func (e *Engine) parseWithName(content, name string) (Template, error) {
+	key := contentHash(content)
+
+	// Fast path: check cache with read lock
+	if cached := e.cache.get(key); cached != nil {
+		return &gonjaTemplate{
+			tmpl:   cached,
+			name:   name,
+			engine: e,
+		}, nil
+	}
+
+	// Slow path: parse and cache
 	// Memory loader requires keys to start with '/'
 	loaderKey := name
 	if len(loaderKey) == 0 || loaderKey[0] != '/' {
@@ -107,8 +153,13 @@ func (e *Engine) parseWithName(content, name string) (Template, error) {
 	// Create the template using the low-level API
 	tmpl, err := exec.NewTemplate(loaderKey, e.config, loader, e.env)
 	if err != nil {
+		// Don't cache parse errors — allow retry with corrected content
 		return nil, NewParseError(name, 0, 0, err)
 	}
+
+	// Double-check and store: another goroutine may have cached the same
+	// content between our read and this write. That's acceptable (idempotent).
+	e.cache.set(key, tmpl)
 
 	return &gonjaTemplate{
 		tmpl:   tmpl,
@@ -188,6 +239,14 @@ func (e *Engine) MustParseString(content string) Template {
 		panic(fmt.Sprintf("template parse error: %v", err))
 	}
 	return tmpl
+}
+
+// CacheLen returns the number of templates currently in the cache.
+// This is intended for testing and diagnostics.
+func (e *Engine) CacheLen() int {
+	e.cache.mu.RLock()
+	defer e.cache.mu.RUnlock()
+	return len(e.cache.items)
 }
 
 // Compile-time interface checks

@@ -30,7 +30,10 @@ func New(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (Cor
 	if err != nil {
 		return Core{}, err
 	}
-	w := writer.New(dryRun)
+	w, err := writer.New(dryRun)
+	if err != nil {
+		return Core{}, err
+	}
 	return Core{
 		parser: tmpl,
 		fwr:    &w,

@@ -15,15 +15,22 @@ const (
 	FileModeDefault = 0o644
 )
 
-// New creates a new writer.
+// New creates a new writer with a cached working directory.
+// The working directory is resolved once at construction time and reused
+// for path containment validation on every write operation.
 //
 // Deprecated: New returns a concrete Write value. Callers should program
 // against the FileWriter interface instead so the writer can be injected.
-func New(dryRun bool) Write {
-	return Write{
-		mx: sync.Mutex{},
-		fs: setFileWriter(dryRun),
+func New(dryRun bool) (Write, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return Write{}, fmt.Errorf("cannot determine working directory: %w", err)
 	}
+	return Write{
+		mx:  sync.Mutex{},
+		fs:  setFileWriter(dryRun),
+		cwd: cwd,
+	}, nil
 }
 
 // validatePathWithinDir ensures that path stays within the base directory.
@@ -33,18 +40,13 @@ func validatePathWithinDir(path, baseDir string) error {
 }
 
 // WriteFile thin wrapper to decouple dependency of write file.
-// Validates that the output path stays within the current working directory
+// Validates that the output path stays within the cached working directory
 // to prevent path traversal via malicious generator templates.
 func (w *Write) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	// Validate path containment against working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("cannot determine working directory: %w", err)
-	}
-	if err := validatePathWithinDir(name, cwd); err != nil {
+	if err := validatePathWithinDir(name, w.cwd); err != nil {
 		return fmt.Errorf("path safety check failed: %w", err)
 	}
 
@@ -52,18 +54,13 @@ func (w *Write) WriteFile(name string, data []byte, perm fs.FileMode) error {
 }
 
 // AppendFile - append data to the end of file.
-// Validates that the target path stays within the current working directory
+// Validates that the target path stays within the cached working directory
 // to prevent path traversal via malicious generator templates.
 func (w *Write) AppendFile(name string, data []byte) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	// Validate path containment against working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("cannot determine working directory: %w", err)
-	}
-	if err := validatePathWithinDir(name, cwd); err != nil {
+	if err := validatePathWithinDir(name, w.cwd); err != nil {
 		return fmt.Errorf("path safety check failed: %w", err)
 	}
 
@@ -81,18 +78,13 @@ func (w *Write) AppendFile(name string, data []byte) error {
 
 // InjectIntoFile - inject before, or after a matcher for a source file.
 // If the matcher can't be found, don't do anything to the file.
-// Validates that the target path stays within the current working directory
+// Validates that the target path stays within the cached working directory
 // to prevent path traversal via malicious generator templates.
 func (w *Write) InjectIntoFile(name string, data []byte, inject Inject) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	// Validate path containment against working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("cannot determine working directory: %w", err)
-	}
-	if err := validatePathWithinDir(name, cwd); err != nil {
+	if err := validatePathWithinDir(name, w.cwd); err != nil {
 		return fmt.Errorf("path safety check failed: %w", err)
 	}
 

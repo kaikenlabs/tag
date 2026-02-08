@@ -3,6 +3,7 @@ package scaffold
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -745,6 +746,156 @@ func TestUT_OpenAndReadRegularFile_SanitizesMode(t *testing.T) {
 	assert.Equal(t, fs.FileMode(0), mode&fs.ModeSetuid)
 	// Execute should be preserved
 	assert.NotEqual(t, fs.FileMode(0), mode&0o111)
+}
+
+// --- openRegularFile ---
+
+func TestUT_OpenRegularFile_RegularFile(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "regular.txt")
+	require.NoError(t, os.WriteFile(filePath, []byte("hello world"), 0o644))
+
+	f, mode, err := openRegularFile(filePath)
+	require.NoError(t, err)
+	defer f.Close()
+
+	assert.Equal(t, fs.FileMode(0o644), mode&0o777)
+
+	content, err := io.ReadAll(f)
+	require.NoError(t, err)
+	assert.Equal(t, "hello world", string(content))
+}
+
+func TestUT_OpenRegularFile_Symlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	require.NoError(t, os.WriteFile(target, []byte("secret"), 0o644))
+
+	link := filepath.Join(dir, "link.txt")
+	require.NoError(t, os.Symlink(target, link))
+
+	_, _, err := openRegularFile(link)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "symlink detected")
+}
+
+// --- streamBinaryFile ---
+
+func TestUT_StreamBinaryFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create source binary file (1MB)
+	srcPath := filepath.Join(dir, "source.bin")
+	binaryContent := make([]byte, 1024*1024)
+	for i := range binaryContent {
+		binaryContent[i] = byte(i % 256)
+	}
+	require.NoError(t, os.WriteFile(srcPath, binaryContent, 0o644))
+
+	// Open source file and read sample (same flow as processFile)
+	f, mode, err := openRegularFile(srcPath)
+	require.NoError(t, err)
+	defer f.Close()
+
+	sample := make([]byte, 8192)
+	n, err := f.Read(sample)
+	require.NoError(t, err)
+	sample = sample[:n]
+
+	// Stream to destination
+	destPath := filepath.Join(dir, "dest.bin")
+	err = streamBinaryFile(f, destPath, sample, mode)
+	require.NoError(t, err)
+
+	// Verify content matches
+	destContent, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, binaryContent, destContent)
+}
+
+func TestUT_StreamBinaryFile_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create empty source file
+	srcPath := filepath.Join(dir, "empty.bin")
+	require.NoError(t, os.WriteFile(srcPath, []byte{}, 0o644))
+
+	f, mode, err := openRegularFile(srcPath)
+	require.NoError(t, err)
+	defer f.Close()
+
+	sample := make([]byte, 8192)
+	n, readErr := f.Read(sample)
+	sample = sample[:n]
+	assert.Equal(t, io.EOF, readErr)
+	assert.Equal(t, 0, n)
+
+	destPath := filepath.Join(dir, "dest.bin")
+	err = streamBinaryFile(f, destPath, sample, mode)
+	require.NoError(t, err)
+
+	destContent, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Empty(t, destContent)
+}
+
+func TestUT_StreamBinaryFile_SmallFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create small binary file (fits entirely in sample)
+	binaryContent := []byte{0x89, 0x50, 0x4E, 0x47, 0x00, 0x01, 0x02, 0x03}
+	srcPath := filepath.Join(dir, "small.bin")
+	require.NoError(t, os.WriteFile(srcPath, binaryContent, 0o644))
+
+	f, mode, err := openRegularFile(srcPath)
+	require.NoError(t, err)
+	defer f.Close()
+
+	sample := make([]byte, 8192)
+	n, _ := f.Read(sample)
+	sample = sample[:n]
+
+	destPath := filepath.Join(dir, "dest.bin")
+	err = streamBinaryFile(f, destPath, sample, mode)
+	require.NoError(t, err)
+
+	destContent, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, binaryContent, destContent)
+}
+
+// --- Large binary file end-to-end ---
+
+func TestUT_Write_LargeBinaryFileStreaming(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create a 1MB binary file with null bytes
+	binaryContent := make([]byte, 1024*1024)
+	binaryContent[0] = 0x89 // PNG header signature
+	binaryContent[1] = 0x50
+	binaryContent[2] = 0x4E
+	binaryContent[3] = 0x47
+	binaryContent[4] = 0x00 // null byte makes it binary
+	for i := 5; i < len(binaryContent); i++ {
+		binaryContent[i] = byte(i % 256)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "large.bin"), binaryContent, 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	// Verify content matches exactly
+	outputContent, err := os.ReadFile(filepath.Join(outputDir, "large.bin"))
+	require.NoError(t, err)
+	assert.Equal(t, binaryContent, outputContent)
 }
 
 // --- test helpers ---
