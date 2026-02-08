@@ -1,0 +1,10 @@
+{
+    "project_name": "My Project",
+    "project_slug": "{{ cookiecutter.project_name|lower|replace(' ', '_') }}",
+    "author": "Test Author",
+    "description": "A short description",
+    "license": ["MIT", "BSD-3", "Apache-2.0"],
+    "use_docker": true,
+    "port": 8080,
+    "_private_version": "0.1.0"
+}

@@ -1,0 +1,3 @@
+{{ cookiecutter.license }}
+
+Copyright (c) {{ cookiecutter.author }}
