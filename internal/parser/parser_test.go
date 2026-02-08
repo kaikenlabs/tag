@@ -1,12 +1,54 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// mockExecutor implements template.TemplateExecutor for testing NewWithExecutor.
+type mockExecutor struct {
+	executeToStringResult string
+	executeToStringErr    error
+	renderMetadataResult  *template.Metadata
+	renderMetadataErr     error
+	parseStringTemplate   template.Template
+	parseStringErr        error
+}
+
+func (m *mockExecutor) ParseString(_ string) (template.Template, error) {
+	return m.parseStringTemplate, m.parseStringErr
+}
+
+func (m *mockExecutor) ParseStringNamed(_, _ string) (template.Template, error) {
+	return m.parseStringTemplate, m.parseStringErr
+}
+
+func (m *mockExecutor) ExecuteToString(_ string, _ template.Context) (string, error) {
+	return m.executeToStringResult, m.executeToStringErr
+}
+
+func (m *mockExecutor) RenderAndParseMetadata(_ string, _ template.Context) (*template.Metadata, error) {
+	return m.renderMetadataResult, m.renderMetadataErr
+}
+
+var _ template.TemplateExecutor = (*mockExecutor)(nil)
+
+// mockTemplate implements template.Template for testing.
+type mockTemplate struct {
+	result string
+	err    error
+}
+
+func (m *mockTemplate) Execute(_ template.Context) (string, error) {
+	return m.result, m.err
+}
+
+var _ template.Template = (*mockTemplate)(nil)
 
 func TestUT_withTemplates(t *testing.T) {
 	type args struct {
@@ -410,4 +452,59 @@ func TestUT_Parse_NoMetadataBlockErrors(t *testing.T) {
 	_, err = te.Parse(InputData{Name: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "to")
+}
+
+func TestUT_NewWithExecutor_ParsesTemplate(t *testing.T) {
+	// Verify NewWithExecutor wires the mock executor correctly.
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     "output/service.go",
+			Action: template.ActionCreate,
+			Extra:  map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "generated code"},
+	}
+
+	tmplContent := "---\nto: output/service.go\n---\ngenerated code\n"
+	te := NewWithExecutor(mock, map[string]string{"svc.tmpl": tmplContent}, nil)
+
+	data, err := te.Parse(InputData{Name: "MyService"})
+	require.NoError(t, err)
+	require.Len(t, data, 1)
+	assert.Equal(t, "output/service.go", data[0].To)
+	assert.Equal(t, ActionCreate, data[0].Action)
+	assert.Equal(t, "generated code", string(data[0].Output))
+}
+
+func TestUT_NewWithExecutor_MetadataError(t *testing.T) {
+	// Verify that metadata rendering errors propagate correctly.
+	mock := &mockExecutor{
+		renderMetadataErr: fmt.Errorf("mock metadata error"),
+	}
+
+	tmplContent := "---\nto: output.go\n---\nbody\n"
+	te := NewWithExecutor(mock, map[string]string{"tmpl": tmplContent}, nil)
+
+	_, err := te.Parse(InputData{Name: "test"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mock metadata error")
+}
+
+func TestUT_NewWithExecutor_BodyRenderError(t *testing.T) {
+	// Verify that body rendering errors propagate correctly.
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     "output.go",
+			Action: template.ActionCreate,
+			Extra:  map[string]string{},
+		},
+		parseStringErr: fmt.Errorf("mock parse error"),
+	}
+
+	tmplContent := "---\nto: output.go\n---\nbody\n"
+	te := NewWithExecutor(mock, map[string]string{"tmpl": tmplContent}, nil)
+
+	_, err := te.Parse(InputData{Name: "test"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mock parse error")
 }

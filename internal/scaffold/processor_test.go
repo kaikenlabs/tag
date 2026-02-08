@@ -1,17 +1,48 @@
 package scaffold
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// mockTemplateExecutor implements template.TemplateExecutor for testing.
+type mockTemplateExecutor struct {
+	parseStringResult     template.Template
+	parseStringErr        error
+	executeToStringResult string
+	executeToStringErr    error
+	renderMetadataResult  *template.Metadata
+	renderMetadataErr     error
+}
+
+func (m *mockTemplateExecutor) ParseString(_ string) (template.Template, error) {
+	return m.parseStringResult, m.parseStringErr
+}
+
+func (m *mockTemplateExecutor) ParseStringNamed(_, _ string) (template.Template, error) {
+	return m.parseStringResult, m.parseStringErr
+}
+
+func (m *mockTemplateExecutor) ExecuteToString(_ string, _ template.Context) (string, error) {
+	return m.executeToStringResult, m.executeToStringErr
+}
+
+func (m *mockTemplateExecutor) RenderAndParseMetadata(_ string, _ template.Context) (*template.Metadata, error) {
+	return m.renderMetadataResult, m.renderMetadataErr
+}
+
+// Compile-time check: mockTemplateExecutor satisfies TemplateExecutor.
+var _ template.TemplateExecutor = (*mockTemplateExecutor)(nil)
+
 func mustNewPathProcessor(t *testing.T) *DefaultPathProcessor {
 	t.Helper()
-	p, err := NewPathProcessor()
+	engine, err := template.NewEngine()
 	require.NoError(t, err)
-	return p
+	return NewPathProcessor(engine)
 }
 
 func TestUT_PathProcessor_SimpleVar(t *testing.T) {
@@ -320,7 +351,6 @@ func TestUT_HasPlaceholders(t *testing.T) {
 	}
 }
 
-
 func TestUT_PathProcessor_ConditionalFilename(t *testing.T) {
 	processor := mustNewPathProcessor(t)
 
@@ -448,4 +478,27 @@ func TestUT_PathProcessor_WhitespaceAroundFilter(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestUT_PathProcessor_WithMockExecutor(t *testing.T) {
+	// Verify PathProcessor works against the TemplateExecutor interface, not just *template.Engine.
+	mock := &mockTemplateExecutor{
+		executeToStringResult: "rendered_value",
+	}
+	processor := NewPathProcessor(mock)
+
+	result, err := processor.ProcessPath("{{ vars.name }}", map[string]any{"name": "test"})
+	require.NoError(t, err)
+	assert.Equal(t, "rendered_value", result)
+}
+
+func TestUT_PathProcessor_MockExecutorError(t *testing.T) {
+	mock := &mockTemplateExecutor{
+		executeToStringErr: fmt.Errorf("mock render error"),
+	}
+	processor := NewPathProcessor(mock)
+
+	_, err := processor.ProcessPath("{{ vars.name }}", map[string]any{"name": "test"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mock render error")
 }

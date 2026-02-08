@@ -10,7 +10,19 @@ import (
 	"github.com/kaikenlabs/tag/internal/template"
 )
 
-// New creates a new TemplateEngine that uses Gonja for template processing.
+// NewWithExecutor creates a TemplateEngine using the provided TemplateExecutor.
+// The caller is responsible for configuring the executor (e.g., setting loaders
+// for shared template resolution) before passing it in.
+func NewWithExecutor(executor template.TemplateExecutor, templates, sharedTemplates map[string]string) TemplateEngine {
+	return TemplateEngine{
+		gonjaEngine:     executor,
+		templates:       templates,
+		sharedTemplates: sharedTemplates,
+	}
+}
+
+// Deprecated: New creates a TemplateEngine that internally creates its own template.Engine.
+// Prefer NewWithExecutor to share a single engine across scaffold and generate paths.
 func New(dirPath string, sharedPath string, fileSuffix string) (TemplateEngine, error) {
 	// Initialize Gonja engine
 	gonjaEngine, err := template.NewEngine()
@@ -32,18 +44,15 @@ func New(dirPath string, sharedPath string, fileSuffix string) (TemplateEngine, 
 		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
 	}
 
-	// Wire shared templates into Gonja's loader if any were loaded
+	// Wire shared templates into Gonja's loader if any were loaded.
+	// This must happen on the concrete engine before it is stored as the interface.
 	if len(sharedTemplates) > 0 {
 		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
 		gonjaEngine.SetLoader(loader)
 		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
 	}
 
-	return TemplateEngine{
-		gonjaEngine:     gonjaEngine,
-		templates:       templates,
-		sharedTemplates: sharedTemplates,
-	}, nil
+	return NewWithExecutor(gonjaEngine, templates, sharedTemplates), nil
 }
 
 // Parse processes all loaded templates with the given input data.
@@ -66,6 +75,9 @@ func (te *TemplateEngine) Parse(input InputData) ([]TemplateData, error) {
 // Stage 1: Extract and render metadata
 // Stage 2: Parse metadata into TemplateData
 // Stage 3: Render the template body
+//
+// Deprecated: This method is part of the legacy generate pipeline.
+// It will be replaced by direct TemplateExecutor calls in a future release.
 func (te *TemplateEngine) parseTemplate(tmplName, tmplContent string, input InputData) (TemplateData, error) {
 	// Stage 1: Extract metadata block and body
 	metaRaw, bodyRaw, err := template.ExtractMetadata(tmplContent)
@@ -142,7 +154,7 @@ func (te *TemplateEngine) renderBody(tmplName, body string, ctx template.Context
 	return []byte(result), nil
 }
 
-// buildContext creates a Gonja context from the input data.
+// buildContext creates a Gonja context from the input data using ContextBuilder.
 func buildContext(input InputData) template.Context {
 	// Convert string metadata to any for vars
 	vars := make(map[string]any)
@@ -150,8 +162,10 @@ func buildContext(input InputData) template.Context {
 		vars[k] = v
 	}
 
-	// Create context with name, vars, and computed name options
-	return template.NewContext(input.Name, vars, nil)
+	return template.NewContextBuilder().
+		WithName(input.Name).
+		WithVars(vars).
+		Build()
 }
 
 // enrichContextWithMetadata adds extra metadata fields to the vars namespace.

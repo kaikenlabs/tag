@@ -17,16 +17,12 @@ type PathProcessor interface {
 
 // DefaultPathProcessor implements PathProcessor using the Gonja template engine.
 type DefaultPathProcessor struct {
-	engine *template.Engine
+	engine template.TemplateRenderer
 }
 
-// NewPathProcessor creates a new path processor.
-func NewPathProcessor() (*DefaultPathProcessor, error) {
-	engine, err := template.NewEngine()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create path processor: %w", err)
-	}
-	return &DefaultPathProcessor{engine: engine}, nil
+// NewPathProcessor creates a new path processor with the given template renderer.
+func NewPathProcessor(engine template.TemplateRenderer) *DefaultPathProcessor {
+	return &DefaultPathProcessor{engine: engine}
 }
 
 // placeholderDetectRegex detects if a string contains Jinja2-style template syntax.
@@ -135,4 +131,3 @@ func ExtractPlaceholders(path string) []string {
 func HasPlaceholders(path string) bool {
 	return placeholderDetectRegex.MatchString(path)
 }
-
