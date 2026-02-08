@@ -15,16 +15,51 @@ import (
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/writer"
 	"github.com/urfave/cli/v2"
 )
 
 // newEngine is a function variable that creates a new engine.
 // It can be replaced in tests to inject a mock generator.
 var newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
-	core, err := engine.New(dryRun, dirPath, sharedPath, fileSuffix) //nolint:staticcheck // legacy generate pipeline still active
-	if err != nil {
-		return nil, err
+	if dryRun {
+		slog.Info(chalk.Cyan("DRYRUN MODE"))
 	}
+
+	// 1. Create template engine
+	tmplEngine, err := template.NewEngine()
+	if err != nil {
+		return nil, fmt.Errorf("cannot create template engine: %w", err)
+	}
+
+	// 2. Load primary templates
+	templates, err := engine.LoadTemplateFiles(dirPath, fileSuffix)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load templates: %w", err)
+	}
+
+	// 3. Load shared templates (non-fatal)
+	sharedTemplates, sharedErr := engine.LoadTemplateFiles(sharedPath, fileSuffix)
+	if sharedErr != nil {
+		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
+	}
+
+	// 4. Wire shared templates into loader if any were loaded
+	if len(sharedTemplates) > 0 {
+		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
+		tmplEngine.SetLoader(loader)
+		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
+	}
+
+	// 5. Create parser and writer with injected dependencies
+	parser := engine.NewParserWithExecutor(tmplEngine, templates, sharedTemplates)
+	w, err := writer.New(dryRun) //nolint:staticcheck // only available constructor; result used as FileWriter interface
+	if err != nil {
+		return nil, fmt.Errorf("cannot create writer: %w", err)
+	}
+
+	core := engine.NewCore(parser, &w)
 	return &core, nil
 }
 

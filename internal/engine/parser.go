@@ -1,4 +1,4 @@
-package parser
+package engine
 
 import (
 	"fmt"
@@ -10,54 +10,20 @@ import (
 	"github.com/kaikenlabs/tag/internal/template"
 )
 
-// NewWithExecutor creates a TemplateEngine using the provided TemplateExecutor.
+// NewParserWithExecutor creates a TemplateParser using the provided TemplateExecutor.
 // The caller is responsible for configuring the executor (e.g., setting loaders
 // for shared template resolution) before passing it in.
-func NewWithExecutor(executor template.TemplateExecutor, templates, sharedTemplates map[string]string) TemplateEngine {
-	return TemplateEngine{
+func NewParserWithExecutor(executor template.TemplateExecutor, templates, sharedTemplates map[string]string) TemplateParser {
+	return TemplateParser{
 		gonjaEngine:     executor,
 		templates:       templates,
 		sharedTemplates: sharedTemplates,
 	}
 }
 
-// Deprecated: New creates a TemplateEngine that internally creates its own template.Engine.
-// Prefer NewWithExecutor to share a single engine across scaffold and generate paths.
-func New(dirPath string, sharedPath string, fileSuffix string) (TemplateEngine, error) {
-	// Initialize Gonja engine
-	gonjaEngine, err := template.NewEngine()
-	if err != nil {
-		slog.Error("cannot create template engine", "error", err)
-		return TemplateEngine{}, err
-	}
-
-	// Load primary templates
-	templates, err := withTemplates(dirPath, fileSuffix)
-	if err != nil {
-		slog.Error("cannot load templates", "error", err)
-		return TemplateEngine{}, err
-	}
-
-	// Load shared templates (errors are non-fatal but logged)
-	sharedTemplates, sharedErr := withTemplates(sharedPath, fileSuffix)
-	if sharedErr != nil {
-		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
-	}
-
-	// Wire shared templates into Gonja's loader if any were loaded.
-	// This must happen on the concrete engine before it is stored as the interface.
-	if len(sharedTemplates) > 0 {
-		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
-		gonjaEngine.SetLoader(loader)
-		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
-	}
-
-	return NewWithExecutor(gonjaEngine, templates, sharedTemplates), nil
-}
-
 // Parse processes all loaded templates with the given input data.
 // It returns a slice of TemplateData sorted by action (Create, Inject, Append).
-func (te *TemplateEngine) Parse(input InputData) ([]TemplateData, error) {
+func (te *TemplateParser) Parse(input InputData) ([]TemplateData, error) {
 	result := []TemplateData{}
 
 	for name, tmplContent := range te.templates {
@@ -75,10 +41,7 @@ func (te *TemplateEngine) Parse(input InputData) ([]TemplateData, error) {
 // Stage 1: Extract and render metadata
 // Stage 2: Parse metadata into TemplateData
 // Stage 3: Render the template body
-//
-// Deprecated: This method is part of the legacy generate pipeline.
-// It will be replaced by direct TemplateExecutor calls in a future release.
-func (te *TemplateEngine) parseTemplate(tmplName, tmplContent string, input InputData) (TemplateData, error) {
+func (te *TemplateParser) parseTemplate(tmplName, tmplContent string, input InputData) (TemplateData, error) {
 	// Stage 1: Extract metadata block and body
 	metaRaw, bodyRaw, err := template.ExtractMetadata(tmplContent)
 	if err != nil {
@@ -88,7 +51,7 @@ func (te *TemplateEngine) parseTemplate(tmplName, tmplContent string, input Inpu
 	}
 
 	// Build the initial Gonja context
-	ctx := buildContext(input)
+	ctx := buildParserContext(input)
 
 	// Stage 2: Render and parse metadata (if present)
 	var metadata *template.Metadata
@@ -122,7 +85,6 @@ func (te *TemplateEngine) parseTemplate(tmplName, tmplContent string, input Inpu
 		return TemplateData{}, err
 	}
 
-	// Convert template.Metadata to parser.TemplateData
 	return TemplateData{
 		Name:   tmplName,
 		To:     metadata.To,
@@ -132,13 +94,13 @@ func (te *TemplateEngine) parseTemplate(tmplName, tmplContent string, input Inpu
 			InjectClause:  metadata.InjectClause,
 			InjectMatcher: metadata.InjectMatcher,
 			Notes:         metadata.Notes,
-			Meta:          mergeMetadata(input.Meta, metadata.Extra),
+			Meta:          mergeParserMetadata(input.Meta, metadata.Extra),
 		},
 	}, nil
 }
 
 // renderBody renders the template body using Gonja.
-func (te *TemplateEngine) renderBody(tmplName, body string, ctx template.Context) ([]byte, error) {
+func (te *TemplateParser) renderBody(tmplName, body string, ctx template.Context) ([]byte, error) {
 	// Create base template
 	tmpl, err := te.gonjaEngine.ParseStringNamed(body, tmplName)
 	if err != nil {
@@ -154,8 +116,8 @@ func (te *TemplateEngine) renderBody(tmplName, body string, ctx template.Context
 	return []byte(result), nil
 }
 
-// buildContext creates a Gonja context from the input data using ContextBuilder.
-func buildContext(input InputData) template.Context {
+// buildParserContext creates a Gonja context from the input data using ContextBuilder.
+func buildParserContext(input InputData) template.Context {
 	// Convert string metadata to any for vars
 	vars := make(map[string]any)
 	for k, v := range input.Meta {
@@ -191,9 +153,9 @@ func enrichContextWithMetadata(ctx template.Context, metadata *template.Metadata
 	}
 }
 
-// mergeMetadata combines CLI metadata with template-defined metadata.
+// mergeParserMetadata combines CLI metadata with template-defined metadata.
 // CLI values take precedence over template-defined values.
-func mergeMetadata(cliMeta map[string]string, templateMeta map[string]string) map[string]string {
+func mergeParserMetadata(cliMeta map[string]string, templateMeta map[string]string) map[string]string {
 	result := make(map[string]string)
 
 	// Add template-defined metadata first
@@ -209,8 +171,8 @@ func mergeMetadata(cliMeta map[string]string, templateMeta map[string]string) ma
 	return result
 }
 
-// withTemplates loads templates from a directory.
-func withTemplates(dirPath string, fileSuffix string) (map[string]string, error) {
+// LoadTemplateFiles loads templates from a directory.
+func LoadTemplateFiles(dirPath string, fileSuffix string) (map[string]string, error) {
 	rootTemplates := map[string]string{}
 	files, err := os.ReadDir(dirPath)
 	if err != nil {

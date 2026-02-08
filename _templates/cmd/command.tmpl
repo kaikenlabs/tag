@@ -1,5 +1,5 @@
 ---
-to: test/output/cmd_{{ .Name | caseSnake }}.go
+to: test/output/cmd_{{ name | snake }}.go
 ---
 
 package output
@@ -10,16 +10,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func {{.Name | caseCamel }}Cmd() *cobra.Command {
+func {{ name | camel }}Cmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "{{ .Name | caseLower }}",
+		Use:   "{{ name | lower }}",
 		Short: "a new command",
 		Long:  "a new command",
-		Run:   {{ .Name | caseCamel }}Func(),
+		Run:   {{ name | camel }}Func(),
 	}
 }
 
-func {{ .Name | caseCamel }}Func() cmdFunc {
+func {{ name | camel }}Func() cmdFunc {
 	return func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			log.Println("at least 1 argument must be provided")

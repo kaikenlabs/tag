@@ -3,7 +3,6 @@ package scaffold
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/google/shlex"
 )
@@ -240,103 +238,6 @@ func (r *ArgvHookRunner) RunArgv(phase HookPhase, commands [][]string, workDir s
 	}
 
 	return results, nil
-}
-
-// BuildHookEnv creates environment variables for hook execution.
-// It merges the current environment with TAG-specific variables.
-func BuildHookEnv(vars map[string]any, templateDir, outputDir string) []string {
-	// Start with current environment
-	env := os.Environ()
-
-	// Add TAG-specific variables
-	env = append(env, fmt.Sprintf("TAG_TEMPLATE_DIR=%s", templateDir))
-	env = append(env, fmt.Sprintf("TAG_OUTPUT_DIR=%s", outputDir))
-
-	// Add project_name as a special variable
-	if projectName, ok := vars["project_name"]; ok {
-		env = append(env, fmt.Sprintf("TAG_PROJECT_NAME=%s", stringifyValue(projectName)))
-	}
-
-	// Add all user variables with TAG_VAR_ prefix (sanitized)
-	for name, value := range vars {
-		envKey := formatEnvKey(name)
-		envValue := sanitizeEnvValue(name, stringifyValue(value))
-		env = append(env, fmt.Sprintf("%s=%s", envKey, envValue))
-	}
-
-	return env
-}
-
-// formatEnvKey converts a variable name to an environment variable key.
-// Example: "project_name" -> "TAG_VAR_PROJECT_NAME"
-// Example: "use-docker" -> "TAG_VAR_USE_DOCKER"
-func formatEnvKey(name string) string {
-	// Convert to uppercase and replace non-alphanumeric with underscores
-	var result strings.Builder
-	result.WriteString("TAG_VAR_")
-
-	for _, r := range name {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			result.WriteRune(unicode.ToUpper(r))
-		} else {
-			result.WriteRune('_')
-		}
-	}
-
-	return result.String()
-}
-
-const (
-	// MaxEnvValueLen is the maximum length for a single environment variable value.
-	MaxEnvValueLen = 4096
-)
-
-// sanitizeEnvValue validates and sanitizes an environment variable value.
-// It truncates overly long values and strips newlines to prevent header injection.
-func sanitizeEnvValue(name, value string) string {
-	// Truncate overly long values
-	if len(value) > MaxEnvValueLen {
-		value = value[:MaxEnvValueLen]
-		fmt.Printf("Warning: variable %q value truncated to %d bytes for hook environment\n", name, MaxEnvValueLen)
-	}
-
-	// Strip newlines to prevent environment variable injection
-	value = strings.ReplaceAll(value, "\n", " ")
-	value = strings.ReplaceAll(value, "\r", " ")
-
-	return value
-}
-
-// stringifyValue converts a variable value to a string for environment variables.
-func stringifyValue(value any) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case bool:
-		if v {
-			return "true"
-		}
-		return "false"
-	case float64:
-		// Check if it's an integer
-		if v == float64(int64(v)) {
-			return fmt.Sprintf("%d", int64(v))
-		}
-		return fmt.Sprintf("%g", v)
-	case int:
-		return fmt.Sprintf("%d", v)
-	case int64:
-		return fmt.Sprintf("%d", v)
-	case []any, map[string]any:
-		// JSON encode complex types
-		data, err := json.Marshal(v)
-		if err != nil {
-			return fmt.Sprintf("%v", v)
-		}
-		return string(data)
-	default:
-		return fmt.Sprintf("%v", v)
-	}
 }
 
 // ConfirmHooks checks whether hooks should be executed based on flags and user confirmation.

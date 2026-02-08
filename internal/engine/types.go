@@ -1,12 +1,11 @@
 package engine
 
 import (
-	"github.com/kaikenlabs/tag/internal/parser"
 	"github.com/kaikenlabs/tag/internal/writer"
 )
 
 type Core struct {
-	parser parser.TemplateEngine //nolint:staticcheck // legacy generate pipeline still active
+	parser TemplateParser
 	fwr    writer.FileWriter
 }
 

@@ -4,4 +4,4 @@ inject: true
 after: // add commands
 ---
 
-    rootCmd.AddCommand({{.Name | caseLower }}Cmd())
+    rootCmd.AddCommand({{ name | lower }}Cmd())
