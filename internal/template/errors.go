@@ -13,9 +13,6 @@ var (
 	// ErrExecute indicates a template execution error.
 	ErrExecute = errors.New("template execution error")
 
-	// ErrUndefined indicates an undefined variable was accessed in strict mode.
-	ErrUndefined = errors.New("undefined variable")
-
 	// ErrFilter indicates a filter execution error.
 	ErrFilter = errors.New("filter error")
 )

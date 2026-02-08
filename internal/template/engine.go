@@ -14,7 +14,6 @@ import (
 type Engine struct {
 	config  *config.Config
 	env     *exec.Environment
-	strict  bool
 	baseDir string
 	loader  loaders.Loader
 }
@@ -27,12 +26,9 @@ type gonjaTemplate struct {
 }
 
 // NewEngine creates a new template engine with the given options.
-// By default, the engine uses strict undefined variable handling.
 // Returns an error if the engine cannot be initialized.
 func NewEngine(opts ...Option) (*Engine, error) {
-	e := &Engine{
-		strict: true, // Default to strict mode
-	}
+	e := &Engine{}
 
 	// Apply options
 	for _, opt := range opts {

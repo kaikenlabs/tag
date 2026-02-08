@@ -27,19 +27,6 @@ type Template interface {
 // Option configures the template engine.
 type Option func(*Engine)
 
-// WithStrictUndefined configures whether undefined variables cause errors.
-// When true (default), accessing undefined variables returns an error.
-// When false, undefined variables resolve to empty strings.
-//
-// Note: This option is currently a placeholder for future implementation.
-// Gonja's default behavior is used regardless of this setting.
-// TODO: Wire this into Gonja's configuration when supported.
-func WithStrictUndefined(strict bool) Option {
-	return func(e *Engine) {
-		e.strict = strict
-	}
-}
-
 // WithBaseDir sets the base directory for template loading.
 // This is used for resolving relative paths in extends and include directives.
 func WithBaseDir(dir string) Option {

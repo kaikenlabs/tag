@@ -21,7 +21,7 @@ import (
 // newEngine is a function variable that creates a new engine.
 // It can be replaced in tests to inject a mock generator.
 var newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
-	core, err := engine.New(dryRun, dirPath, sharedPath, fileSuffix)
+	core, err := engine.New(dryRun, dirPath, sharedPath, fileSuffix) //nolint:staticcheck // legacy generate pipeline still active
 	if err != nil {
 		return nil, err
 	}

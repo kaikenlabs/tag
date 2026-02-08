@@ -19,16 +19,6 @@ func NewContext(name string, vars map[string]any, nameOpts *NameOptions) Context
 		Build()
 }
 
-// NewContextWithMeta creates a context with additional metadata.
-// This is useful for backward compatibility with existing TAG templates.
-func NewContextWithMeta(name string, vars map[string]any, meta map[string]string, nameOpts *NameOptions) Context {
-	return NewContextBuilder().
-		WithNameOptions(name, nameOpts).
-		WithVars(vars).
-		WithMeta(meta).
-		Build()
-}
-
 // computeNameOptions creates NameOptions from a name string.
 func computeNameOptions(name string) map[string]any {
 	return map[string]any{
