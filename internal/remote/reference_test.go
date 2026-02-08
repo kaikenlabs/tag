@@ -491,6 +491,70 @@ func TestUT_Parse_SubPath_Rejects_Traversal(t *testing.T) {
 	}
 }
 
+func TestUT_ValidateRefComponent(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{name: "valid owner", value: "user", wantErr: false},
+		{name: "valid org with hyphens", value: "my-org-123", wantErr: false},
+		{name: "empty", value: "", wantErr: true},
+		{name: "dotdot", value: "..", wantErr: true},
+		{name: "single dot", value: ".", wantErr: true},
+		{name: "forward slash", value: "user/evil", wantErr: true},
+		{name: "backslash", value: "user\\evil", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRefComponent("test", tt.value)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestUT_Parse_RejectsTraversalInOwnerRepo(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		errContains string
+	}{
+		{
+			name:        "shorthand dotdot owner",
+			input:       "gh:../repo",
+			errContains: "path traversal",
+		},
+		{
+			name:        "shorthand dotdot repo",
+			input:       "gh:user/..",
+			errContains: "path traversal",
+		},
+		{
+			name:        "https dotdot owner",
+			input:       "https://github.com/../repo.git",
+			errContains: "path traversal",
+		},
+		{
+			name:        "https dotdot repo",
+			input:       "https://github.com/user/...git",
+			errContains: "path traversal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.input)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errContains)
+		})
+	}
+}
+
 func TestUT_Parse_InvalidReference(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -223,6 +223,7 @@ type Options struct {
 }
 
 // CollectOptions contains options for variable collection.
+// Most fields overlap with Options; use Options.CollectOpts() to convert.
 type CollectOptions struct {
 	ValuesFile  string            // Path to values JSON file
 	Meta        map[string]string // CLI meta overrides
@@ -230,4 +231,17 @@ type CollectOptions struct {
 	IsTTY       bool              // Whether stdin is a TTY
 	Replay      bool              // Load and use saved replay values
 	TemplateRef string            // Original template reference (for replay ID lookup)
+}
+
+// CollectOpts builds a CollectOptions from the scaffold Options,
+// reducing manual field-by-field copying at the call site.
+func (o Options) CollectOpts() CollectOptions {
+	return CollectOptions{
+		ValuesFile:  o.ValuesFile,
+		Meta:        o.Meta,
+		NoPrompt:    o.NoInput,
+		IsTTY:       IsTTY(),
+		Replay:      o.Replay,
+		TemplateRef: o.TemplateRef,
+	}
 }

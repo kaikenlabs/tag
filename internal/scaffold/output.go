@@ -10,6 +10,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // OutputWriter handles file generation and copying during scaffolding.
@@ -64,13 +65,13 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 		}
 
 		// Skip tag.template.json
-		if d.Name() == "tag.template.json" && filepath.Dir(relPath) == "." {
+		if d.Name() == types.TemplateConfigFile && filepath.Dir(relPath) == "." {
 			return nil
 		}
 
 		// Skip _generators directory (will be handled separately)
 		// Match exact directory name, not prefix (e.g., don't skip "_generators-old")
-		if relPath == "_generators" || strings.HasPrefix(relPath, "_generators"+string(filepath.Separator)) {
+		if relPath == types.GeneratorsDir || strings.HasPrefix(relPath, types.GeneratorsDir+string(filepath.Separator)) {
 			return nil
 		}
 
@@ -100,7 +101,7 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 
 		if d.IsDir() {
 			// Create directory
-			if err := os.MkdirAll(destPath, 0o755); err != nil {
+			if err := os.MkdirAll(destPath, types.DirMode); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", destPath, err)
 			}
 			return nil
@@ -115,7 +116,7 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 // Text files are rendered through the template engine; binary files are copied as-is.
 func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template.Context, d fs.DirEntry) error {
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
@@ -183,17 +184,17 @@ func buildTemplateContext(vars map[string]any) template.Context {
 
 // CopyGenerators copies the _generators directory to .tag.templates in the output.
 func CopyGenerators(templateRoot, outputDir string) error {
-	generatorsDir := filepath.Join(templateRoot, "_generators")
+	generatorsDir := filepath.Join(templateRoot, types.GeneratorsDir)
 
 	// Check if _generators exists
 	if _, err := os.Stat(generatorsDir); os.IsNotExist(err) {
 		// No _generators directory, create empty .tag.templates
-		templatesDir := filepath.Join(outputDir, ".tag.templates")
-		return os.MkdirAll(templatesDir, 0o755)
+		templatesDir := filepath.Join(outputDir, types.TemplatesDir)
+		return os.MkdirAll(templatesDir, types.DirMode)
 	}
 
 	// Copy _generators to .tag.templates
-	templatesDir := filepath.Join(outputDir, ".tag.templates")
+	templatesDir := filepath.Join(outputDir, types.TemplatesDir)
 	return copyDir(generatorsDir, templatesDir)
 }
 
@@ -218,11 +219,11 @@ func copyDir(src, dst string) error {
 		destPath := filepath.Join(dst, relPath)
 
 		if d.IsDir() {
-			return os.MkdirAll(destPath, 0o755)
+			return os.MkdirAll(destPath, types.DirMode)
 		}
 
 		// Ensure parent directory exists
-		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
 			return err
 		}
 
@@ -266,9 +267,9 @@ func sanitizeFileMode(mode fs.FileMode) fs.FileMode {
 func GenerateTagConfig(outputDir string) error {
 	config := map[string]any{
 		"env": map[string]string{
-			"TAG_PATH":        ".tag.templates",
-			"TAG_SHARED_PATH": "_shared",
-			"TAG_BUNDLE_PATH": "_bundles",
+			"TAG_PATH":        types.TemplatesDir,
+			"TAG_SHARED_PATH": types.SharedDir,
+			"TAG_BUNDLE_PATH": types.BundlesDir,
 		},
 		"hooks": map[string][]string{
 			"pre":  {},
@@ -282,7 +283,7 @@ func GenerateTagConfig(outputDir string) error {
 	}
 
 	configPath := filepath.Join(outputDir, ".tagconfig.json")
-	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+	if err := os.WriteFile(configPath, data, types.FileMode); err != nil {
 		return fmt.Errorf("failed to write tagconfig: %w", err)
 	}
 

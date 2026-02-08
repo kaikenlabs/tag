@@ -53,6 +53,11 @@ func GenerateCommand(cfg *config.Config) *cli.Command {
 				Usage:   "Specifies metadata to include into the generators",
 				Aliases: []string{"m"},
 			},
+			&cli.BoolFlag{
+				Name:  "no-hooks",
+				Value: false,
+				Usage: "Skip execution of pre and post hooks",
+			},
 		},
 	}
 }
@@ -92,8 +97,10 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 }
 
 func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
-	if err := runHooks(cfg.Hooks.Pre, scaffold.HookPhasePreGen); err != nil {
-		return err
+	if !c.Bool("no-hooks") {
+		if err := runHooks(cfg.Hooks.Pre, scaffold.HookPhasePreGen); err != nil {
+			return err
+		}
 	}
 
 	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), generatorName, generatorName+BundleExtension)
@@ -120,11 +127,14 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 		}
 	}
 
-	return runHooks(cfg.Hooks.Post, scaffold.HookPhasePostGen)
+	if !c.Bool("no-hooks") {
+		return runHooks(cfg.Hooks.Post, scaffold.HookPhasePostGen)
+	}
+	return nil
 }
 
 func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args string, inBundle bool) error {
-	if !inBundle {
+	if !inBundle && !c.Bool("no-hooks") {
 		if err := runHooks(cfg.Hooks.Pre, scaffold.HookPhasePreGen); err != nil {
 			return err
 		}
@@ -156,7 +166,7 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		return app.Errorf("error when generating template: %w", err)
 	}
 
-	if !inBundle {
+	if !inBundle && !c.Bool("no-hooks") {
 		return runHooks(cfg.Hooks.Post, scaffold.HookPhasePostGen)
 	}
 	return nil
@@ -172,8 +182,7 @@ func runHooks(hooks [][]string, phase scaffold.HookPhase) error {
 		return app.Errorf("failed to get working directory: %w", err)
 	}
 
-	runner := scaffold.NewArgvHookRunner()
-	results, err := runner.RunArgv(phase, hooks, dir, nil)
+	results, err := scaffold.RunArgvHooks(phase, hooks, dir, nil)
 
 	// Print output from executed hooks
 	for _, result := range results {

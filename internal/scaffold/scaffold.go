@@ -9,7 +9,11 @@ import (
 	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/schema"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
+
+// MaxConfigFileSize is the maximum allowed size for tag.template.json (10 MB).
+const MaxConfigFileSize = 10 * 1024 * 1024
 
 // Scaffold orchestrates the scaffolding process.
 type Scaffold struct {
@@ -76,14 +80,7 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	// Step 3: Collect variables
-	collectOpts := CollectOptions{
-		ValuesFile:  opts.ValuesFile,
-		Meta:        opts.Meta,
-		NoPrompt:    opts.NoInput,
-		IsTTY:       IsTTY(),
-		Replay:      opts.Replay,
-		TemplateRef: opts.TemplateRef,
-	}
+	collectOpts := opts.CollectOpts()
 
 	// Add project name to meta if provided
 	if opts.ProjectName != "" {
@@ -163,7 +160,7 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	// Step 9: Create output directory
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, types.DirMode); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -216,15 +213,23 @@ func (s *Scaffold) Run(opts Options) error {
 
 // loadAndValidateConfig loads tag.template.json and validates it against the schema.
 func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, error) {
-	configPath := filepath.Join(templateDir, "tag.template.json")
+	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
 
-	// Check if config file exists
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Check if this is a Cookiecutter template
-		if ccPath, isCookiecutter := IsCookiecutterTemplate(templateDir); isCookiecutter {
-			return nil, &ErrCookiecutterDetected{CookiecutterPath: ccPath}
+	// Check if config file exists and its size
+	info, err := os.Stat(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Check if this is a Cookiecutter template
+			if ccPath, isCookiecutter := IsCookiecutterTemplate(templateDir); isCookiecutter {
+				return nil, &ErrCookiecutterDetected{CookiecutterPath: ccPath}
+			}
+			return nil, fmt.Errorf("%w: %s", ErrConfigNotFound, configPath)
 		}
-		return nil, fmt.Errorf("%w: %s", ErrConfigNotFound, configPath)
+		return nil, fmt.Errorf("failed to stat config file: %w", err)
+	}
+
+	if info.Size() > MaxConfigFileSize {
+		return nil, fmt.Errorf("config file too large: %d bytes (max %d bytes)", info.Size(), MaxConfigFileSize)
 	}
 
 	// Read config file

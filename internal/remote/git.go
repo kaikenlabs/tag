@@ -224,8 +224,9 @@ func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
 }
 
 // wrapCloneError wraps clone errors with helpful messages.
+// Error messages are sanitized to prevent leaking credential fragments.
 func (f *GitFetcher) wrapCloneError(ref *Reference, err error) error {
-	errStr := err.Error()
+	errStr := sanitizeErrorMessage(err.Error(), ref.Provider)
 
 	// Check for auth errors
 	if strings.Contains(errStr, "authentication") ||
@@ -234,7 +235,7 @@ func (f *GitFetcher) wrapCloneError(ref *Reference, err error) error {
 		return &AuthError{
 			Provider: ref.Provider,
 			Message:  "repository access denied",
-			Err:      err,
+			Err:      errors.New(errStr),
 		}
 	}
 
@@ -249,7 +250,39 @@ func (f *GitFetcher) wrapCloneError(ref *Reference, err error) error {
 		}
 	}
 
-	return &FetchError{Ref: ref, Message: "clone failed", Err: err}
+	return &FetchError{Ref: ref, Message: "clone failed", Err: errors.New(errStr)}
+}
+
+// sanitizeErrorMessage strips potential credential fragments from error messages.
+func sanitizeErrorMessage(msg string, provider Provider) string {
+	// Redact any token-like strings (long alphanumeric sequences that look like tokens)
+	// Common token patterns: ghp_*, glpat-*, ATATT*, etc.
+	tokenPrefixes := []string{"ghp_", "gho_", "ghs_", "ghr_", "glpat-", "ATATT"}
+	for _, prefix := range tokenPrefixes {
+		if idx := strings.Index(msg, prefix); idx >= 0 {
+			// Find the end of the token (tokens are usually alphanumeric+special)
+			end := idx + len(prefix)
+			for end < len(msg) && msg[end] != ' ' && msg[end] != '"' && msg[end] != '\'' && msg[end] != '@' {
+				end++
+			}
+			msg = msg[:idx] + "[REDACTED]" + msg[end:]
+		}
+	}
+
+	// Redact URLs that contain credentials (user:pass@host format)
+	if idx := strings.Index(msg, "://"); idx >= 0 {
+		// Look for user:pass@ pattern after ://
+		rest := msg[idx+3:]
+		if atIdx := strings.Index(rest, "@"); atIdx >= 0 {
+			// Check if there's a colon before the @ (indicating user:pass)
+			beforeAt := rest[:atIdx]
+			if strings.Contains(beforeAt, ":") {
+				msg = msg[:idx+3] + "[REDACTED]@" + rest[atIdx+1:]
+			}
+		}
+	}
+
+	return msg
 }
 
 // isBranchNotFoundError checks if the error is due to a branch not being found.

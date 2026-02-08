@@ -160,6 +160,48 @@ func TestUT_BuildHookEnv_IncludesSystemEnv(t *testing.T) {
 	assert.True(t, hasPath, "should include system PATH")
 }
 
+// --- Unit Tests for sanitizeEnvValue ---
+
+func TestUT_SanitizeEnvValue_Normal(t *testing.T) {
+	result := sanitizeEnvValue("test", "hello world")
+	assert.Equal(t, "hello world", result)
+}
+
+func TestUT_SanitizeEnvValue_StripsNewlines(t *testing.T) {
+	result := sanitizeEnvValue("test", "line1\nline2\rline3")
+	assert.Equal(t, "line1 line2 line3", result)
+}
+
+func TestUT_SanitizeEnvValue_TruncatesLongValues(t *testing.T) {
+	longValue := strings.Repeat("a", MaxEnvValueLen+100)
+	result := sanitizeEnvValue("test", longValue)
+	assert.Len(t, result, MaxEnvValueLen)
+}
+
+func TestUT_SanitizeEnvValue_EmptyString(t *testing.T) {
+	result := sanitizeEnvValue("test", "")
+	assert.Equal(t, "", result)
+}
+
+func TestUT_BuildHookEnv_SanitizesValues(t *testing.T) {
+	vars := map[string]any{
+		"project_name": "test\ninjection",
+	}
+
+	env := BuildHookEnv(vars, "/template", "/output")
+
+	// Newlines should be replaced with spaces
+	for _, e := range env {
+		if strings.HasPrefix(e, "TAG_VAR_PROJECT_NAME=") {
+			value := strings.TrimPrefix(e, "TAG_VAR_PROJECT_NAME=")
+			assert.NotContains(t, value, "\n")
+			assert.Equal(t, "test injection", value)
+			return
+		}
+	}
+	t.Error("TAG_VAR_PROJECT_NAME not found in env")
+}
+
 // --- Unit Tests for formatEnvKey ---
 
 func TestUT_FormatEnvKey(t *testing.T) {
@@ -212,14 +254,14 @@ func TestUT_StringifyValue(t *testing.T) {
 	}
 }
 
-// --- Unit Tests for ShellHookRunner ---
+// --- Unit Tests for ArgvHookRunner.Run (string command parsing) ---
 
-func TestUT_ShellHookRunner_SuccessfulCommand(t *testing.T) {
+func TestUT_ArgvHookRunner_Run_SuccessfulCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
 	}
 
-	runner := &ShellHookRunner{}
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
 	results, err := runner.Run(HookPhasePre, []string{"echo hello"}, dir, os.Environ())
@@ -231,12 +273,12 @@ func TestUT_ShellHookRunner_SuccessfulCommand(t *testing.T) {
 	assert.Contains(t, results[0].Output, "hello")
 }
 
-func TestUT_ShellHookRunner_MultipleCommands(t *testing.T) {
+func TestUT_ArgvHookRunner_Run_MultipleCommands(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
 	}
 
-	runner := &ShellHookRunner{}
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
 	results, err := runner.Run(HookPhasePre, []string{"echo first", "echo second"}, dir, os.Environ())
@@ -247,15 +289,16 @@ func TestUT_ShellHookRunner_MultipleCommands(t *testing.T) {
 	assert.Contains(t, results[1].Output, "second")
 }
 
-func TestUT_ShellHookRunner_FirstCommandFails(t *testing.T) {
+func TestUT_ArgvHookRunner_Run_CommandFails(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
 	}
 
-	runner := &ShellHookRunner{}
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
-	results, err := runner.Run(HookPhasePre, []string{"exit 1", "echo should not run"}, dir, os.Environ())
+	// Use false (always exits with 1) instead of shell builtin "exit 1"
+	results, err := runner.Run(HookPhasePre, []string{"false", "echo should not run"}, dir, os.Environ())
 
 	require.Error(t, err)
 	require.Len(t, results, 1) // Only first command was executed
@@ -265,27 +308,27 @@ func TestUT_ShellHookRunner_FirstCommandFails(t *testing.T) {
 	hookErr, ok := err.(*HookError)
 	require.True(t, ok)
 	assert.Equal(t, HookPhasePre, hookErr.Phase)
-	assert.Equal(t, "exit 1", hookErr.Command)
 }
 
-func TestUT_ShellHookRunner_MiddleCommandFails(t *testing.T) {
+func TestUT_ArgvHookRunner_Run_MiddleCommandFails(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
 	}
 
-	runner := &ShellHookRunner{}
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
-	results, err := runner.Run(HookPhasePre, []string{"echo first", "exit 2", "echo third"}, dir, os.Environ())
+	// "false" exits with 1 without needing a shell
+	results, err := runner.Run(HookPhasePre, []string{"echo first", "false", "echo third"}, dir, os.Environ())
 
 	require.Error(t, err)
 	require.Len(t, results, 2) // First two commands were executed
 	assert.Equal(t, 0, results[0].ExitCode)
-	assert.Equal(t, 2, results[1].ExitCode)
+	assert.Equal(t, 1, results[1].ExitCode)
 }
 
-func TestUT_ShellHookRunner_EmptyCommands(t *testing.T) {
-	runner := &ShellHookRunner{}
+func TestUT_ArgvHookRunner_Run_EmptyCommands(t *testing.T) {
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
 	results, err := runner.Run(HookPhasePre, []string{}, dir, os.Environ())
@@ -294,8 +337,8 @@ func TestUT_ShellHookRunner_EmptyCommands(t *testing.T) {
 	assert.Empty(t, results)
 }
 
-func TestUT_ShellHookRunner_NilCommands(t *testing.T) {
-	runner := &ShellHookRunner{}
+func TestUT_ArgvHookRunner_Run_NilCommands(t *testing.T) {
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
 	results, err := runner.Run(HookPhasePre, nil, dir, os.Environ())
@@ -304,12 +347,12 @@ func TestUT_ShellHookRunner_NilCommands(t *testing.T) {
 	assert.Empty(t, results)
 }
 
-func TestUT_ShellHookRunner_WorkingDirectory(t *testing.T) {
+func TestUT_ArgvHookRunner_Run_WorkingDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
 	}
 
-	runner := &ShellHookRunner{}
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
 	results, err := runner.Run(HookPhasePre, []string{"pwd"}, dir, os.Environ())
@@ -319,52 +362,147 @@ func TestUT_ShellHookRunner_WorkingDirectory(t *testing.T) {
 	assert.Contains(t, results[0].Output, dir)
 }
 
-func TestUT_ShellHookRunner_EnvironmentVariables(t *testing.T) {
+func TestUT_ArgvHookRunner_Run_QuotedArgs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
 	}
 
-	runner := &ShellHookRunner{}
+	runner := &ArgvHookRunner{}
+	dir := t.TempDir()
+
+	// shlex should properly split quoted arguments
+	results, err := runner.Run(HookPhasePre, []string{`echo "hello world"`}, dir, os.Environ())
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Output, "hello world")
+}
+
+func TestUT_ArgvHookRunner_Run_ExplicitShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 	env := append(os.Environ(), "TAG_TEST_VAR=test_value")
 
-	results, err := runner.Run(HookPhasePre, []string{"echo $TAG_TEST_VAR"}, dir, env)
+	// Users can explicitly invoke shell for shell features
+	results, err := runner.Run(HookPhasePre, []string{"sh -c 'echo $TAG_TEST_VAR'"}, dir, env)
 
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Contains(t, results[0].Output, "test_value")
 }
 
-func TestUT_ShellHookRunner_CapturesStderr(t *testing.T) {
+func TestUT_ArgvHookRunner_Run_EmptyEnvUsesSystemEnv(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
 	}
 
-	runner := &ShellHookRunner{}
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
-	results, err := runner.Run(HookPhasePre, []string{"echo error >&2"}, dir, os.Environ())
+	// With nil env, should still work (uses os.Environ internally)
+	results, err := runner.Run(HookPhasePre, []string{"echo hello"}, dir, nil)
 
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Output, "error")
+	assert.Contains(t, results[0].Output, "hello")
 }
 
-func TestUT_ShellHookRunner_EmptyEnvUsesSystemEnv(t *testing.T) {
+func TestUT_ContainsShellMetachars(t *testing.T) {
+	tests := []struct {
+		cmd      string
+		expected bool
+	}{
+		{"echo hello", false},
+		{"echo hello | grep hello", true},
+		{"echo hello > file.txt", true},
+		{"echo $VAR", true},
+		{"echo hello && echo world", true},
+		{"echo hello; echo world", true},
+		{`echo "quoted string"`, false}, // quotes are handled by shlex
+		{"sh -c 'echo hello'", false},   // quotes are handled by shlex
+		{"pwd", false},
+		{"ls -la", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.cmd, func(t *testing.T) {
+			result := containsShellMetachars(tt.cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUT_ArgvHookRunner_Run_MetacharsAreLiteral(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
 	}
 
-	runner := &ShellHookRunner{}
+	runner := &ArgvHookRunner{}
 	dir := t.TempDir()
 
-	// With nil/empty env, should still work (uses os.Environ internally)
-	results, err := runner.Run(HookPhasePre, []string{"echo $PATH"}, dir, nil)
+	// Without shell, > is passed as a literal argument, not a redirect
+	results, err := runner.Run(HookPhasePre, []string{"echo hello > output.txt"}, dir, os.Environ())
 
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	// PATH should exist and have some content
-	assert.NotEmpty(t, strings.TrimSpace(results[0].Output))
+	assert.Equal(t, 0, results[0].ExitCode)
+	// echo receives ">", "output.txt" as arguments, printing them literally
+	assert.Contains(t, results[0].Output, ">")
+	assert.Contains(t, results[0].Output, "output.txt")
+
+	// Verify no file was created by redirection
+	_, err = os.Stat(filepath.Join(dir, "output.txt"))
+	assert.True(t, os.IsNotExist(err), "hook should not have created a file via redirection")
+}
+
+func TestUT_IsExplicitShellCommand(t *testing.T) {
+	tests := []struct {
+		cmd      string
+		expected bool
+	}{
+		{"sh -c 'echo hello'", true},
+		{"/bin/sh -c 'echo hello'", true},
+		{"bash -c 'echo hello'", true},
+		{"/bin/bash -c 'echo hello'", true},
+		{"cmd /C echo hello", true},
+		{"cmd.exe /C echo hello", true},
+		{"  sh -c 'indented'", true},
+		{"echo hello", false},
+		{"sh", false},
+		{"sh -v", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.cmd, func(t *testing.T) {
+			result := isExplicitShellCommand(tt.cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUT_RunArgvHooks_Success(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	dir := t.TempDir()
+
+	results, err := RunArgvHooks(HookPhasePreGen, [][]string{{"echo", "hello"}}, dir, os.Environ())
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Output, "hello")
+}
+
+func TestUT_RunArgvHooks_EmptyCommands(t *testing.T) {
+	results, err := RunArgvHooks(HookPhasePreGen, nil, "", nil)
+
+	require.NoError(t, err)
+	assert.Nil(t, results)
 }
 
 func TestUT_LimitedBuffer_TruncatesLargeOutput(t *testing.T) {
@@ -649,7 +787,7 @@ func TestIT_Scaffold_PreHookFailure_NoOutputCreated(t *testing.T) {
 			"project_name": "test_project",
 		},
 		"hooks": map[string]any{
-			"pre_scaffold": []string{"exit 1"},
+			"pre_scaffold": []string{"false"},
 		},
 	}
 	configData, err := json.MarshalIndent(config, "", "  ")
@@ -672,7 +810,7 @@ func TestIT_Scaffold_PreHookFailure_NoOutputCreated(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pre-scaffold hook failed")
 
-	// Verify output was NOT created
+	// Verify output was NOT created (clean up symlink-resolved path too)
 	assert.NoDirExists(t, outputDir)
 }
 
@@ -732,7 +870,7 @@ func TestIT_Scaffold_PostHookFailure_OutputPreserved(t *testing.T) {
 			"project_name": "test_project",
 		},
 		"hooks": map[string]any{
-			"post_scaffold": []string{"exit 1"},
+			"post_scaffold": []string{"false"},
 		},
 	}
 	configData, err := json.MarshalIndent(config, "", "  ")
@@ -766,6 +904,7 @@ func TestIT_Scaffold_HooksReceiveEnvironmentVariables(t *testing.T) {
 	}
 
 	// Create template that writes env vars to a file
+	// Uses explicit shell invocation since variable expansion requires a shell
 	templateDir := t.TempDir()
 	outputDir := filepath.Join(t.TempDir(), "output")
 
@@ -776,10 +915,10 @@ func TestIT_Scaffold_HooksReceiveEnvironmentVariables(t *testing.T) {
 		},
 		"hooks": map[string]any{
 			"post_scaffold": []string{
-				"echo TAG_PROJECT_NAME=$TAG_PROJECT_NAME > env_check.txt",
-				"echo TAG_VAR_PROJECT_NAME=$TAG_VAR_PROJECT_NAME >> env_check.txt",
-				"echo TAG_VAR_AUTHOR=$TAG_VAR_AUTHOR >> env_check.txt",
-				"echo TAG_OUTPUT_DIR=$TAG_OUTPUT_DIR >> env_check.txt",
+				"sh -c 'echo TAG_PROJECT_NAME=$TAG_PROJECT_NAME > env_check.txt'",
+				"sh -c 'echo TAG_VAR_PROJECT_NAME=$TAG_VAR_PROJECT_NAME >> env_check.txt'",
+				"sh -c 'echo TAG_VAR_AUTHOR=$TAG_VAR_AUTHOR >> env_check.txt'",
+				"sh -c 'echo TAG_OUTPUT_DIR=$TAG_OUTPUT_DIR >> env_check.txt'",
 			},
 		},
 	}
@@ -817,6 +956,7 @@ func TestIT_Scaffold_PreHooksRunInTemplateDirectory(t *testing.T) {
 	}
 
 	// Create template with pre-hook that writes pwd to a marker file
+	// Uses explicit shell invocation since redirect requires a shell
 	templateDir := t.TempDir()
 	outputDir := filepath.Join(t.TempDir(), "output")
 
@@ -825,7 +965,7 @@ func TestIT_Scaffold_PreHooksRunInTemplateDirectory(t *testing.T) {
 			"project_name": "test_project",
 		},
 		"hooks": map[string]any{
-			"pre_scaffold": []string{"pwd > pre_hook_pwd.txt"},
+			"pre_scaffold": []string{"sh -c 'pwd > pre_hook_pwd.txt'"},
 		},
 	}
 	configData, err := json.MarshalIndent(config, "", "  ")
@@ -857,6 +997,7 @@ func TestIT_Scaffold_PostHooksRunInOutputDirectory(t *testing.T) {
 	}
 
 	// Create template with post-hook that writes pwd to a marker file
+	// Uses explicit shell invocation since redirect requires a shell
 	templateDir := t.TempDir()
 	outputDir := filepath.Join(t.TempDir(), "output")
 
@@ -865,7 +1006,7 @@ func TestIT_Scaffold_PostHooksRunInOutputDirectory(t *testing.T) {
 			"project_name": "test_project",
 		},
 		"hooks": map[string]any{
-			"post_scaffold": []string{"pwd > post_hook_pwd.txt"},
+			"post_scaffold": []string{"sh -c 'pwd > post_hook_pwd.txt'"},
 		},
 	}
 	configData, err := json.MarshalIndent(config, "", "  ")
@@ -897,6 +1038,7 @@ func TestIT_Scaffold_MultipleHooksExecuteInOrder(t *testing.T) {
 	}
 
 	// Create template with multiple hooks that append to a file
+	// Uses explicit shell invocation since redirects require a shell
 	templateDir := t.TempDir()
 	outputDir := filepath.Join(t.TempDir(), "output")
 
@@ -906,9 +1048,9 @@ func TestIT_Scaffold_MultipleHooksExecuteInOrder(t *testing.T) {
 		},
 		"hooks": map[string]any{
 			"post_scaffold": []string{
-				"echo first > order.txt",
-				"echo second >> order.txt",
-				"echo third >> order.txt",
+				"sh -c 'echo first > order.txt'",
+				"sh -c 'echo second >> order.txt'",
+				"sh -c 'echo third >> order.txt'",
 			},
 		},
 	}

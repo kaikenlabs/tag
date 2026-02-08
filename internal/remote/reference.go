@@ -134,6 +134,14 @@ func parseShorthand(input, prefix string, provider Provider, host string) (*Refe
 	repo := strings.TrimSuffix(parts[1], ".git") // Strip .git if present
 	subPath := ""
 
+	// Validate owner and repo against path traversal
+	if err := validateRefComponent("owner", owner); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+	if err := validateRefComponent("repo", repo); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+
 	if len(parts) > 2 {
 		subPath = strings.Join(parts[2:], "/")
 	}
@@ -233,6 +241,14 @@ func parseGitHTTPURL(input string, parsed *url.URL, version string) (*Reference,
 	repo := parts[1]
 	subPath := ""
 
+	// Validate owner and repo against path traversal
+	if err := validateRefComponent("owner", owner); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+	if err := validateRefComponent("repo", repo); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+
 	// Handle GitHub/GitLab web URLs: /user/repo/tree/branch/subdir or /user/repo/blob/branch/file
 	if len(parts) > 3 && (parts[2] == "tree" || parts[2] == "blob") {
 		// parts[3] is the branch/tag
@@ -306,6 +322,14 @@ func parseGitURL(input string) (*Reference, error) {
 	version := matches[6]
 	subPath := strings.TrimPrefix(matches[7], "/")
 
+	// Validate owner and repo against path traversal
+	if err := validateRefComponent("owner", owner); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+	if err := validateRefComponent("repo", repo); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+
 	// Handle version with embedded subpath
 	if version != "" {
 		if slashIdx := strings.Index(version, "/"); slashIdx != -1 {
@@ -357,6 +381,14 @@ func parseSSHStyle(input string) (*Reference, error) {
 	version := strings.TrimPrefix(matches[5], "@")
 	subPath := strings.TrimPrefix(matches[6], "/")
 	subPath = strings.TrimSuffix(subPath, "/")
+
+	// Validate owner and repo against path traversal
+	if err := validateRefComponent("owner", owner); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+	if err := validateRefComponent("repo", repo); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
 
 	// Validate subpath against path traversal
 	if err := validateSubPath(subPath); err != nil {
@@ -451,7 +483,8 @@ func (r *Reference) IsRemote() bool {
 func (r *Reference) CacheKey() string {
 	if r.Provider != ProviderGeneric && r.Owner != "" && r.Repo != "" {
 		// Use human-readable format for known providers
-		key := fmt.Sprintf("%s_%s_%s", shortProvider(r.Provider), r.Owner, r.Repo)
+		// sanitizeForPath is applied as defense-in-depth (validation rejects bad values at parse time)
+		key := fmt.Sprintf("%s_%s_%s", shortProvider(r.Provider), sanitizeForPath(r.Owner), sanitizeForPath(r.Repo))
 		if r.Version != "" {
 			key += "@" + sanitizeForPath(r.Version)
 		}
@@ -492,6 +525,21 @@ func sanitizeForPath(s string) string {
 		"|", "_",
 	)
 	return replacer.Replace(s)
+}
+
+// validateRefComponent checks that a reference component (owner, repo) is safe.
+// It rejects empty strings, path traversal sequences, and path separators.
+func validateRefComponent(name, value string) error {
+	if value == "" {
+		return fmt.Errorf("%s must not be empty", name)
+	}
+	if value == "." || value == ".." {
+		return fmt.Errorf("%s contains path traversal component: %s", name, value)
+	}
+	if strings.ContainsAny(value, "/\\") {
+		return fmt.Errorf("%s contains path separator: %s", name, value)
+	}
+	return nil
 }
 
 // validateSubPath checks that a subpath is safe and does not contain path traversal components.

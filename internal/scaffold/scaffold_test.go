@@ -491,6 +491,25 @@ func TestIT_Scaffold_PathTraversalPrevention(t *testing.T) {
 	assert.Contains(t, err.Error(), "path traversal")
 }
 
+func TestUT_LoadAndValidateConfig_RejectsLargeFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create an oversized config file (just over the limit)
+	configPath := filepath.Join(dir, "tag.template.json")
+	largeData := make([]byte, MaxConfigFileSize+1)
+	for i := range largeData {
+		largeData[i] = ' '
+	}
+	require.NoError(t, os.WriteFile(configPath, largeData, 0o644))
+
+	s, err := NewScaffold(Options{NoInput: true})
+	require.NoError(t, err)
+
+	_, err = s.loadAndValidateConfig(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config file too large")
+}
+
 func TestUT_ValidateSafeOutputDir(t *testing.T) {
 	tests := []struct {
 		name    string

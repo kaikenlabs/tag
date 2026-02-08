@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // Save saves replay data for the given template source.
@@ -33,7 +35,7 @@ func Save(templateSource, version string, values map[string]any, secrets map[str
 	}
 
 	// Ensure replay directory exists with secure permissions
-	if err := os.MkdirAll(replayDir, 0o700); err != nil {
+	if err := os.MkdirAll(replayDir, types.DirModePrivate); err != nil {
 		return NewReplayError(templateID, "save", fmt.Errorf("failed to create replay directory: %w", err))
 	}
 
@@ -59,7 +61,7 @@ func Save(templateSource, version string, values map[string]any, secrets map[str
 
 	// Write atomically: write to temp file then rename
 	tempPath := filePath + ".tmp"
-	if err := os.WriteFile(tempPath, jsonData, 0o600); err != nil {
+	if err := os.WriteFile(tempPath, jsonData, types.FileModePrivate); err != nil {
 		return NewReplayError(templateID, "save", fmt.Errorf("failed to write replay file: %w", err))
 	}
 
@@ -102,4 +104,3 @@ func getReplayDir() (string, error) {
 	}
 	return filepath.Join(homeDir, ".tag", DefaultReplayDir), nil
 }
-
