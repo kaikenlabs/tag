@@ -96,6 +96,7 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── types.go            - TemplateConfig, VariableDef, Options
     │       ├── processor.go        - Path placeholder processing (Gonja)
     │       ├── hooks.go            - Pre/post scaffold hook execution
+    │       ├── hookenv.go          - Hook environment variable building
     │       ├── prompt.go           - Interactive prompting utilities
     │       ├── output.go           - Output directory handling
     │       ├── cookiecutter_detect.go - Cookiecutter template detection
@@ -128,8 +129,10 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── auth.go             - Auth provider (Bearer for Bitbucket, Basic for GitHub/GitLab)
     │       └── errors.go           - Custom error types with provider hints
     │
-    ├── internal/engine/        Code generation engine
+    ├── internal/engine/        Code generation engine + template parsing
     │       ├── engine.go           - Generator execution
+    │       ├── parser.go           - Template parsing logic (merged from parser/)
+    │       ├── parser_types.go     - Parser type definitions
     │       ├── types.go            - Generator bundle types
     │       └── interfaces.go       - Generator interface definitions
     │
@@ -138,14 +141,7 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       └── validate.go         - Config validation
     │
     ├── internal/formats/       String formatting utilities
-    │       ├── cases.go            - Case conversions (snake, pascal, camel, etc.)
-    │       └── stringers.go        - String formatting helpers
-    │
-    ├── internal/parser/        Template parsing
-    │       ├── parser.go           - Template parsing logic
-    │       ├── lexer.go            - Lexical analysis
-    │       ├── types.go            - Parser type definitions
-    │       └── errors.go           - Parser error types
+    │       └── cases.go            - Case conversions (snake, pascal, camel, etc.)
     │
     ├── internal/replay/        Replay system for saved inputs
     ├── internal/schema/        JSON Schema validation

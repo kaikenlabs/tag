@@ -1,4 +1,4 @@
-package parser
+package engine
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockExecutor implements template.TemplateExecutor for testing NewWithExecutor.
+// mockExecutor implements template.TemplateExecutor for testing NewParserWithExecutor.
 type mockExecutor struct {
 	executeToStringResult string
 	executeToStringErr    error
@@ -50,7 +50,16 @@ func (m *mockTemplate) Execute(_ template.Context) (string, error) {
 
 var _ template.Template = (*mockTemplate)(nil)
 
-func TestUT_withTemplates(t *testing.T) {
+// newTestParser creates a TemplateParser for tests using a real template engine.
+// This replaces the old parser.New() / newParserLegacy() in tests.
+func newTestParser(t *testing.T) TemplateParser {
+	t.Helper()
+	eng, err := template.NewEngine()
+	require.NoError(t, err)
+	return NewParserWithExecutor(eng, nil, nil)
+}
+
+func TestUT_LoadTemplateFiles(t *testing.T) {
 	type args struct {
 		fileSuffix string
 		dirPath    string
@@ -82,7 +91,7 @@ func TestUT_withTemplates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := withTemplates(tt.args.dirPath, tt.args.fileSuffix)
+			got, err := LoadTemplateFiles(tt.args.dirPath, tt.args.fileSuffix)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -103,8 +112,7 @@ to: output/file.go
 ---
 hello {{ name }}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 
 	// Override with test template
 	te.templates = map[string]string{"tmp": strTmp}
@@ -126,8 +134,7 @@ to: {{ name|snake }}/{{ name|snake }}.go
 ---
 package {{ name|snake }}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	input := InputData{
@@ -150,8 +157,7 @@ camel: {{ name|camel }}
 kebab: {{ name|kebab }}
 plural: {{ name|plural }}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	input := InputData{
@@ -175,8 +181,7 @@ to: {{ vars.output_dir }}/file.go
 ---
 // Module: {{ vars.module_name }}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	input := InputData{
@@ -204,8 +209,7 @@ n.kebab_case: {{ n.kebab_case }}
 n.lower_case: {{ n.lower_case }}
 n.upper_case: {{ n.upper_case }}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	input := InputData{
@@ -230,8 +234,7 @@ to: output.go
 ---
 content
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	data, err := te.Parse(InputData{Name: "test"})
@@ -246,8 +249,7 @@ append: true
 ---
 appended content
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	data, err := te.Parse(InputData{Name: "test"})
@@ -263,8 +265,7 @@ after: // marker
 ---
 injected content
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	data, err := te.Parse(InputData{Name: "test"})
@@ -282,8 +283,7 @@ before: // marker
 ---
 injected content
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	data, err := te.Parse(InputData{Name: "test"})
@@ -301,8 +301,7 @@ custom_key: custom_value
 ---
 value: {{ vars.custom_key }}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	data, err := te.Parse(InputData{Name: "test"})
@@ -318,8 +317,7 @@ value: template_default
 ---
 value: {{ vars.value }}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	input := InputData{
@@ -340,11 +338,10 @@ to: output.go
 ---
 {{ name|invalid_filter_xyz }}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
-	_, err = te.Parse(InputData{Name: "test"})
+	_, err := te.Parse(InputData{Name: "test"})
 	assert.Error(t, err)
 }
 
@@ -366,8 +363,7 @@ to: output.go
 ---
 create`,
 	}
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = templates
 
 	data, err := te.Parse(InputData{Name: "test"})
@@ -390,8 +386,7 @@ feature enabled
 feature disabled
 {% endif %}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	// With feature enabled
@@ -413,8 +408,7 @@ to: output.go
 item {{ i }}
 {% endfor %}
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
 	data, err := te.Parse(InputData{Name: "test"})
@@ -432,11 +426,10 @@ append: true
 ---
 content without destination
 `
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
-	_, err = te.Parse(InputData{Name: "test"})
+	_, err := te.Parse(InputData{Name: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "to")
 }
@@ -445,17 +438,16 @@ func TestUT_Parse_NoMetadataBlockErrors(t *testing.T) {
 	// Template without metadata block should error (no 'to' field)
 	strTmp := `just content without metadata block`
 
-	te, err := New(".", "", "")
-	require.NoError(t, err)
+	te := newTestParser(t)
 	te.templates = map[string]string{"tmp": strTmp}
 
-	_, err = te.Parse(InputData{Name: "test"})
+	_, err := te.Parse(InputData{Name: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "to")
 }
 
-func TestUT_NewWithExecutor_ParsesTemplate(t *testing.T) {
-	// Verify NewWithExecutor wires the mock executor correctly.
+func TestUT_NewParserWithExecutor_ParsesTemplate(t *testing.T) {
+	// Verify NewParserWithExecutor wires the mock executor correctly.
 	mock := &mockExecutor{
 		renderMetadataResult: &template.Metadata{
 			To:     "output/service.go",
@@ -466,7 +458,7 @@ func TestUT_NewWithExecutor_ParsesTemplate(t *testing.T) {
 	}
 
 	tmplContent := "---\nto: output/service.go\n---\ngenerated code\n"
-	te := NewWithExecutor(mock, map[string]string{"svc.tmpl": tmplContent}, nil)
+	te := NewParserWithExecutor(mock, map[string]string{"svc.tmpl": tmplContent}, nil)
 
 	data, err := te.Parse(InputData{Name: "MyService"})
 	require.NoError(t, err)
@@ -476,21 +468,21 @@ func TestUT_NewWithExecutor_ParsesTemplate(t *testing.T) {
 	assert.Equal(t, "generated code", string(data[0].Output))
 }
 
-func TestUT_NewWithExecutor_MetadataError(t *testing.T) {
+func TestUT_NewParserWithExecutor_MetadataError(t *testing.T) {
 	// Verify that metadata rendering errors propagate correctly.
 	mock := &mockExecutor{
 		renderMetadataErr: fmt.Errorf("mock metadata error"),
 	}
 
 	tmplContent := "---\nto: output.go\n---\nbody\n"
-	te := NewWithExecutor(mock, map[string]string{"tmpl": tmplContent}, nil)
+	te := NewParserWithExecutor(mock, map[string]string{"tmpl": tmplContent}, nil)
 
 	_, err := te.Parse(InputData{Name: "test"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mock metadata error")
 }
 
-func TestUT_NewWithExecutor_BodyRenderError(t *testing.T) {
+func TestUT_NewParserWithExecutor_BodyRenderError(t *testing.T) {
 	// Verify that body rendering errors propagate correctly.
 	mock := &mockExecutor{
 		renderMetadataResult: &template.Metadata{
@@ -502,7 +494,7 @@ func TestUT_NewWithExecutor_BodyRenderError(t *testing.T) {
 	}
 
 	tmplContent := "---\nto: output.go\n---\nbody\n"
-	te := NewWithExecutor(mock, map[string]string{"tmpl": tmplContent}, nil)
+	te := NewParserWithExecutor(mock, map[string]string{"tmpl": tmplContent}, nil)
 
 	_, err := te.Parse(InputData{Name: "test"})
 	require.Error(t, err)

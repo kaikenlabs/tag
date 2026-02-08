@@ -78,8 +78,6 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	// Step 2b: Set derived variable names on the processor for SSTI protection.
-	// Derived variables have template expressions as defaults and need recursive
-	// rendering to resolve. Non-derived variables are escaped to prevent SSTI.
 	if processor, ok := s.Processor.(*DefaultPathProcessor); ok {
 		derivedNames := make(map[string]bool)
 		for name, def := range config.Vars {
@@ -92,8 +90,6 @@ func (s *Scaffold) Run(opts Options) error {
 
 	// Step 3: Collect variables
 	collectOpts := opts.CollectOpts()
-
-	// Add project name to meta if provided
 	if opts.ProjectName != "" {
 		if collectOpts.Meta == nil {
 			collectOpts.Meta = make(map[string]string)
@@ -106,42 +102,15 @@ func (s *Scaffold) Run(opts Options) error {
 		return fmt.Errorf("failed to collect variables: %w", err)
 	}
 
-	// Step 4: Determine output directory
-	outputDir := opts.OutputDir
-	if outputDir == "" {
-		// Use project_name as output directory
-		if projectName, ok := vars["project_name"].(string); ok && projectName != "" {
-			outputDir = projectName
-		} else {
-			return fmt.Errorf("output directory not specified and project_name variable not set")
-		}
+	// Step 4: Resolve output directory
+	outputDir, err := resolveOutputDir(opts.OutputDir, vars)
+	if err != nil {
+		return err
 	}
 
-	// Make output directory absolute
-	if !filepath.IsAbs(outputDir) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
-		}
-		outputDir = filepath.Join(cwd, outputDir)
-	}
-
-	// Step 5: Safety check for dangerous paths when using --force
-	if opts.Force {
-		if err := validateSafeOutputDir(outputDir); err != nil {
-			return fmt.Errorf("refusing to use --force with unsafe path: %w", err)
-		}
-	}
-
-	// Check output directory doesn't exist (unless --force)
-	if _, err := os.Stat(outputDir); err == nil {
-		if !opts.Force {
-			return fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, outputDir)
-		}
-		// Remove existing directory
-		if err := os.RemoveAll(outputDir); err != nil {
-			return fmt.Errorf("failed to remove existing output: %w", err)
-		}
+	// Step 5: Prepare output directory (safety checks, force handling)
+	if err := prepareOutputDir(outputDir, opts.Force); err != nil {
+		return err
 	}
 
 	// Make template directory absolute for hooks
@@ -154,72 +123,110 @@ func (s *Scaffold) Run(opts Options) error {
 		templateDirAbs = filepath.Join(cwd, templateDirAbs)
 	}
 
-	// Step 6: Build hook environment
+	// Step 6: Build hook environment and check confirmation
 	hookEnv := BuildHookEnv(vars, templateDirAbs, outputDir)
 
-	// Step 7: Check hook confirmation
 	hooksAllowed, err := ConfirmHooks(config.Hooks, opts.AcceptHooks, opts.NoInput, s.Prompter)
 	if err != nil {
 		return fmt.Errorf("hook confirmation failed: %w", err)
 	}
 
-	// Step 8: Run pre-scaffold hooks (before creating output directory)
+	// Step 7: Run pre-scaffold hooks
 	if hooksAllowed {
 		if err := RunPreScaffoldHooks(s.HookRunner, config.Hooks, templateDirAbs, hookEnv); err != nil {
 			return fmt.Errorf("pre-scaffold hook failed: %w", err)
 		}
 	}
 
-	// Step 9: Create output directory
+	// Step 8: Create output directory and write files
 	if err := os.MkdirAll(outputDir, types.DirMode); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Step 10: Process template files
 	if err := s.Writer.Write(opts.TemplateDir, outputDir, vars); err != nil {
-		// Clean up on error
 		_ = os.RemoveAll(outputDir)
 		return fmt.Errorf("failed to process template: %w", err)
 	}
 
-	// Step 11: Copy _generators to .tag.templates
 	if err := CopyGenerators(opts.TemplateDir, outputDir); err != nil {
-		// Clean up on error
 		_ = os.RemoveAll(outputDir)
 		return fmt.Errorf("failed to copy generators: %w", err)
 	}
 
-	// Step 12: Generate .tagconfig.json
+	// Step 9: Generate config and run post-scaffold hooks
 	if err := GenerateTagConfig(outputDir); err != nil {
 		return fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
-	// Step 13a: Run post-scaffold hooks (failures are warnings, not errors)
 	if hooksAllowed {
 		RunPostScaffoldHooks(s.HookRunner, config.Hooks, outputDir, hookEnv)
 	}
 
-	// Step 13b: Save replay data (unless --no-save)
-	if !opts.NoSave && opts.TemplateRef != "" {
-		// Build secrets map from variable definitions
-		secrets := make(map[string]bool)
-		for name, def := range config.Vars {
-			if def.Secret {
-				secrets[name] = true
-			}
-		}
-
-		// Save replay data
-		if err := replay.Save(opts.TemplateRef, config.Version, vars, secrets); err != nil {
-			// Don't fail the scaffold for replay save errors, just warn
-			fmt.Printf("Warning: failed to save replay data: %v\n", err)
-		}
-	}
-
-	// Step 14: Display summary
+	// Step 10: Save replay data and display summary
+	saveReplayData(opts, config, vars)
 	s.displaySummary(outputDir, vars)
 
 	return nil
+}
+
+// resolveOutputDir determines and returns the absolute output directory path.
+func resolveOutputDir(outputDir string, vars map[string]any) (string, error) {
+	if outputDir == "" {
+		if projectName, ok := vars["project_name"].(string); ok && projectName != "" {
+			outputDir = projectName
+		} else {
+			return "", fmt.Errorf("output directory not specified and project_name variable not set")
+		}
+	}
+
+	if !filepath.IsAbs(outputDir) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get working directory: %w", err)
+		}
+		outputDir = filepath.Join(cwd, outputDir)
+	}
+
+	return outputDir, nil
+}
+
+// prepareOutputDir validates and prepares the output directory,
+// handling --force safety checks and existing directory removal.
+func prepareOutputDir(outputDir string, force bool) error {
+	if force {
+		if err := validateSafeOutputDir(outputDir); err != nil {
+			return fmt.Errorf("refusing to use --force with unsafe path: %w", err)
+		}
+	}
+
+	if _, err := os.Stat(outputDir); err == nil {
+		if !force {
+			return fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, outputDir)
+		}
+		if err := os.RemoveAll(outputDir); err != nil {
+			return fmt.Errorf("failed to remove existing output: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// saveReplayData saves input values for reproducible scaffolding.
+func saveReplayData(opts Options, config *TemplateConfig, vars map[string]any) {
+	if opts.NoSave || opts.TemplateRef == "" {
+		return
+	}
+
+	secrets := make(map[string]bool)
+	for name, def := range config.Vars {
+		if def.Secret {
+			secrets[name] = true
+		}
+	}
+
+	if err := replay.Save(opts.TemplateRef, config.Version, vars, secrets); err != nil {
+		fmt.Printf("Warning: failed to save replay data: %v\n", err)
+	}
 }
 
 // loadAndValidateConfig loads tag.template.json and validates it against the schema.

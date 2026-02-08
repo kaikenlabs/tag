@@ -3,6 +3,5 @@ to: test/output/output.go
 inject: true
 before: }, nil
 ---
-{{ $repo := printf "%sRepo" .N.PascalCase }}
-{{ $constructor := printf "New%sRepo(db, logger)" .N.PascalCase }}
-{{- printf "\n    %s%s %s," $repo ":" $constructor }}
+
+    {{ name | pascal }}Repo: New{{ name | pascal }}Repo(db, logger),
