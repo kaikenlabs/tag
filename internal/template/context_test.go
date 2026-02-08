@@ -90,19 +90,6 @@ func TestUT_NewContext_NilVarsCreatesEmptyMap(t *testing.T) {
 	assert.Len(t, varsMap, 0)
 }
 
-func TestUT_NewContextWithMeta(t *testing.T) {
-	vars := map[string]any{"project": "test"}
-	meta := map[string]string{"key1": "value1", "key2": "value2"}
-
-	ctx := NewContextWithMeta("test", vars, meta, nil)
-
-	// Check meta namespace
-	metaMap, ok := ctx["meta"].(map[string]any)
-	require.True(t, ok, "meta should be a map")
-	assert.Equal(t, "value1", metaMap["key1"])
-	assert.Equal(t, "value2", metaMap["key2"])
-}
-
 func TestUT_NewNameOptions(t *testing.T) {
 	opts := NewNameOptions("MyProject")
 

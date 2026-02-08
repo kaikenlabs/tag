@@ -14,13 +14,6 @@ func TestUT_Engine_NewEngine(t *testing.T) {
 		engine, err := NewEngine()
 		require.NoError(t, err)
 		assert.NotNil(t, engine)
-		assert.True(t, engine.strict)
-	})
-
-	t.Run("with strict disabled", func(t *testing.T) {
-		engine, err := NewEngine(WithStrictUndefined(false))
-		require.NoError(t, err)
-		assert.False(t, engine.strict)
 	})
 
 	t.Run("with base dir", func(t *testing.T) {

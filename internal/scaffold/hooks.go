@@ -289,10 +289,6 @@ func formatEnvKey(name string) string {
 const (
 	// MaxEnvValueLen is the maximum length for a single environment variable value.
 	MaxEnvValueLen = 4096
-
-	// envDangerousChars are characters in env values that could be dangerous
-	// if hook scripts use unquoted shell expansions.
-	envDangerousChars = ";|&$`"
 )
 
 // sanitizeEnvValue validates and sanitizes an environment variable value.
