@@ -55,9 +55,19 @@ func (p *EnvAuthProvider) GitAuth(ref *Reference) (transport.AuthMethod, error) 
 		return nil, nil
 	}
 
-	// Bitbucket access tokens require Bearer auth
+	// Bitbucket supports multiple token types:
+	// - Atlassian API tokens (ATAT...): basic auth with email as username
+	// - Workspace/repo access tokens: basic auth with "x-token-auth" as username
+	// BITBUCKET_USERNAME selects which format to use.
 	if ref.Provider == ProviderBitbucket {
-		return &http.TokenAuth{Token: token}, nil
+		username := "x-token-auth"
+		if bbUser := os.Getenv("BITBUCKET_USERNAME"); bbUser != "" {
+			username = bbUser
+		}
+		return &http.BasicAuth{
+			Username: username,
+			Password: token,
+		}, nil
 	}
 
 	// GitHub and GitLab use basic auth with x-access-token

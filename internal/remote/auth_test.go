@@ -86,9 +86,10 @@ func TestUT_EnvAuthProvider_GitAuth_HTTPSWithoutToken(t *testing.T) {
 	assert.Nil(t, auth) // No auth, will try public access
 }
 
-func TestUT_EnvAuthProvider_GitAuth_BitbucketUsesBearer(t *testing.T) {
+func TestUT_EnvAuthProvider_GitAuth_BitbucketWithUsername(t *testing.T) {
 	provider := NewEnvAuthProvider()
 	t.Setenv("BITBUCKET_TOKEN", "test-bb-token")
+	t.Setenv("BITBUCKET_USERNAME", "user@example.com")
 
 	ref := &Reference{
 		Type:     ReferenceTypeGit,
@@ -100,9 +101,31 @@ func TestUT_EnvAuthProvider_GitAuth_BitbucketUsesBearer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, auth)
 
-	tokenAuth, ok := auth.(*githttp.TokenAuth)
-	require.True(t, ok, "expected TokenAuth for Bitbucket, got %T", auth)
-	assert.Equal(t, "test-bb-token", tokenAuth.Token)
+	basicAuth, ok := auth.(*githttp.BasicAuth)
+	require.True(t, ok, "expected BasicAuth for Bitbucket, got %T", auth)
+	assert.Equal(t, "user@example.com", basicAuth.Username)
+	assert.Equal(t, "test-bb-token", basicAuth.Password)
+}
+
+func TestUT_EnvAuthProvider_GitAuth_BitbucketWithoutUsername(t *testing.T) {
+	provider := NewEnvAuthProvider()
+	t.Setenv("BITBUCKET_TOKEN", "test-bb-token")
+	t.Setenv("BITBUCKET_USERNAME", "")
+
+	ref := &Reference{
+		Type:     ReferenceTypeGit,
+		Provider: ProviderBitbucket,
+		URL:      "https://bitbucket.org/user/repo.git",
+	}
+
+	auth, err := provider.GitAuth(ref)
+	require.NoError(t, err)
+	require.NotNil(t, auth)
+
+	basicAuth, ok := auth.(*githttp.BasicAuth)
+	require.True(t, ok, "expected BasicAuth for Bitbucket, got %T", auth)
+	assert.Equal(t, "x-token-auth", basicAuth.Username)
+	assert.Equal(t, "test-bb-token", basicAuth.Password)
 }
 
 func TestUT_EnvAuthProvider_GitAuth_GitHubUsesBasicAuth(t *testing.T) {

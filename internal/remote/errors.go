@@ -85,7 +85,7 @@ func (e *AuthError) Error() string {
 	case ProviderGitLab:
 		hint = " (hint: set GITLAB_TOKEN environment variable)"
 	case ProviderBitbucket:
-		hint = " (hint: set BITBUCKET_TOKEN environment variable with a workspace or repository access token)"
+		hint = " (hint: set BITBUCKET_TOKEN and BITBUCKET_USERNAME (your Atlassian email) for API tokens, or just BITBUCKET_TOKEN for workspace/repository access tokens)"
 	}
 
 	if e.Err != nil {
