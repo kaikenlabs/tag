@@ -6,7 +6,7 @@ import (
 )
 
 type Core struct {
-	parser parser.TemplateEngine
+	parser parser.TemplateEngine //nolint:staticcheck // legacy generate pipeline still active
 	fwr    writer.FileWriter
 }
 
