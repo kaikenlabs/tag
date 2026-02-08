@@ -172,8 +172,7 @@ func runHooks(hooks [][]string, phase scaffold.HookPhase) error {
 		return app.Errorf("failed to get working directory: %w", err)
 	}
 
-	runner := scaffold.NewArgvHookRunner()
-	results, err := runner.RunArgv(phase, hooks, dir, nil)
+	results, err := scaffold.RunArgvHooks(phase, hooks, dir, nil)
 
 	// Print output from executed hooks
 	for _, result := range results {

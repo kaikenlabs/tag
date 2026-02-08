@@ -9,10 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/google/shlex"
 )
 
 const (
@@ -54,46 +55,14 @@ type HookRunner interface {
 	Run(phase HookPhase, commands []string, workDir string, env []string) ([]HookResult, error)
 }
 
-// ShellHookRunner executes hooks via the system shell.
-type ShellHookRunner struct{}
-
-// NewHookRunner creates a new hook runner using the system shell.
+// NewHookRunner creates a new hook runner using direct argv execution (no shell interpretation).
 func NewHookRunner() HookRunner {
-	return &ShellHookRunner{}
+	return &ArgvHookRunner{}
 }
 
-// Run executes commands sequentially via the system shell.
-// On Unix: /bin/sh -c "command"
-// On Windows: cmd.exe /C "command"
-func (r *ShellHookRunner) Run(phase HookPhase, commands []string, workDir string, env []string) ([]HookResult, error) {
-	if len(commands) == 0 {
-		return nil, nil
-	}
-
-	results := make([]HookResult, 0, len(commands))
-
-	for _, cmdStr := range commands {
-		result := r.executeCommand(cmdStr, workDir, env)
-		results = append(results, result)
-
-		if result.Err != nil {
-			return results, NewHookError(phase, cmdStr, result.Output, result.ExitCode, result.Err)
-		}
-	}
-
-	return results, nil
-}
-
-// executeCommand runs a single command via the system shell with timeout.
-func (r *ShellHookRunner) executeCommand(cmdStr, workDir string, env []string) HookResult {
-	var cmdArgs []string
-	if runtime.GOOS == "windows" {
-		cmdArgs = []string{"cmd.exe", "/C", cmdStr}
-	} else {
-		cmdArgs = []string{"/bin/sh", "-c", cmdStr}
-	}
-	return execWithTimeout(cmdStr, cmdArgs, workDir, env)
-}
+// shellMetachars contains characters that indicate shell features (pipes, redirects, etc.)
+// which won't work with direct argv execution. Quotes are excluded since shlex handles them.
+const shellMetachars = "|&;<>()$`!*?#~"
 
 // execWithTimeout runs a command with timeout, output limiting, and structured result handling.
 // cmdDisplay is the human-readable command string for results/errors.
@@ -180,12 +149,61 @@ func (l *limitedBuffer) String() string {
 var _ io.Writer = (*limitedBuffer)(nil)
 
 // ArgvHookRunner executes hooks using direct argv arrays (no shell interpretation).
-// This is safer than ShellHookRunner as it prevents shell injection.
+// It implements HookRunner and also provides RunArgv for pre-split command arrays.
+// This is the unified hook runner used by both scaffold and generate commands.
 type ArgvHookRunner struct{}
 
 // NewArgvHookRunner creates a new argv-based hook runner.
 func NewArgvHookRunner() *ArgvHookRunner {
 	return &ArgvHookRunner{}
+}
+
+// Run implements HookRunner by splitting shell command strings into argv arrays
+// using POSIX shell quoting rules, then executing them directly (no shell interpretation).
+// Commands that use shell features (pipes, redirects, variable expansion) must explicitly
+// invoke a shell, e.g. "sh -c 'echo hello | grep hello'".
+func (r *ArgvHookRunner) Run(phase HookPhase, commands []string, workDir string, env []string) ([]HookResult, error) {
+	if len(commands) == 0 {
+		return nil, nil
+	}
+
+	// Convert string commands to argv arrays
+	argvCommands := make([][]string, 0, len(commands))
+	for _, cmdStr := range commands {
+		// Warn if the command contains shell metacharacters and doesn't already use a shell
+		if containsShellMetachars(cmdStr) && !isExplicitShellCommand(cmdStr) {
+			fmt.Printf("Warning: hook command %q contains shell metacharacters that won't be interpreted.\n", cmdStr)
+			fmt.Printf("  If you need shell features, use: sh -c '%s'\n", cmdStr)
+		}
+
+		argv, err := shlex.Split(cmdStr)
+		if err != nil {
+			return nil, NewHookError(phase, cmdStr, "", 1, fmt.Errorf("failed to parse hook command: %w", err))
+		}
+		if len(argv) == 0 {
+			continue
+		}
+		argvCommands = append(argvCommands, argv)
+	}
+
+	return r.RunArgv(phase, argvCommands, workDir, env)
+}
+
+// containsShellMetachars checks if a command string contains shell metacharacters
+// that won't work with direct argv execution.
+func containsShellMetachars(cmd string) bool {
+	return strings.ContainsAny(cmd, shellMetachars)
+}
+
+// isExplicitShellCommand checks if a command already invokes a shell explicitly.
+func isExplicitShellCommand(cmd string) bool {
+	trimmed := strings.TrimSpace(cmd)
+	for _, prefix := range []string{"sh -c ", "bash -c ", "/bin/sh -c ", "/bin/bash -c ", "cmd /C ", "cmd.exe /C "} {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // RunArgv executes commands sequentially using direct argv arrays.
@@ -364,18 +382,8 @@ func RunPreScaffoldHooks(runner HookRunner, hooks *HooksConfig, templateDir stri
 	fmt.Printf("Running pre-scaffold hooks...\n")
 
 	results, err := runner.Run(HookPhasePre, hooks.PreScaffold, templateDir, env)
-	if err != nil {
-		// Print output from failed command
-		if len(results) > 0 {
-			lastResult := results[len(results)-1]
-			if lastResult.Output != "" {
-				fmt.Printf("Hook output:\n%s\n", lastResult.Output)
-			}
-		}
-		return err
-	}
 
-	// Print success output if any
+	// Print output from all executed commands for debugging context
 	for _, result := range results {
 		if result.Output != "" {
 			fmt.Print(result.Output)
@@ -385,7 +393,7 @@ func RunPreScaffoldHooks(runner HookRunner, hooks *HooksConfig, templateDir stri
 		}
 	}
 
-	return nil
+	return err
 }
 
 // RunPostScaffoldHooks executes post-scaffold hooks.
@@ -415,4 +423,16 @@ func RunPostScaffoldHooks(runner HookRunner, hooks *HooksConfig, outputDir strin
 		fmt.Printf("Warning: post-scaffold hook failed: %v\n", err)
 		fmt.Printf("Note: Scaffold completed successfully, but some post-scaffold tasks may not have run.\n")
 	}
+}
+
+// RunArgvHooks executes pre-split argv hook commands and prints their output.
+// This is used by the generate command which stores hooks as [][]string.
+// Returns an error if any command fails.
+func RunArgvHooks(phase HookPhase, hooks [][]string, workDir string, env []string) ([]HookResult, error) {
+	if len(hooks) == 0 {
+		return nil, nil
+	}
+
+	runner := NewArgvHookRunner()
+	return runner.RunArgv(phase, hooks, workDir, env)
 }
