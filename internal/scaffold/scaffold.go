@@ -79,14 +79,7 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	// Step 3: Collect variables
-	collectOpts := CollectOptions{
-		ValuesFile:  opts.ValuesFile,
-		Meta:        opts.Meta,
-		NoPrompt:    opts.NoInput,
-		IsTTY:       IsTTY(),
-		Replay:      opts.Replay,
-		TemplateRef: opts.TemplateRef,
-	}
+	collectOpts := opts.CollectOpts()
 
 	// Add project name to meta if provided
 	if opts.ProjectName != "" {
