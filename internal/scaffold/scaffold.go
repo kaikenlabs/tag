@@ -48,10 +48,7 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 
 	// Create other components
 	collector := NewVariableCollector(prompter)
-	processor, err := NewPathProcessor()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create path processor: %w", err)
-	}
+	processor := NewPathProcessor(engine)
 	writer := NewOutputWriter(engine, processor)
 
 	return &Scaffold{

@@ -21,12 +21,12 @@ type OutputWriter interface {
 
 // DefaultOutputWriter implements OutputWriter.
 type DefaultOutputWriter struct {
-	engine        *template.Engine
+	engine        template.TemplateRenderer
 	pathProcessor PathProcessor
 }
 
 // NewOutputWriter creates a new output writer.
-func NewOutputWriter(engine *template.Engine, pathProcessor PathProcessor) *DefaultOutputWriter {
+func NewOutputWriter(engine template.TemplateRenderer, pathProcessor PathProcessor) *DefaultOutputWriter {
 	return &DefaultOutputWriter{
 		engine:        engine,
 		pathProcessor: pathProcessor,

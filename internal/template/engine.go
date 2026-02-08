@@ -194,5 +194,8 @@ func (e *Engine) MustParseString(content string) Template {
 	return tmpl
 }
 
-// Compile-time interface check
-var _ Template = (*gonjaTemplate)(nil)
+// Compile-time interface checks
+var (
+	_ Template         = (*gonjaTemplate)(nil)
+	_ TemplateExecutor = (*Engine)(nil)
+)

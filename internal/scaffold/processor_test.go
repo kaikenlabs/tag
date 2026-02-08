@@ -3,15 +3,16 @@ package scaffold
 import (
 	"testing"
 
+	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func mustNewPathProcessor(t *testing.T) *DefaultPathProcessor {
 	t.Helper()
-	p, err := NewPathProcessor()
+	engine, err := template.NewEngine()
 	require.NoError(t, err)
-	return p
+	return NewPathProcessor(engine)
 }
 
 func TestUT_PathProcessor_SimpleVar(t *testing.T) {
@@ -319,7 +320,6 @@ func TestUT_HasPlaceholders(t *testing.T) {
 		})
 	}
 }
-
 
 func TestUT_PathProcessor_ConditionalFilename(t *testing.T) {
 	processor := mustNewPathProcessor(t)
