@@ -9,8 +9,9 @@ import (
 )
 
 type Write struct {
-	mx sync.Mutex
-	fs fileReadWrite
+	mx  sync.Mutex
+	fs  fileReadWrite
+	cwd string // cached working directory, resolved once at construction
 }
 
 type fileWrite struct{}

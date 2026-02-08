@@ -510,21 +510,22 @@ func shortProvider(p Provider) string {
 	}
 }
 
+// pathSanitizer is a pre-computed Replacer for characters problematic in file paths.
+var pathSanitizer = strings.NewReplacer(
+	"/", "_",
+	"\\", "_",
+	":", "_",
+	"*", "_",
+	"?", "_",
+	"\"", "_",
+	"<", "_",
+	">", "_",
+	"|", "_",
+)
+
 // sanitizeForPath removes or replaces characters that are problematic in file paths.
 func sanitizeForPath(s string) string {
-	// Replace problematic characters
-	replacer := strings.NewReplacer(
-		"/", "_",
-		"\\", "_",
-		":", "_",
-		"*", "_",
-		"?", "_",
-		"\"", "_",
-		"<", "_",
-		">", "_",
-		"|", "_",
-	)
-	return replacer.Replace(s)
+	return pathSanitizer.Replace(s)
 }
 
 // validateRefComponent checks that a reference component (owner, repo) is safe.
