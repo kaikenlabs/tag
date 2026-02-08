@@ -175,3 +175,39 @@ func TestIT_GitFetcher_PublicGitHubRepo(t *testing.T) {
 	_, err = os.Stat(filepath.Join(path, "README"))
 	assert.NoError(t, err)
 }
+
+// --- Unit Tests for sanitizeErrorMessage ---
+
+func TestUT_SanitizeErrorMessage_RedactsGitHubToken(t *testing.T) {
+	msg := `authentication failed: https://ghp_abc123XYZ789@github.com/owner/repo.git`
+	result := sanitizeErrorMessage(msg, ProviderGitHub)
+	assert.NotContains(t, result, "ghp_abc123XYZ789")
+	assert.Contains(t, result, "[REDACTED]")
+}
+
+func TestUT_SanitizeErrorMessage_RedactsGitLabToken(t *testing.T) {
+	msg := `authentication failed: error with token glpat-abc123XYZ789 in request`
+	result := sanitizeErrorMessage(msg, ProviderGitLab)
+	assert.NotContains(t, result, "glpat-abc123XYZ789")
+	assert.Contains(t, result, "[REDACTED]")
+}
+
+func TestUT_SanitizeErrorMessage_RedactsURLCredentials(t *testing.T) {
+	msg := `clone failed: https://x-access-token:mytoken123@github.com/owner/repo.git: 401`
+	result := sanitizeErrorMessage(msg, ProviderGitHub)
+	assert.NotContains(t, result, "mytoken123")
+	assert.Contains(t, result, "[REDACTED]@")
+}
+
+func TestUT_SanitizeErrorMessage_PreservesCleanMessages(t *testing.T) {
+	msg := `repository not found: https://github.com/owner/repo`
+	result := sanitizeErrorMessage(msg, ProviderGitHub)
+	assert.Equal(t, msg, result)
+}
+
+func TestUT_SanitizeErrorMessage_RedactsBitbucketToken(t *testing.T) {
+	msg := `error: ATATT3xFfGF0abc123 is invalid`
+	result := sanitizeErrorMessage(msg, ProviderBitbucket)
+	assert.NotContains(t, result, "ATATT3xFfGF0abc123")
+	assert.Contains(t, result, "[REDACTED]")
+}
