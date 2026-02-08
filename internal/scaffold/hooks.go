@@ -300,6 +300,60 @@ func stringifyValue(value any) string {
 	}
 }
 
+// ConfirmHooks checks whether hooks should be executed based on flags and user confirmation.
+// Returns true if hooks should run, false if they should be skipped.
+// Returns an error only if prompting fails.
+func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompter) (bool, error) {
+	if hooks == nil {
+		return false, nil
+	}
+
+	allHooks := make([]string, 0)
+	allHooks = append(allHooks, hooks.PreScaffold...)
+	allHooks = append(allHooks, hooks.PostScaffold...)
+
+	if len(allHooks) == 0 {
+		return false, nil
+	}
+
+	// --accept-hooks: run without prompting
+	if acceptHooks {
+		return true, nil
+	}
+
+	// --no-input without --accept-hooks: skip hooks
+	if noInput {
+		fmt.Println("Skipping hooks (use --accept-hooks to run them in non-interactive mode).")
+		return false, nil
+	}
+
+	// Interactive: display hooks and prompt for confirmation
+	fmt.Println("This template defines the following hooks:")
+	if len(hooks.PreScaffold) > 0 {
+		fmt.Println("  Pre-scaffold:")
+		for _, cmd := range hooks.PreScaffold {
+			fmt.Printf("    - %s\n", cmd)
+		}
+	}
+	if len(hooks.PostScaffold) > 0 {
+		fmt.Println("  Post-scaffold:")
+		for _, cmd := range hooks.PostScaffold {
+			fmt.Printf("    - %s\n", cmd)
+		}
+	}
+
+	confirmed, err := prompter.Confirm("Do you want to execute these hooks?", false)
+	if err != nil {
+		return false, fmt.Errorf("failed to confirm hooks: %w", err)
+	}
+
+	if !confirmed {
+		fmt.Println("Hooks skipped by user choice.")
+	}
+
+	return confirmed, nil
+}
+
 // RunPreScaffoldHooks executes pre-scaffold hooks and returns an error if any fail.
 // Pre-scaffold hooks run in the template directory before any files are created.
 func RunPreScaffoldHooks(runner HookRunner, hooks *HooksConfig, templateDir string, env []string) error {

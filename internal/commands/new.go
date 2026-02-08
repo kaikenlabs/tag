@@ -43,8 +43,16 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 		return app.Errorf("please provide the generator name")
 	}
 
+	if err := ValidateNameSafe(generator); err != nil {
+		return app.Errorf("invalid generator name: %w", err)
+	}
+
 	slog.Info(chalk.Green("creating new generator"), "path", cfg.Env.Path)
 	dirPath := filepath.Join(cfg.Env.Path, generator, fmt.Sprintf("%s%s", generator, cfg.Env.Extension))
+
+	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
+		return app.Errorf("path safety check failed: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
 		return app.Errorf("error creating %s: %w", dirPath, err)
 	}

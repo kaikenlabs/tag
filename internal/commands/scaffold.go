@@ -101,8 +101,8 @@ Examples:
 				Usage: "Don't save variable values for future replay",
 			},
 			&cli.BoolFlag{
-				Name:  "allow-hooks",
-				Usage: "Allow pre/post scaffold hooks to run for remote templates (disabled by default for security)",
+				Name:  "accept-hooks",
+				Usage: "Accept and run pre/post scaffold hooks without prompting for confirmation",
 			},
 		},
 		Action: scaffoldAction,
@@ -153,7 +153,7 @@ func scaffoldAction(c *cli.Context) error {
 		Replay:      c.Bool("replay"),
 		NoSave:      c.Bool("no-save"),
 		TemplateRef: templateRef, // Pass original reference for replay ID generation
-		AllowHooks:  c.Bool("allow-hooks"),
+		AcceptHooks: c.Bool("accept-hooks"),
 		IsRemote:    isRemote,
 	}
 
