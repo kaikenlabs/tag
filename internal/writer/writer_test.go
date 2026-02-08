@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -33,6 +34,105 @@ func TestWrite_WriteFile_write_error_should_return_error(t *testing.T) {
 	}
 	err := w.WriteFile("blood", []byte("hello world"), 0o700)
 	assert.Error(t, err)
+}
+
+func TestUT_WriteFile_PathContainment(t *testing.T) {
+	t.Run("rejects paths outside working directory", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+		writeCalled := false
+		mockWr.WriteFileFunc = func(name string, data []byte, perm fs.FileMode) error {
+			writeCalled = true
+			return nil
+		}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.WriteFile("/etc/cron.d/backdoor", []byte("malicious"), 0o750)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "path safety check failed")
+		assert.False(t, writeCalled, "file should not have been written")
+	})
+
+	t.Run("rejects dotdot traversal", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+		writeCalled := false
+		mockWr.WriteFileFunc = func(name string, data []byte, perm fs.FileMode) error {
+			writeCalled = true
+			return nil
+		}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.WriteFile("../../etc/passwd", []byte("malicious"), 0o750)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "path safety check failed")
+		assert.False(t, writeCalled, "file should not have been written")
+	})
+
+	t.Run("allows paths within working directory", func(t *testing.T) {
+		mockWr := fileReadWriteMock{}
+
+		w := Write{
+			mx: sync.Mutex{},
+			fs: &mockWr,
+		}
+
+		err := w.WriteFile("mypackage/output.go", []byte("package mypackage"), 0o750)
+		require.NoError(t, err)
+	})
+}
+
+func TestUT_ValidatePathWithinDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name    string
+		path    string
+		baseDir string
+		wantErr bool
+	}{
+		{
+			name:    "path within base",
+			path:    filepath.Join(tmpDir, "sub", "file.go"),
+			baseDir: tmpDir,
+			wantErr: false,
+		},
+		{
+			name:    "path escapes base",
+			path:    filepath.Join(tmpDir, "..", "escape"),
+			baseDir: tmpDir,
+			wantErr: true,
+		},
+		{
+			name:    "absolute path outside base",
+			path:    "/etc/passwd",
+			baseDir: tmpDir,
+			wantErr: true,
+		},
+		{
+			name:    "path equals base",
+			path:    tmpDir,
+			baseDir: tmpDir,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validatePathWithinDir(tt.path, tt.baseDir)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestWrite_AppendFile_should_return_ok(t *testing.T) {

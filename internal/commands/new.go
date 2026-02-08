@@ -63,7 +63,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			slog.Info("error closing file", "error", err.Error())
+			slog.Warn("error closing file", "error", err.Error())
 		}
 	}()
 

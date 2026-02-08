@@ -178,6 +178,43 @@ func TestUT_Resolver_InvalidReference(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid")
 }
 
+func TestUT_ApplySubPath_Containment(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheDir := filepath.Join(tmpDir, "cache")
+
+	resolver, err := NewResolverWithOptions(cacheDir, nil)
+	require.NoError(t, err)
+
+	// Create a base directory with a subdirectory
+	baseDir := filepath.Join(tmpDir, "base")
+	subDir := filepath.Join(baseDir, "templates")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	t.Run("valid subpath returns correct path", func(t *testing.T) {
+		path, err := resolver.applySubPath(baseDir, "templates")
+		require.NoError(t, err)
+		assert.Equal(t, subDir, path)
+	})
+
+	t.Run("empty subpath returns base path", func(t *testing.T) {
+		path, err := resolver.applySubPath(baseDir, "")
+		require.NoError(t, err)
+		assert.Equal(t, baseDir, path)
+	})
+
+	t.Run("dotdot traversal is rejected", func(t *testing.T) {
+		_, err := resolver.applySubPath(baseDir, "../../etc/passwd")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "path traversal")
+	})
+
+	t.Run("nonexistent subpath returns error", func(t *testing.T) {
+		_, err := resolver.applySubPath(baseDir, "nonexistent")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+}
+
 func TestUT_IsLocal(t *testing.T) {
 	// Create temp directory for local path test
 	tmpDir := t.TempDir()

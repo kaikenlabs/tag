@@ -154,6 +154,11 @@ func parseShorthand(input, prefix string, provider Provider, host string) (*Refe
 	// Normalize: remove trailing slashes from subpath
 	subPath = strings.TrimSuffix(subPath, "/")
 
+	// Validate subpath against path traversal
+	if err := validateSubPath(subPath); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+
 	// Build clone URL
 	cloneURL := fmt.Sprintf("https://%s/%s/%s.git", host, owner, repo)
 
@@ -255,6 +260,11 @@ func parseGitHTTPURL(input string, parsed *url.URL, version string) (*Reference,
 	// Normalize subpath
 	subPath = strings.TrimSuffix(subPath, "/")
 
+	// Validate subpath against path traversal
+	if err := validateSubPath(subPath); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+
 	// Build clone URL (without tree/blob path components)
 	cloneURL := fmt.Sprintf("https://%s/%s/%s.git", parsed.Host, owner, repo)
 
@@ -308,6 +318,11 @@ func parseGitURL(input string) (*Reference, error) {
 
 	subPath = strings.TrimSuffix(subPath, "/")
 
+	// Validate subpath against path traversal
+	if err := validateSubPath(subPath); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
+
 	provider := ProviderGeneric
 	if p, ok := hostToProvider[host]; ok {
 		provider = p
@@ -342,6 +357,11 @@ func parseSSHStyle(input string) (*Reference, error) {
 	version := strings.TrimPrefix(matches[5], "@")
 	subPath := strings.TrimPrefix(matches[6], "/")
 	subPath = strings.TrimSuffix(subPath, "/")
+
+	// Validate subpath against path traversal
+	if err := validateSubPath(subPath); err != nil {
+		return nil, &ParseError{Input: input, Message: err.Error()}
+	}
 
 	provider := ProviderGeneric
 	if p, ok := hostToProvider[host]; ok {
@@ -472,6 +492,41 @@ func sanitizeForPath(s string) string {
 		"|", "_",
 	)
 	return replacer.Replace(s)
+}
+
+// validateSubPath checks that a subpath is safe and does not contain path traversal components.
+// It rejects absolute paths, paths with ".." segments, and backslash separators.
+func validateSubPath(subPath string) error {
+	if subPath == "" {
+		return nil
+	}
+
+	// Reject absolute paths
+	if filepath.IsAbs(subPath) {
+		return fmt.Errorf("subpath must be relative, got absolute path: %s", subPath)
+	}
+
+	// Reject backslash separators (normalize to forward slash for checking)
+	if strings.ContainsRune(subPath, '\\') {
+		return fmt.Errorf("subpath contains invalid backslash separator: %s", subPath)
+	}
+
+	// Reject any ".." component in the raw path (defense-in-depth: reject before normalization)
+	for _, part := range strings.Split(subPath, "/") {
+		if part == ".." {
+			return fmt.Errorf("subpath contains path traversal component: %s", subPath)
+		}
+	}
+
+	// Also check the cleaned path for ".." components
+	cleaned := filepath.Clean(subPath)
+	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
+		if part == ".." {
+			return fmt.Errorf("subpath contains path traversal component: %s", subPath)
+		}
+	}
+
+	return nil
 }
 
 // String returns a human-readable representation of the reference.

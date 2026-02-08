@@ -55,7 +55,11 @@ func CopyFile(src, dst string) error {
 		return err
 	}
 
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcInfo.Mode())
+	// Strip setuid, setgid, and sticky bits to prevent privilege escalation
+	// from untrusted template sources.
+	mode := srcInfo.Mode() &^ (os.ModeSetuid | os.ModeSetgid | os.ModeSticky)
+
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}

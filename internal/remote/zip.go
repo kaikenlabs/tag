@@ -140,11 +140,15 @@ func (f *ZipFetcher) download(ctx context.Context, url string) (string, error) {
 	limited := io.LimitReader(resp.Body, f.maxFileSize)
 
 	_, err = io.Copy(tmpFile, limited)
-	tmpFile.Close()
+	closeErr := tmpFile.Close()
 
 	if err != nil {
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("write file: %w", err)
+	}
+	if closeErr != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("close temp file: %w", closeErr)
 	}
 
 	return tmpPath, nil
