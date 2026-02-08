@@ -19,7 +19,7 @@ my-template/
 │   │   └── logo.png                     # Copied as-is (no .tmpl)
 │   ├── README.md.tmpl
 │   └── .gitignore
-└── _generators/                         # Optional: becomes _templates/ in output
+└── _generators/                         # Optional: becomes .tag.templates/ in output
     └── handler/
         └── handler.tmpl
 ```
@@ -266,7 +266,7 @@ my-template/
         └── model.tmpl
 ```
 
-This becomes `_templates/` in the generated project, allowing users to run `tag generate` commands.
+This becomes `.tag.templates/` in the generated project, allowing users to run `tag generate` commands.
 
 ## Hooks
 

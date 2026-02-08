@@ -143,7 +143,7 @@ Templates are configured via `tag.template.json`:
 
 ## Generator Templates
 
-For incremental code generation, create templates in `_templates/`:
+For incremental code generation, create templates in `.tag.templates/`:
 
 ```
 ---
@@ -213,7 +213,7 @@ Only `display_name` is prompted; `package_name` is computed as `my_package`.
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--dry-run` | `-d` | false | Preview without writing |
-| `--path` | `-tp` | `_templates` | Templates directory |
+| `--path` | `-tp` | `.tag.templates` | Templates directory |
 | `--shared` | `-sp` | `_shared` | Shared templates directory |
 | `--extension` | `-x` | `.tmpl` | Template file extension |
 

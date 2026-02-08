@@ -54,7 +54,7 @@ tag init
 # Create a new generator
 tag new handler
 
-# Edit your generator templates in _templates/handler/
+# Edit your generator templates in .tag.templates/handler/
 # Then run:
 tag generate handler UserAuth
 ```

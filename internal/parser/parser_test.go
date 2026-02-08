@@ -23,7 +23,7 @@ func TestUT_withTemplates(t *testing.T) {
 			name: "should return inject_after.tmpl",
 			args: args{
 				fileSuffix: "tmpl",
-				dirPath:    "../../example/_templates/fakr",
+				dirPath:    "../../example/.tag.templates/fakr",
 			},
 			want:    7,
 			wantErr: false,
@@ -32,7 +32,7 @@ func TestUT_withTemplates(t *testing.T) {
 			name: "should return error if not exists",
 			args: args{
 				fileSuffix: "tmpl",
-				dirPath:    "../../example/_templates/flat",
+				dirPath:    "../../example/.tag.templates/flat",
 			},
 			want:    0,
 			wantErr: true,

@@ -64,7 +64,7 @@ func createTestCLIContext(t *testing.T, args []string, flagValues map[string]int
 	app := &cli.App{
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: flags.DryRunFlag},
-			&cli.StringFlag{Name: flags.PathFlag, Value: "_templates"},
+			&cli.StringFlag{Name: flags.PathFlag, Value: ".tag.templates"},
 			&cli.StringFlag{Name: flags.ExtensionFlag, Value: ".tmpl"},
 			&cli.StringFlag{Name: flags.SharedPathFlag, Value: "_shared"},
 			&cli.StringFlag{Name: flags.BundlePathFlag, Value: "_bundles"},

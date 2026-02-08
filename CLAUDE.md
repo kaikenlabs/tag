@@ -4,27 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TAG is a Go-based code generation CLI tool with two main capabilities:
+TAG is a Go-based CLI tool for template-driven code generation and project scaffolding.
 
-1. **Project Scaffolding** (`tag scaffold`) - Create new projects from local or remote templates
-2. **Code Generation** (`tag generate`) - Generate code files from templates within existing projects
+**Commands**:
+- `tag init` - Initialize tag directory structure (`.tag.templates/_shared`, `.tag.templates/_bundles`)
+- `tag new <name>` - Create a new generator template
+- `tag new-bundle <name>` (alias: `nb`) - Create a new bundle (collection of generators)
+- `tag generate <bundle-or-generator> <name>` - Run generators/bundles within existing projects
+- `tag scaffold <template> [project-name]` - Create new projects from local or remote templates
+- `tag convert cookiecutter <source>` - Convert Cookiecutter templates to TAG format
 
-TAG uses Gonja (Jinja2-compatible) templates and supports Cookiecutter template conversion.
-
-## Key Features
-
-- **Template engine**: Gonja (Jinja2-compatible)
-- **Commands**:
-  - `tag scaffold <template>` - Project scaffolding from local/remote templates
-  - `tag convert cookiecutter` - Migration tool for Cookiecutter templates
-  - `tag generate <template>` - Generate code files in existing projects
-- **Remote templates**: Support for `gh:`, `gl:`, `bb:`, Git URLs, and zip files
-- **Variable namespace**: `{{ vars.* }}` (aliased as `{{ cookiecutter.* }}` for compatibility)
-- **Path placeholders**: `{{ vars.name }}` and `{{ vars.name | filter }}` syntax in file/directory names
-- **Template config**: `tag.template.json` with JSON Schema validation
-- **Replay system**: Auto-save inputs for reproducible scaffolding
-- **Hooks**: Pre and post scaffold command execution
-- **Cookiecutter auto-detection**: Automatic conversion when scaffolding Cookiecutter templates
+**Key Features**:
+- Template engine: Gonja (Jinja2-compatible)
+- Remote templates: `gh:`, `gl:`, `bb:` shorthands, Git URLs, zip files
+- Variable namespace: `{{ vars.* }}` (aliased as `{{ cookiecutter.* }}` for compatibility)
+- Path placeholders: `{{ vars.name }}` and `{{ vars.name | filter }}` in file/directory names
+- Template config: `tag.template.json` with JSON Schema validation
+- Replay system: Auto-save inputs for reproducible scaffolding
+- Hooks: Pre and post scaffold command execution
+- Cookiecutter auto-detection: Automatic conversion when scaffolding Cookiecutter templates
 
 ## Template Syntax
 
@@ -53,6 +51,7 @@ Only `display_name` is prompted; `package_name` is computed automatically.
 ### Build and Run
 ```bash
 make build              # Build binary to ./tag
+make install            # Build and install to ~/.local/bin
 go build -o tag         # Alternative direct build
 ./tag --help            # Show CLI help
 ```
@@ -61,7 +60,7 @@ go build -o tag         # Alternative direct build
 ```bash
 go test ./...                           # Run all tests
 go test -v ./internal/scaffold/...      # Run tests for specific package
-go test -run TestUT_CommandError ./...  # Run single test by name
+go test -run TestUT_CommandError ./...   # Run single test by name
 make test-unit                          # Run unit tests with coverage (requires tools)
 make test-integration                   # Build and run integration test
 ```
@@ -81,40 +80,81 @@ make tools              # Install golangci-lint, gofumpt, gotest, gosec, govulnc
 ## Architecture
 
 ```
-main.go                     CLI entry point (urfave/cli/v2)
+main.go                         CLI entry point (urfave/cli/v2)
     │
-    ├── internal/commands/  Command handlers
-    │       ├── scaffold.go     - Project scaffolding command
-    │       ├── convert.go      - Cookiecutter conversion command
-    │       └── generate.go     - Code generation command
+    ├── internal/commands/      Command handlers
+    │       ├── init.go             - Initialize tag directory structure
+    │       ├── new.go              - Create new generator template
+    │       ├── bundle.go           - Create new bundle
+    │       ├── generate.go         - Code generation command
+    │       ├── scaffold.go         - Project scaffolding command
+    │       └── convert.go          - Cookiecutter conversion command
     │
-    ├── internal/scaffold/  Scaffold orchestration
-    │       ├── scaffold.go     - Main scaffolding logic
-    │       ├── variables.go    - Variable collection and prompting
-    │       ├── types.go        - TemplateConfig, VariableDef, Options
-    │       ├── processor.go    - Path placeholder processing
-    │       ├── hooks.go        - Pre/post scaffold hook execution
-    │       └── writer.go       - File output operations
+    ├── internal/scaffold/      Scaffold orchestration
+    │       ├── scaffold.go         - Main scaffolding logic
+    │       ├── variables.go        - Variable collection and prompting
+    │       ├── types.go            - TemplateConfig, VariableDef, Options
+    │       ├── processor.go        - Path placeholder processing (Gonja)
+    │       ├── hooks.go            - Pre/post scaffold hook execution
+    │       ├── prompt.go           - Interactive prompting utilities
+    │       ├── output.go           - Output directory handling
+    │       ├── cookiecutter_detect.go - Cookiecutter template detection
+    │       └── errors.go           - Custom error types
     │
-    ├── internal/convert/   Cookiecutter conversion
-    │       ├── cookiecutter.go - Converter orchestration
-    │       ├── variables.go    - Variable conversion
-    │       └── paths.go        - Path placeholder conversion
+    ├── internal/convert/       Cookiecutter conversion
+    │       ├── cookiecutter.go     - Converter orchestration
+    │       ├── variables.go        - Variable conversion
+    │       ├── paths.go            - Path placeholder conversion
+    │       ├── content.go          - Content analysis for compatibility
+    │       ├── hooks.go            - Hook detection and copying
+    │       ├── types.go            - Options, Result, Incompatibility types
+    │       └── errors.go           - Custom error types
     │
-    ├── internal/template/  Gonja template engine wrapper
-    │       ├── engine.go       - Template execution
-    │       ├── filters.go      - Custom filters (snake, pascal, etc.)
-    │       └── methods.go      - Custom string methods (replace, etc.)
+    ├── internal/template/      Gonja template engine wrapper
+    │       ├── engine.go           - Template execution
+    │       ├── filters.go          - Custom filters (snake, pascal, etc.)
+    │       ├── methods.go          - Custom string methods (replace, etc.)
+    │       ├── loader.go           - Template file loader
+    │       ├── context.go          - Template context building
+    │       ├── metadata.go         - Template metadata handling
+    │       └── types.go            - Type definitions
     │
-    ├── internal/remote/    Remote template resolution
-    │       └── resolver.go     - GitHub, GitLab, Bitbucket, Git URLs
+    ├── internal/remote/        Remote template resolution
+    │       ├── remote.go           - Resolver orchestration
+    │       ├── reference.go        - Reference parsing (gh:, gl:, bb:, URLs)
+    │       ├── git.go              - Git cloning and checkout
+    │       ├── zip.go              - ZIP download and extraction
+    │       ├── cache.go            - Template caching system
+    │       ├── auth.go             - Auth provider (Bearer for Bitbucket, Basic for GitHub/GitLab)
+    │       └── errors.go           - Custom error types with provider hints
     │
-    ├── internal/replay/    Replay system for saved inputs
+    ├── internal/engine/        Code generation engine
+    │       ├── engine.go           - Generator execution
+    │       ├── types.go            - Generator bundle types
+    │       └── interfaces.go       - Generator interface definitions
     │
-    ├── internal/schema/    JSON Schema validation
+    ├── internal/config/        Configuration management
+    │       ├── config.go           - Config file loading
+    │       └── validate.go         - Config validation
     │
-    └── pkg/app/            Shared utilities
-            └── errors.go   CommandError type with Errorf() helper
+    ├── internal/formats/       String formatting utilities
+    │       ├── cases.go            - Case conversions (snake, pascal, camel, etc.)
+    │       └── stringers.go        - String formatting helpers
+    │
+    ├── internal/parser/        Template parsing
+    │       ├── parser.go           - Template parsing logic
+    │       ├── lexer.go            - Lexical analysis
+    │       ├── types.go            - Parser type definitions
+    │       └── errors.go           - Parser error types
+    │
+    ├── internal/replay/        Replay system for saved inputs
+    ├── internal/schema/        JSON Schema validation
+    ├── internal/chalk/         Terminal color/styling
+    ├── internal/types/         Type definitions and flag constants
+    ├── internal/writer/        File writing and code injection
+    │
+    ├── pkg/app/                Error handling (CommandError, Errorf)
+    └── pkg/prettylog/          Custom slog handler with colored output
 ```
 
 ## Key Concepts
@@ -139,6 +179,12 @@ Paths with `{{ vars.name }}` or `{{ vars.name | filter }}` are processed using G
 - Method calls: `{{ vars.name.lower().replace(' ', '_') }}`
 - Nested templates (recursive rendering for derived variables)
 
+### Remote Authentication
+- **GitHub**: `GITHUB_TOKEN` env var (basic auth with `x-access-token`)
+- **GitLab**: `GITLAB_TOKEN` env var (basic auth with `x-access-token`)
+- **Bitbucket**: `BITBUCKET_TOKEN` env var (Bearer token auth)
+- **SSH**: SSH agent or default key paths
+
 ## Error Handling Pattern
 
 Commands return errors using `app.Errorf()` which creates a `*CommandError`. Errors bubble up to `main.go` for centralized logging and exit code handling.
@@ -160,8 +206,8 @@ if err != nil {
 ## Documentation
 
 - `docs/` - User-facing documentation
-  - `docs/commands/` - Command reference
-  - `docs/templates/` - Template authoring guides
-  - `docs/reference/` - Configuration reference
-- `claudedocs/tag_scaffold_specification.md` - Technical specification
-- `claudedocs/research_cookiecutter_vs_tag.md` - Cookiecutter comparison
+  - `docs/commands/` - Command reference (scaffold, generate, convert)
+  - `docs/templates/` - Template authoring guides (syntax, filters, hooks)
+  - `docs/reference/` - Configuration reference (tag.template.json, remote-refs)
+  - `docs/migration/` - Migration guide (v1-to-v2)
+  - `docs/getting-started.md` - Getting started guide
