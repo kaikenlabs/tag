@@ -166,20 +166,10 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 
 // buildTemplateContext builds the template context from variables.
 func buildTemplateContext(vars map[string]any) template.Context {
-	ctx := make(template.Context)
-
-	// Add vars namespace
-	ctx["vars"] = vars
-
-	// Add cookiecutter alias for compatibility
-	ctx["cookiecutter"] = vars
-
-	// Add individual variables at root level for convenience
-	for k, v := range vars {
-		ctx[k] = v
-	}
-
-	return ctx
+	return template.NewContextBuilder().
+		WithVars(vars).
+		WithRootVars(vars).
+		Build()
 }
 
 // CopyGenerators copies the _generators directory to .tag.templates in the output.

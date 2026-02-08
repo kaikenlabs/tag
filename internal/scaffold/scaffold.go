@@ -21,7 +21,7 @@ type Scaffold struct {
 	Collector   VariableCollector
 	Processor   PathProcessor
 	Writer      OutputWriter
-	Engine      *template.Engine
+	Engine      template.TemplateRenderer
 	Prompter    Prompter
 	HookRunner  HookRunner // Executes pre/post scaffold hooks
 	DryRun      bool
