@@ -502,3 +502,138 @@ func TestUT_PathProcessor_MockExecutorError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mock render error")
 }
+
+// ============================================================================
+// SSTI REGRESSION TESTS (Ticket #65)
+//
+// These tests document the current behavior of recursive template rendering
+// in processSegment. The recursive rendering (up to 5 iterations) means that
+// user-controlled variable values containing template syntax will be executed.
+//
+// This is a Server-Side Template Injection (SSTI) vulnerability.
+// When the S1 fix is applied (Phase 2.3), these tests should be updated:
+// - Tests marked "current behavior" should change expected results to show
+//   that user-provided template syntax is NO LONGER rendered.
+// ============================================================================
+
+func TestUT_ProcessSegment_RecursiveRendering_CurrentBehavior(t *testing.T) {
+	// SSTI REGRESSION: This test demonstrates that user-provided variable values
+	// containing template syntax are rendered by the recursive processSegment loop.
+	// After S1 fix: user-provided {{ }} in values should NOT be rendered.
+	processor := mustNewPathProcessor(t)
+
+	vars := map[string]any{
+		"project_name": "myproject",
+		// User-controlled value that contains template syntax
+		"user_input": "{{ vars.project_name }}",
+	}
+
+	// Current behavior: the template in user_input is rendered, yielding "myproject"
+	result, err := processor.ProcessPath("{{ vars.user_input }}", vars)
+	require.NoError(t, err)
+	// SSTI: user_input's value "{{ vars.project_name }}" is rendered to "myproject"
+	assert.Equal(t, "myproject", result,
+		"SSTI: recursive rendering resolves template syntax in user-provided values")
+}
+
+func TestUT_ProcessSegment_NestedSSTI_CurrentBehavior(t *testing.T) {
+	// SSTI REGRESSION: Multi-level nested template injection.
+	// Variable A references Variable B's template expression, which in turn
+	// references Variable C's plain value.
+	processor := mustNewPathProcessor(t)
+
+	vars := map[string]any{
+		"level_c": "final_value",
+		"level_b": "{{ vars.level_c }}",
+		"level_a": "{{ vars.level_b }}",
+	}
+
+	// Current behavior: recursive rendering resolves through all levels
+	result, err := processor.ProcessPath("{{ vars.level_a }}", vars)
+	require.NoError(t, err)
+	// level_a → "{{ vars.level_b }}" → "{{ vars.level_c }}" → "final_value"
+	assert.Equal(t, "final_value", result,
+		"SSTI: multi-level recursive rendering resolves nested template expressions")
+}
+
+func TestUT_ProcessSegment_RecursionLimit(t *testing.T) {
+	// Verify the recursion limit (maxRenderIterations = 5) prevents infinite loops.
+	// Create a chain of variables that would require more than 5 iterations to fully resolve.
+	processor := mustNewPathProcessor(t)
+
+	// Build a chain: v1 → v2 → v3 → v4 → v5 → v6 → "done"
+	// With 5 iterations max, the chain should stop before fully resolving.
+	vars := map[string]any{
+		"v6": "done",
+		"v5": "{{ vars.v6 }}",
+		"v4": "{{ vars.v5 }}",
+		"v3": "{{ vars.v4 }}",
+		"v2": "{{ vars.v3 }}",
+		"v1": "{{ vars.v2 }}",
+	}
+
+	result, err := processor.ProcessPath("{{ vars.v1 }}", vars)
+	require.NoError(t, err)
+
+	// The chain requires 6 renders to fully resolve (v1→v2→v3→v4→v5→v6→done).
+	// With maxRenderIterations=5, we start with "{{ vars.v1 }}" and get 5 render passes:
+	// Pass 1: "{{ vars.v1 }}" → "{{ vars.v2 }}"
+	// Pass 2: "{{ vars.v2 }}" → "{{ vars.v3 }}"
+	// Pass 3: "{{ vars.v3 }}" → "{{ vars.v4 }}"
+	// Pass 4: "{{ vars.v4 }}" → "{{ vars.v5 }}"
+	// Pass 5: "{{ vars.v5 }}" → "{{ vars.v6 }}"
+	// Loop ends (5 iterations used). Result still contains template syntax.
+	assert.NotEqual(t, "done", result,
+		"recursion limit should prevent full resolution of a 6-level chain")
+	assert.Contains(t, result, "v6",
+		"result should still contain unresolved reference to v6")
+
+	// Also verify a 5-level chain DOES fully resolve (proving the limit is exactly 5)
+	vars5 := map[string]any{
+		"v5": "resolved",
+		"v4": "{{ vars.v5 }}",
+		"v3": "{{ vars.v4 }}",
+		"v2": "{{ vars.v3 }}",
+		"v1": "{{ vars.v2 }}",
+	}
+	result5, err := processor.ProcessPath("{{ vars.v1 }}", vars5)
+	require.NoError(t, err)
+	assert.Equal(t, "resolved", result5,
+		"a 5-level chain should fully resolve within the recursion limit")
+}
+
+func TestUT_ProcessSegment_CyclicReference(t *testing.T) {
+	// Verify that cyclic references (A→B, B→A) don't cause infinite loops.
+	// The recursion limit and the "no change" check should prevent this.
+	processor := mustNewPathProcessor(t)
+
+	vars := map[string]any{
+		"a": "{{ vars.b }}",
+		"b": "{{ vars.a }}",
+	}
+
+	result, err := processor.ProcessPath("{{ vars.a }}", vars)
+	require.NoError(t, err)
+	// Cyclic references should terminate without panic or infinite loop.
+	// The exact result is implementation-dependent but should be deterministic.
+	assert.NotEmpty(t, result, "cyclic reference should produce some output")
+	t.Logf("Cyclic reference test result: %q", result)
+}
+
+func TestUT_ProcessSegment_TemplateSyntaxInValue_NotPath(t *testing.T) {
+	// SSTI REGRESSION: Even when the template syntax in a variable value
+	// attempts to access something potentially dangerous, it still renders.
+	processor := mustNewPathProcessor(t)
+
+	vars := map[string]any{
+		"safe_name": "hello",
+		// Attacker tries to reference another variable through injection
+		"malicious": "{{ vars.safe_name }}_injected",
+	}
+
+	result, err := processor.ProcessPath("{{ vars.malicious }}", vars)
+	require.NoError(t, err)
+	// Current behavior: the template in malicious is rendered
+	assert.Equal(t, "hello_injected", result,
+		"SSTI: template expressions in variable values are currently rendered")
+}
