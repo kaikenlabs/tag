@@ -152,8 +152,8 @@ func TestUT_NewAction_TemplateContent(t *testing.T) {
 	// Verify template has package declaration
 	assert.Contains(t, content, "package testpkg")
 
-	// Verify template uses .Name template variable
-	assert.Contains(t, content, "{{ .Name")
+	// Verify template uses Gonja name variable with snake filter
+	assert.Contains(t, content, "{{ name | snake }}")
 }
 
 func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {

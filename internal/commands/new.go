@@ -75,7 +75,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 }
 
 var newGeneratorTemplate = `---
-to: %s/{{ .Name | caseSnake }}.go
+to: %s/{{ name | snake }}.go
 ---
 package %s
 

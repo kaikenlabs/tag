@@ -114,12 +114,12 @@ func (w *Write) InjectIntoFile(name string, data []byte, inject Inject) error {
 		slog.Error("cannot inject data", "file", name, "error", err)
 		return err
 	}
-	formatedOutput, err := mergeInjection(source, data, inject)
+	formattedOutput, err := mergeInjection(source, data, inject)
 	if err != nil {
 		slog.Error("cannot inject via matcher", "error", err, "file", name, "matcher", inject.Matcher, "clause", inject.Clause)
 		return err
 	}
-	if err := w.fs.WriteFile(name, formatedOutput, FileModeDefault); err != nil {
+	if err := w.fs.WriteFile(name, formattedOutput, FileModeDefault); err != nil {
 		slog.Error("cannot write to file", "file", name, "error", err)
 		return err
 	}
