@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kaikenlabs/tag/internal/types"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 	"github.com/urfave/cli/v2"
-
-	"github.com/kaikenlabs/tag/internal/types/flags"
 )
 
 const File = ".tagconfig.json"
@@ -74,5 +74,5 @@ func CreateConfigFile(c *cli.Context) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	return os.WriteFile(File, data, 0o644)
+	return os.WriteFile(File, data, types.FileMode)
 }

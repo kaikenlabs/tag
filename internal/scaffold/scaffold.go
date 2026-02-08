@@ -9,6 +9,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/schema"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // MaxConfigFileSize is the maximum allowed size for tag.template.json (10 MB).
@@ -159,7 +160,7 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	// Step 9: Create output directory
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, types.DirMode); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 

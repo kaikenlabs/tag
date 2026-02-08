@@ -10,6 +10,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // OutputWriter handles file generation and copying during scaffolding.
@@ -100,7 +101,7 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 
 		if d.IsDir() {
 			// Create directory
-			if err := os.MkdirAll(destPath, 0o755); err != nil {
+			if err := os.MkdirAll(destPath, types.DirMode); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", destPath, err)
 			}
 			return nil
@@ -115,7 +116,7 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 // Text files are rendered through the template engine; binary files are copied as-is.
 func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template.Context, d fs.DirEntry) error {
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
@@ -189,7 +190,7 @@ func CopyGenerators(templateRoot, outputDir string) error {
 	if _, err := os.Stat(generatorsDir); os.IsNotExist(err) {
 		// No _generators directory, create empty .tag.templates
 		templatesDir := filepath.Join(outputDir, ".tag.templates")
-		return os.MkdirAll(templatesDir, 0o755)
+		return os.MkdirAll(templatesDir, types.DirMode)
 	}
 
 	// Copy _generators to .tag.templates
@@ -218,11 +219,11 @@ func copyDir(src, dst string) error {
 		destPath := filepath.Join(dst, relPath)
 
 		if d.IsDir() {
-			return os.MkdirAll(destPath, 0o755)
+			return os.MkdirAll(destPath, types.DirMode)
 		}
 
 		// Ensure parent directory exists
-		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
 			return err
 		}
 
@@ -282,7 +283,7 @@ func GenerateTagConfig(outputDir string) error {
 	}
 
 	configPath := filepath.Join(outputDir, ".tagconfig.json")
-	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+	if err := os.WriteFile(configPath, data, types.FileMode); err != nil {
 		return fmt.Errorf("failed to write tagconfig: %w", err)
 	}
 
