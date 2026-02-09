@@ -64,52 +64,11 @@ Examples:
 
   # Scaffold without saving replay data
   tag scaffold gh:user/template test-project --no-save`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Usage:   "Output directory (default: ./<project_name>)",
-			},
-			&cli.StringFlag{
-				Name:  "values",
-				Usage: "JSON file with variable values",
-			},
-			&cli.StringSliceFlag{
-				Name:    "meta",
-				Aliases: []string{"m"},
-				Usage:   "Variable override in key=value format (can be repeated)",
-			},
-			&cli.BoolFlag{
-				Name:  "no-input",
-				Usage: "Skip interactive prompts, use defaults only",
-			},
-			&cli.BoolFlag{
-				Name:    "force",
-				Aliases: []string{"f"},
-				Usage:   "Overwrite output directory if it exists",
-			},
-			&cli.BoolFlag{
-				Name:    "update",
-				Aliases: []string{"u"},
-				Usage:   "Force refresh of cached remote templates",
-			},
-			&cli.BoolFlag{
-				Name:  "replay",
-				Usage: "Reuse saved variable values from a previous scaffold of this template",
-			},
-			&cli.BoolFlag{
-				Name:  "no-save",
-				Usage: "Don't save variable values for future replay",
-			},
-			&cli.BoolFlag{
-				Name:  "accept-hooks",
-				Usage: "Accept and run pre/post scaffold hooks without prompting for confirmation",
-			},
-			&cli.BoolFlag{
-				Name:  "allow-recursive-render",
-				Usage: "Allow template syntax in variable values to be rendered (SECURITY: enables recursive template rendering)",
-			},
-		},
+		Flags: append(commonScaffoldFlags(), &cli.BoolFlag{
+			Name:    "update",
+			Aliases: []string{"u"},
+			Usage:   "Force refresh of cached remote templates",
+		}),
 		Action: scaffoldAction,
 	}
 }
@@ -147,22 +106,9 @@ func scaffoldAction(c *cli.Context) error {
 	isRemote := !remote.IsLocal(templateRef)
 
 	// Build options
-	opts := scaffold.Options{
-		TemplateDir:          templateDir,
-		OutputDir:            c.String("output"),
-		ProjectName:          projectName,
-		ValuesFile:           c.String("values"),
-		Meta:                 meta,
-		NoInput:              c.Bool("no-input"),
-		Force:                c.Bool("force"),
-		Replay:               c.Bool("replay"),
-		NoSave:               c.Bool("no-save"),
-		TemplateRef:          templateRef, // Pass original reference for replay ID generation
-		AcceptHooks:          c.Bool("accept-hooks"),
-		IsRemote:             isRemote,
-		AllowRecursiveRender: c.Bool("allow-recursive-render"),
-		IsTTY:                scaffold.IsTTY(),
-	}
+	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
+	opts.TemplateRef = templateRef // Original reference for replay ID generation
+	opts.IsRemote = isRemote
 
 	// Create and run scaffold
 	s, err := scaffold.NewScaffold(opts)
