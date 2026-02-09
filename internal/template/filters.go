@@ -11,6 +11,9 @@ import (
 	"golang.org/x/text/language"
 )
 
+// titleCaser is a cached English title caser to avoid allocation per filter call.
+var titleCaser = cases.Title(language.English)
+
 // RegisterFilters registers all custom filters with the given filter set.
 // Returns an error if any filter fails to register.
 func RegisterFilters(filters *exec.FilterSet) error {
@@ -140,7 +143,7 @@ func filterTitle(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.
 	if err := params.Take(); err != nil {
 		return exec.AsValue(fmt.Errorf("title: %w", err))
 	}
-	return exec.AsValue(cases.Title(language.English).String(in.String()))
+	return exec.AsValue(titleCaser.String(in.String()))
 }
 
 // Inflection filters

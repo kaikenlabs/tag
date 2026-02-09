@@ -28,14 +28,12 @@ func initAction(c *cli.Context) error {
 	slog.Info(chalk.Green("creating initial setup"), "path", c.String(flags.PathFlag))
 	dirPath := filepath.Join(".", c.String(flags.PathFlag), c.String(flags.SharedPathFlag), ".gitkeep")
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
-		slog.Error("error initialising tag's shared path", "error", err.Error())
-		return err
+		return app.Errorf("cannot initialise tag's shared path: %w", err)
 	}
 
 	dirPath = filepath.Join(".", c.String(flags.PathFlag), c.String(flags.BundlePathFlag), ".gitkeep")
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
-		slog.Error("error initialising tag's bundle path", "error", err.Error())
-		return err
+		return app.Errorf("cannot initialise tag's bundle path: %w", err)
 	}
 
 	if err := config.CreateConfigFile(c); err != nil {

@@ -17,6 +17,54 @@ const (
 	emptyString           = ""
 )
 
+// NewGenerator creates a Generator with the standard pipeline.
+// It creates a new template engine, loads templates, and wires up the parser and writer.
+func NewGenerator(dryRun bool, dirPath, sharedPath, fileSuffix string) (Generator, error) {
+	tmplEngine, err := template.NewEngine()
+	if err != nil {
+		return nil, fmt.Errorf("cannot create template engine: %w", err)
+	}
+	return NewGeneratorWithEngine(tmplEngine, dryRun, dirPath, sharedPath, fileSuffix)
+}
+
+// NewGeneratorWithEngine creates a Generator using an existing template engine.
+// This allows sharing a template engine (and its cache) across multiple generators,
+// such as when running a bundle of generators.
+func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath, fileSuffix string) (Generator, error) {
+	if dryRun {
+		slog.Info(chalk.Cyan("DRYRUN MODE"))
+	}
+
+	// Load primary templates
+	templates, err := LoadTemplateFiles(dirPath, fileSuffix)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load templates: %w", err)
+	}
+
+	// Load shared templates (non-fatal)
+	sharedTemplates, sharedErr := LoadTemplateFiles(sharedPath, fileSuffix)
+	if sharedErr != nil {
+		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
+	}
+
+	// Wire shared templates into loader if any were loaded
+	if len(sharedTemplates) > 0 {
+		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
+		tmplEngine.SetLoader(loader)
+		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
+	}
+
+	// Create parser and writer with injected dependencies
+	parser := NewParserWithExecutor(tmplEngine, templates, sharedTemplates)
+	w, err := writer.New(dryRun) //nolint:staticcheck // only available constructor; result used as FileWriter interface
+	if err != nil {
+		return nil, fmt.Errorf("cannot create writer: %w", err)
+	}
+
+	core := NewCore(parser, &w)
+	return &core, nil
+}
+
 // NewCore creates a Core engine with injected dependencies.
 // This is the preferred constructor, enabling dependency injection for testing.
 func NewCore(parser TemplateParser, fwr writer.FileWriter) Core {

@@ -12,14 +12,14 @@ import (
 //   - "vars": user-defined variables (TAG namespace)
 //   - "cookiecutter": alias to vars (Cookiecutter compatibility)
 //   - "n": pre-computed name variants
-func NewContext(name string, vars map[string]any, nameOpts *NameOptions) Context {
+func NewContext(name string, vars map[string]any) Context {
 	return NewContextBuilder().
-		WithNameOptions(name, nameOpts).
+		WithName(name).
 		WithVars(vars).
 		Build()
 }
 
-// computeNameOptions creates NameOptions from a name string.
+// computeNameOptions creates name variant options from a name string.
 func computeNameOptions(name string) map[string]any {
 	return map[string]any{
 		"snake_case":  formats.CaseSnake(name),
@@ -28,18 +28,6 @@ func computeNameOptions(name string) map[string]any {
 		"kebab_case":  formats.CaseKebab(name),
 		"lower_case":  strings.ToLower(name),
 		"upper_case":  strings.ToUpper(name),
-	}
-}
-
-// NewNameOptions creates a NameOptions struct from a name string.
-func NewNameOptions(name string) NameOptions {
-	return NameOptions{
-		SnakeCase:  formats.CaseSnake(name),
-		PascalCase: formats.CasePascal(name),
-		CamelCase:  formats.CaseCamel(name),
-		KebabCase:  formats.CaseKebab(name),
-		LowerCase:  strings.ToLower(name),
-		UpperCase:  strings.ToUpper(name),
 	}
 }
 
@@ -81,24 +69,6 @@ func (b *ContextBuilder) WithName(name string) *ContextBuilder {
 	return b
 }
 
-// WithNameOptions adds the "name" key and "n" namespace from pre-computed NameOptions.
-func (b *ContextBuilder) WithNameOptions(name string, opts *NameOptions) *ContextBuilder {
-	b.ctx["name"] = name
-	if opts != nil {
-		b.ctx["n"] = map[string]any{
-			"snake_case":  opts.SnakeCase,
-			"pascal_case": opts.PascalCase,
-			"camel_case":  opts.CamelCase,
-			"kebab_case":  opts.KebabCase,
-			"lower_case":  opts.LowerCase,
-			"upper_case":  opts.UpperCase,
-		}
-	} else {
-		b.ctx["n"] = computeNameOptions(name)
-	}
-	return b
-}
-
 // WithMeta adds the "meta" namespace for backward compatibility.
 func (b *ContextBuilder) WithMeta(meta map[string]string) *ContextBuilder {
 	if meta != nil {
@@ -116,21 +86,3 @@ func (b *ContextBuilder) Build() Context {
 	return b.ctx
 }
 
-// Set adds or updates a value in the context.
-func (c Context) Set(key string, value any) {
-	c[key] = value
-}
-
-// Get retrieves a value from the context.
-func (c Context) Get(key string) (any, bool) {
-	v, ok := c[key]
-	return v, ok
-}
-
-// Merge combines another context into this one.
-// Values from the other context override existing values.
-func (c Context) Merge(other Context) {
-	for k, v := range other {
-		c[k] = v
-	}
-}

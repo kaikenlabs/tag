@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -16,52 +15,16 @@ import (
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/template"
-	"github.com/kaikenlabs/tag/internal/writer"
 	"github.com/urfave/cli/v2"
 )
 
 // newEngine is a function variable that creates a new engine.
 // It can be replaced in tests to inject a mock generator.
-var newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
-	if dryRun {
-		slog.Info(chalk.Cyan("DRYRUN MODE"))
-	}
+var newEngine = engine.NewGenerator
 
-	// 1. Create template engine
-	tmplEngine, err := template.NewEngine()
-	if err != nil {
-		return nil, fmt.Errorf("cannot create template engine: %w", err)
-	}
-
-	// 2. Load primary templates
-	templates, err := engine.LoadTemplateFiles(dirPath, fileSuffix)
-	if err != nil {
-		return nil, fmt.Errorf("cannot load templates: %w", err)
-	}
-
-	// 3. Load shared templates (non-fatal)
-	sharedTemplates, sharedErr := engine.LoadTemplateFiles(sharedPath, fileSuffix)
-	if sharedErr != nil {
-		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
-	}
-
-	// 4. Wire shared templates into loader if any were loaded
-	if len(sharedTemplates) > 0 {
-		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
-		tmplEngine.SetLoader(loader)
-		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
-	}
-
-	// 5. Create parser and writer with injected dependencies
-	parser := engine.NewParserWithExecutor(tmplEngine, templates, sharedTemplates)
-	w, err := writer.New(dryRun) //nolint:staticcheck // only available constructor; result used as FileWriter interface
-	if err != nil {
-		return nil, fmt.Errorf("cannot create writer: %w", err)
-	}
-
-	core := engine.NewCore(parser, &w)
-	return &core, nil
-}
+// newBundleEngine is a function variable that creates an engine with a shared template engine.
+// It can be replaced in tests to inject a mock generator.
+var newBundleEngine = engine.NewGeneratorWithEngine
 
 func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
@@ -155,10 +118,35 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 		return app.Errorf("cannot decode bundle file: %w", err)
 	}
 
+	// Create shared template engine for all generators in the bundle.
+	// This avoids re-creating the engine (and its cache) for each generator.
+	tmplEngine, err := template.NewEngine()
+	if err != nil {
+		return app.Errorf("cannot create template engine: %w", err)
+	}
+
+	dryRun := c.Bool(flags.DryRunFlag)
+	sharedPath := filepath.Join(cfg.Env.Path, c.Path(flags.SharedPathFlag))
+
 	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
 	for _, generator := range bundle.Generators {
-		if err := generateTemplate(c, cfg, generator.Name, targetName, args, true); err != nil {
-			return err
+		genDirPath := filepath.Join(cfg.Env.Path, generator.Name)
+
+		if err := ValidatePathContainment(cfg.Env.Path, genDirPath); err != nil {
+			return app.Errorf("path safety check failed: %w", err)
+		}
+		if _, err := os.ReadDir(genDirPath); err != nil {
+			return app.Errorf("generator %s not found in: %s", generator.Name, cfg.Env.Path)
+		}
+
+		gen, err := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath, cfg.Env.Extension)
+		if err != nil {
+			return app.Errorf("error creating engine: %w", err)
+		}
+
+		err = gen.Generate(engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)})
+		if err != nil {
+			return app.Errorf("error when generating template: %w", err)
 		}
 	}
 
@@ -219,15 +207,7 @@ func runHooks(hooks [][]string, phase scaffold.HookPhase) error {
 
 	results, err := scaffold.RunArgvHooks(phase, hooks, dir, nil)
 
-	// Print output from executed hooks
-	for _, result := range results {
-		if result.Output != "" {
-			fmt.Print(result.Output)
-			if !strings.HasSuffix(result.Output, "\n") {
-				fmt.Println()
-			}
-		}
-	}
+	scaffold.PrintHookResults(results)
 
 	if err != nil {
 		return app.Errorf("hook failed: %w", err)

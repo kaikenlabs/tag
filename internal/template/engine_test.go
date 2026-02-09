@@ -30,7 +30,7 @@ func TestUT_Engine_ParseString_Simple(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, tmpl)
 
-	ctx := NewContext("World", nil, nil)
+	ctx := NewContext("World", nil)
 	result, err := tmpl.Execute(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello, World!", result)
@@ -42,7 +42,7 @@ func TestUT_Engine_ParseString_WithFilters(t *testing.T) {
 	tmpl, err := engine.ParseString("{{ name|upper }}")
 	require.NoError(t, err)
 
-	ctx := NewContext("hello", nil, nil)
+	ctx := NewContext("hello", nil)
 	result, err := tmpl.Execute(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "HELLO", result)
@@ -88,7 +88,7 @@ func TestUT_Engine_ParseString_NestedAccess(t *testing.T) {
 	require.NoError(t, err)
 
 	vars := map[string]any{"project_name": "my-project"}
-	ctx := NewContext("test", vars, nil)
+	ctx := NewContext("test", vars)
 
 	result, err := tmpl.Execute(ctx)
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestUT_Engine_ParseString_FilterChain(t *testing.T) {
 	tmpl, err := engine.ParseString("{{ name|snake|upper }}")
 	require.NoError(t, err)
 
-	ctx := NewContext("HelloWorld", nil, nil)
+	ctx := NewContext("HelloWorld", nil)
 	result, err := tmpl.Execute(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "HELLO_WORLD", result)
@@ -118,7 +118,7 @@ func TestUT_Engine_ParseString_SyntaxError(t *testing.T) {
 func TestUT_Engine_ExecuteToString(t *testing.T) {
 	engine := MustNewEngine()
 
-	ctx := NewContext("World", nil, nil)
+	ctx := NewContext("World", nil)
 	result, err := engine.ExecuteToString("Hello, {{ name }}!", ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello, World!", result)
@@ -151,7 +151,7 @@ func TestUT_Engine_ParseFile(t *testing.T) {
 	tmpl, err := engine.ParseFile("test.tmpl")
 	require.NoError(t, err)
 
-	ctx := NewContext("World", nil, nil)
+	ctx := NewContext("World", nil)
 	result, err := tmpl.Execute(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello, World!", result)
@@ -192,7 +192,7 @@ func ({{ n.camel_case }} *{{ n.pascal_case }}) Get{{ field|pascal }}() string {
 		"package_name": "models",
 		"fields":       []string{"name", "email", "phone"},
 	}
-	ctx := NewContext("User", vars, nil)
+	ctx := NewContext("User", vars)
 
 	result, err := engine.ExecuteToString(template, ctx)
 	require.NoError(t, err)

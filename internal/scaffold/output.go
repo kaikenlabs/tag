@@ -262,17 +262,17 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 	// Parse and execute template
 	tmpl, err := w.engine.ParseString(string(content))
 	if err != nil {
-		return NewTemplateError(srcPath, "failed to parse template", err)
+		return NewFileProcessingError(srcPath, "failed to parse template", err)
 	}
 
 	result, err := tmpl.Execute(ctx)
 	if err != nil {
-		return NewTemplateError(srcPath, "failed to execute template", err)
+		return NewFileProcessingError(srcPath, "failed to execute template", err)
 	}
 
 	// Write output
 	if err := os.WriteFile(destPath, []byte(result), mode); err != nil {
-		return NewTemplateError(srcPath, "failed to write output", err)
+		return NewFileProcessingError(srcPath, "failed to write output", err)
 	}
 
 	return nil

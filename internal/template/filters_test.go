@@ -26,7 +26,7 @@ func TestUT_FilterSnake(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpl := `{{ name|snake }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -52,7 +52,7 @@ func TestUT_FilterPascal(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpl := `{{ name|pascal }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -77,7 +77,7 @@ func TestUT_FilterCamel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpl := `{{ name|camel }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -101,7 +101,7 @@ func TestUT_FilterKebab(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpl := `{{ name|kebab }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -123,7 +123,7 @@ func TestUT_FilterLower(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			tmpl := `{{ name|lower }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -145,7 +145,7 @@ func TestUT_FilterUpper(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			tmpl := `{{ name|upper }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -167,7 +167,7 @@ func TestUT_FilterTitle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			tmpl := `{{ name|title }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -191,7 +191,7 @@ func TestUT_FilterPlural(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			tmpl := `{{ name|plural }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -214,7 +214,7 @@ func TestUT_FilterSingular(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			tmpl := `{{ name|singular }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -243,7 +243,7 @@ func TestUT_FilterOrdinalize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			tmpl := `{{ name|ordinalize }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -265,7 +265,7 @@ func TestUT_FilterTitleize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			tmpl := `{{ name|titleize }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -287,7 +287,7 @@ func TestUT_FilterHumanize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			tmpl := `{{ name|humanize }}`
-			ctx := NewContext(tt.input, nil, nil)
+			ctx := NewContext(tt.input, nil)
 			result, err := engine.ExecuteToString(tmpl, ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -300,7 +300,7 @@ func TestUT_FilterSplit(t *testing.T) {
 
 	t.Run("split by comma", func(t *testing.T) {
 		tmpl := `{% for item in name|split(",") %}{{ item }};{% endfor %}`
-		ctx := NewContext("a,b,c", nil, nil)
+		ctx := NewContext("a,b,c", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "a;b;c;", result)
@@ -308,7 +308,7 @@ func TestUT_FilterSplit(t *testing.T) {
 
 	t.Run("split by whitespace default", func(t *testing.T) {
 		tmpl := `{% for item in name|split %}{{ item }};{% endfor %}`
-		ctx := NewContext("a b c", nil, nil)
+		ctx := NewContext("a b c", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "a;b;c;", result)
@@ -340,7 +340,7 @@ func TestUT_FilterContains(t *testing.T) {
 
 	t.Run("contains substring", func(t *testing.T) {
 		tmpl := `{% if name|contains("world") %}yes{% else %}no{% endif %}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "yes", result)
@@ -348,7 +348,7 @@ func TestUT_FilterContains(t *testing.T) {
 
 	t.Run("does not contain", func(t *testing.T) {
 		tmpl := `{% if name|contains("xyz") %}yes{% else %}no{% endif %}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "no", result)
@@ -360,7 +360,7 @@ func TestUT_FilterHasPrefix(t *testing.T) {
 
 	t.Run("has prefix", func(t *testing.T) {
 		tmpl := `{% if name|hasprefix("hello") %}yes{% else %}no{% endif %}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "yes", result)
@@ -368,7 +368,7 @@ func TestUT_FilterHasPrefix(t *testing.T) {
 
 	t.Run("does not have prefix", func(t *testing.T) {
 		tmpl := `{% if name|hasprefix("world") %}yes{% else %}no{% endif %}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "no", result)
@@ -380,7 +380,7 @@ func TestUT_FilterHasSuffix(t *testing.T) {
 
 	t.Run("has suffix", func(t *testing.T) {
 		tmpl := `{% if name|hassuffix("world") %}yes{% else %}no{% endif %}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "yes", result)
@@ -388,7 +388,7 @@ func TestUT_FilterHasSuffix(t *testing.T) {
 
 	t.Run("does not have suffix", func(t *testing.T) {
 		tmpl := `{% if name|hassuffix("hello") %}yes{% else %}no{% endif %}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "no", result)
@@ -400,7 +400,7 @@ func TestUT_FilterReplace(t *testing.T) {
 
 	t.Run("replace substring", func(t *testing.T) {
 		tmpl := `{{ name|replace("world", "universe") }}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hello universe", result)
@@ -408,7 +408,7 @@ func TestUT_FilterReplace(t *testing.T) {
 
 	t.Run("replace multiple occurrences", func(t *testing.T) {
 		tmpl := `{{ name|replace("o", "0") }}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hell0 w0rld", result)
@@ -420,7 +420,7 @@ func TestUT_FilterTrim(t *testing.T) {
 
 	t.Run("trim whitespace", func(t *testing.T) {
 		tmpl := `{{ name|trim }}`
-		ctx := NewContext("  hello world  ", nil, nil)
+		ctx := NewContext("  hello world  ", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hello world", result)
@@ -428,7 +428,7 @@ func TestUT_FilterTrim(t *testing.T) {
 
 	t.Run("trim specific chars", func(t *testing.T) {
 		tmpl := `{{ name|trim("x") }}`
-		ctx := NewContext("xxxhelloxxx", nil, nil)
+		ctx := NewContext("xxxhelloxxx", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hello", result)
@@ -440,7 +440,7 @@ func TestUT_FilterDefault(t *testing.T) {
 
 	t.Run("use default for empty", func(t *testing.T) {
 		tmpl := `{{ name|default("fallback") }}`
-		ctx := NewContext("", nil, nil)
+		ctx := NewContext("", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "fallback", result)
@@ -448,7 +448,7 @@ func TestUT_FilterDefault(t *testing.T) {
 
 	t.Run("use value when present", func(t *testing.T) {
 		tmpl := `{{ name|default("fallback") }}`
-		ctx := NewContext("hello", nil, nil)
+		ctx := NewContext("hello", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hello", result)
@@ -460,7 +460,7 @@ func TestUT_FilterTruncate(t *testing.T) {
 
 	t.Run("truncate with ellipsis", func(t *testing.T) {
 		tmpl := `{{ name|truncate(5) }}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hello...", result)
@@ -468,7 +468,7 @@ func TestUT_FilterTruncate(t *testing.T) {
 
 	t.Run("truncate with custom ending", func(t *testing.T) {
 		tmpl := `{{ name|truncate(5, "!") }}`
-		ctx := NewContext("hello world", nil, nil)
+		ctx := NewContext("hello world", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hello!", result)
@@ -476,7 +476,7 @@ func TestUT_FilterTruncate(t *testing.T) {
 
 	t.Run("no truncate when short enough", func(t *testing.T) {
 		tmpl := `{{ name|truncate(20) }}`
-		ctx := NewContext("hello", nil, nil)
+		ctx := NewContext("hello", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hello", result)
@@ -485,7 +485,7 @@ func TestUT_FilterTruncate(t *testing.T) {
 	t.Run("truncate UTF-8 multi-byte characters correctly", func(t *testing.T) {
 		tmpl := `{{ name|truncate(3) }}`
 		// Use emoji which are multi-byte UTF-8 characters
-		ctx := NewContext("🎉🎊🎈🎁", nil, nil)
+		ctx := NewContext("🎉🎊🎈🎁", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		// Should truncate by rune count, not byte count
@@ -494,7 +494,7 @@ func TestUT_FilterTruncate(t *testing.T) {
 
 	t.Run("truncate CJK characters correctly", func(t *testing.T) {
 		tmpl := `{{ name|truncate(2) }}`
-		ctx := NewContext("你好世界", nil, nil)
+		ctx := NewContext("你好世界", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "你好...", result)
@@ -506,7 +506,7 @@ func TestUT_FilterChaining(t *testing.T) {
 
 	t.Run("snake then upper", func(t *testing.T) {
 		tmpl := `{{ name|snake|upper }}`
-		ctx := NewContext("HelloWorld", nil, nil)
+		ctx := NewContext("HelloWorld", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "HELLO_WORLD", result)
@@ -514,7 +514,7 @@ func TestUT_FilterChaining(t *testing.T) {
 
 	t.Run("plural then pascal", func(t *testing.T) {
 		tmpl := `{{ name|plural|pascal }}`
-		ctx := NewContext("user", nil, nil)
+		ctx := NewContext("user", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "Users", result)
@@ -526,7 +526,7 @@ func TestUT_FilterAliases(t *testing.T) {
 
 	t.Run("snake_case alias", func(t *testing.T) {
 		tmpl := `{{ name|snake_case }}`
-		ctx := NewContext("HelloWorld", nil, nil)
+		ctx := NewContext("HelloWorld", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "hello_world", result)
@@ -534,7 +534,7 @@ func TestUT_FilterAliases(t *testing.T) {
 
 	t.Run("pluralize alias", func(t *testing.T) {
 		tmpl := `{{ name|pluralize }}`
-		ctx := NewContext("user", nil, nil)
+		ctx := NewContext("user", nil)
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "users", result)

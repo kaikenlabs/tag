@@ -397,7 +397,7 @@ func TestUT_RenderAndParseMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	metaRaw := "to: {{ name|snake }}/{{ name|snake }}.go\nappend: true"
-	ctx := NewContext("MyService", nil, nil)
+	ctx := NewContext("MyService", nil)
 
 	meta, err := engine.RenderAndParseMetadata(metaRaw, ctx)
 
@@ -411,7 +411,7 @@ func TestUT_RenderAndParseMetadata_WithVars(t *testing.T) {
 	require.NoError(t, err)
 
 	metaRaw := "to: {{ vars.output_dir }}/{{ name }}.go"
-	ctx := NewContext("handler", map[string]any{"output_dir": "pkg/handlers"}, nil)
+	ctx := NewContext("handler", map[string]any{"output_dir": "pkg/handlers"})
 
 	meta, err := engine.RenderAndParseMetadata(metaRaw, ctx)
 
@@ -424,7 +424,7 @@ func TestUT_RenderAndParseMetadata_WithNameOptions(t *testing.T) {
 	require.NoError(t, err)
 
 	metaRaw := "to: {{ n.snake_case }}/{{ n.pascal_case }}.go"
-	ctx := NewContext("user-service", nil, nil)
+	ctx := NewContext("user-service", nil)
 
 	meta, err := engine.RenderAndParseMetadata(metaRaw, ctx)
 
@@ -438,7 +438,7 @@ func TestUT_RenderAndParseMetadata_UndefinedVarReturnsEmpty(t *testing.T) {
 
 	// Undefined variable returns empty string in Gonja
 	metaRaw := "to: {{ undefined_var }}/file.go"
-	ctx := NewContext("test", nil, nil)
+	ctx := NewContext("test", nil)
 
 	meta, err := engine.RenderAndParseMetadata(metaRaw, ctx)
 
@@ -453,7 +453,7 @@ func TestUT_RenderAndParseMetadata_InvalidSyntax(t *testing.T) {
 
 	// Invalid Jinja2 syntax should error
 	metaRaw := "to: {{ name|invalid_filter }}/file.go"
-	ctx := NewContext("test", nil, nil)
+	ctx := NewContext("test", nil)
 
 	_, err = engine.RenderAndParseMetadata(metaRaw, ctx)
 

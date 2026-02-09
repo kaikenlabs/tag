@@ -1,9 +1,9 @@
 package template
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
+	"hash/fnv"
+	"strconv"
 	"sync"
 
 	"github.com/nikolalohinski/gonja/v2"
@@ -14,7 +14,7 @@ import (
 )
 
 // templateCache provides thread-safe caching of parsed Gonja templates.
-// Templates are keyed by SHA-256 hash of their content string.
+// Templates are keyed by FNV-1a hash of their content string.
 type templateCache struct {
 	mu    sync.RWMutex
 	items map[string]*exec.Template
@@ -34,10 +34,12 @@ func (c *templateCache) set(key string, tmpl *exec.Template) {
 	c.items[key] = tmpl
 }
 
-// contentHash computes a SHA-256 hash of the template content for use as a cache key.
+// contentHash computes an FNV-1a hash of the template content for use as a cache key.
+// FNV-1a is sufficient for cache keying (not security) and is significantly faster than SHA-256.
 func contentHash(content string) string {
-	h := sha256.Sum256([]byte(content))
-	return hex.EncodeToString(h[:])
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(content))
+	return strconv.FormatUint(h.Sum64(), 36)
 }
 
 // Engine wraps Gonja to provide a consistent template interface.

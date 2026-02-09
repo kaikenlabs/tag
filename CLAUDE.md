@@ -118,6 +118,8 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── loader.go           - Template file loader
     │       ├── context.go          - Template context building
     │       ├── metadata.go         - Template metadata handling
+    │       ├── interfaces.go       - TemplateRenderer interface
+    │       ├── errors.go           - Error types and sentinels
     │       └── types.go            - Type definitions
     │
     ├── internal/remote/        Remote template resolution

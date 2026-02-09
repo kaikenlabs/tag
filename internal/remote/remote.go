@@ -212,11 +212,7 @@ func (r *Resolver) CleanupCache() error {
 
 // isZipFile checks if a path is a zip file.
 func isZipFile(path string) bool {
-	if len(path) < 4 {
-		return false
-	}
-	ext := path[len(path)-4:]
-	return ext == ".zip" || ext == ".ZIP"
+	return strings.EqualFold(filepath.Ext(path), ".zip")
 }
 
 // IsLocal checks if a reference string points to a local resource.

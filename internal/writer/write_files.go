@@ -2,7 +2,6 @@ package writer
 
 import (
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -35,10 +34,5 @@ func (f *fileWrite) OpenFile(name string, flag int, perm fs.FileMode) (*os.File,
 }
 
 func (f *fileWrite) Write(file *os.File, b []byte) (n int, err error) {
-	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Error("cannot close file", "file", file.Name(), "error", err)
-		}
-	}()
 	return file.Write(b)
 }

@@ -12,9 +12,6 @@ var (
 
 	// ErrExecute indicates a template execution error.
 	ErrExecute = errors.New("template execution error")
-
-	// ErrFilter indicates a filter execution error.
-	ErrFilter = errors.New("filter error")
 )
 
 // TemplateError wraps template-related errors with additional context.
@@ -74,7 +71,3 @@ func NewExecuteError(template string, err error) error {
 	}
 }
 
-// NewFilterError creates a new filter error with context.
-func NewFilterError(filterName string, err error) error {
-	return fmt.Errorf("%w: %s: %v", ErrFilter, filterName, err)
-}

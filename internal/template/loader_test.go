@@ -175,7 +175,7 @@ func TestUT_Loader_Integration_WithEngine(t *testing.T) {
 	tmpl, err := engine.ParseFile("greeting.tmpl")
 	require.NoError(t, err)
 
-	ctx := NewContext("World", nil, nil)
+	ctx := NewContext("World", nil)
 	result, err := tmpl.Execute(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello, World!", result)

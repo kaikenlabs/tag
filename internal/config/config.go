@@ -37,10 +37,10 @@ func CheckConfig(cfg *Config) error {
 }
 
 // LoadConfigFile loads the configuration from the config file.
-// Returns an empty config if the file doesn't exist, or an error if parsing fails.
+// Returns nil config if the file doesn't exist, or an error if parsing fails.
 func LoadConfigFile() (*Config, error) {
 	if _, err := os.Stat(File); err != nil {
-		return &Config{}, nil
+		return nil, nil
 	}
 	data, err := os.ReadFile(File)
 	if err != nil {
