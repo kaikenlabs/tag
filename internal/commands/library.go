@@ -60,6 +60,15 @@ func newLibrary() (*library.Library, error) {
 	return library.New(dataDir)
 }
 
+// newReadOnlyLibrary creates a library without a resolver (for ls, inspect, edit, rm).
+func newReadOnlyLibrary() (*library.Library, error) {
+	dataDir, err := xdg.DataHome()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine data directory: %w", err)
+	}
+	return library.NewReadOnly(dataDir), nil
+}
+
 func libAddCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "add",
@@ -133,7 +142,7 @@ func libListCommand() *cli.Command {
 		Aliases: []string{"list"},
 		Usage:   "List installed templates",
 		Action: func(c *cli.Context) error {
-			lib, err := newLibrary()
+			lib, err := newReadOnlyLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
 			}
@@ -159,10 +168,7 @@ func libListCommand() *cli.Command {
 				if version == "" {
 					version = "-"
 				}
-				desc := entry.Description
-				if len(desc) > 40 {
-					desc = desc[:37] + "..."
-				}
+				desc := truncate(entry.Description, 40)
 				fmt.Printf("%-20s %-30s %-10s %s\n",
 					truncate(entry.Name, 20),
 					truncate(entry.Source, 30),
@@ -187,7 +193,7 @@ func libRemoveCommand() *cli.Command {
 				return app.Errorf("template name is required\n\nUsage: tag lib rm <name>")
 			}
 
-			lib, err := newLibrary()
+			lib, err := newReadOnlyLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
 			}
@@ -261,7 +267,7 @@ func libInspectCommand() *cli.Command {
 				return app.Errorf("template name is required\n\nUsage: tag lib inspect <name>")
 			}
 
-			lib, err := newLibrary()
+			lib, err := newReadOnlyLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
 			}
@@ -304,11 +310,15 @@ func printInspect(entry *library.Entry, templateDir string) {
 	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Warning: could not read %s: %v\n", types.TemplateConfigFile, err)
+		}
 		return
 	}
 
 	var config map[string]any
 	if err := json.Unmarshal(data, &config); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not parse %s: %v\n", types.TemplateConfigFile, err)
 		return
 	}
 
@@ -367,7 +377,7 @@ func libEditCommand() *cli.Command {
 				return app.Errorf("template name is required\n\nUsage: tag lib edit <name>")
 			}
 
-			lib, err := newLibrary()
+			lib, err := newReadOnlyLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
 			}

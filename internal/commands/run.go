@@ -32,58 +32,13 @@ EXAMPLES:
 
   # With variable overrides
   tag run go-api my-service -m author="Jane Doe"`,
-		Flags:  scaffoldFlags(),
+		Flags:  commonScaffoldFlags(),
 		Action: runAction,
 	}
 }
 
-// scaffoldFlags returns the shared scaffold flags (minus --update, which is irrelevant for library templates).
-func scaffoldFlags() []cli.Flag {
-	return []cli.Flag{
-		&cli.StringFlag{
-			Name:    "output",
-			Aliases: []string{"o"},
-			Usage:   "Output directory (default: ./<project_name>)",
-		},
-		&cli.StringFlag{
-			Name:  "values",
-			Usage: "JSON file with variable values",
-		},
-		&cli.StringSliceFlag{
-			Name:    "meta",
-			Aliases: []string{"m"},
-			Usage:   "Variable override in key=value format (can be repeated)",
-		},
-		&cli.BoolFlag{
-			Name:  "no-input",
-			Usage: "Skip interactive prompts, use defaults only",
-		},
-		&cli.BoolFlag{
-			Name:    "force",
-			Aliases: []string{"f"},
-			Usage:   "Overwrite output directory if it exists",
-		},
-		&cli.BoolFlag{
-			Name:  "replay",
-			Usage: "Reuse saved variable values from a previous scaffold of this template",
-		},
-		&cli.BoolFlag{
-			Name:  "no-save",
-			Usage: "Don't save variable values for future replay",
-		},
-		&cli.BoolFlag{
-			Name:  "accept-hooks",
-			Usage: "Accept and run pre/post scaffold hooks without prompting",
-		},
-		&cli.BoolFlag{
-			Name:  "allow-recursive-render",
-			Usage: "Allow template syntax in variable values to be rendered",
-		},
-	}
-}
-
 func runAction(c *cli.Context) error {
-	lib, err := newLibrary()
+	lib, err := newReadOnlyLibrary()
 	if err != nil {
 		return app.Errorf("failed to initialize library: %w", err)
 	}
@@ -98,14 +53,15 @@ func runAction(c *cli.Context) error {
 		projectName = c.Args().Get(1)
 	}
 
-	templateDir, err := lib.TemplatePath(templateName)
+	// Get entry first — provides both path and source in one lookup
+	entry, err := lib.Get(templateName)
 	if err != nil {
 		return app.Errorf("failed to find template: %w", err)
 	}
 
-	entry, err := lib.Get(templateName)
+	templateDir, err := lib.TemplatePath(templateName)
 	if err != nil {
-		return app.Errorf("failed to get template info: %w", err)
+		return app.Errorf("failed to find template: %w", err)
 	}
 
 	meta, err := scaffold.ParseMetaFlags(c.StringSlice("meta"))
@@ -136,6 +92,12 @@ func runAction(c *cli.Context) error {
 	}
 
 	if err := s.Run(opts); err != nil {
+		// If a library template becomes an unconverted Cookiecutter (e.g., via `tag lib edit`),
+		// give a more helpful error message.
+		var ccErr *scaffold.CookiecutterDetectedError
+		if errors.As(err, &ccErr) {
+			return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", templateName, templateName)
+		}
 		return app.Errorf("scaffolding failed: %w", err)
 	}
 
@@ -187,9 +149,9 @@ func pickTemplate(lib *library.Library) (string, error) {
 		Size:  10,
 		Templates: &promptui.SelectTemplates{
 			Label:    "{{ . }}",
-			Active:   "\U0001F449 {{ .Display }}",
+			Active:   "> {{ .Display }}",
 			Inactive: "  {{ .Display }}",
-			Selected: "\u2705 {{ .Name }}",
+			Selected: "* {{ .Name }}",
 		},
 		Searcher: func(input string, index int) bool {
 			return strings.Contains(

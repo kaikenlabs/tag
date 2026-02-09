@@ -13,6 +13,9 @@ const appName = "tag"
 // It respects $XDG_DATA_HOME, defaulting to ~/.local/share/tag.
 func DataHome() (string, error) {
 	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+		if !filepath.IsAbs(dir) {
+			return "", fmt.Errorf("$XDG_DATA_HOME must be an absolute path, got: %s", dir)
+		}
 		return filepath.Join(dir, appName), nil
 	}
 

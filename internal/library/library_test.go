@@ -69,6 +69,8 @@ func TestUT_ValidateName(t *testing.T) {
 	}{
 		{"valid name", "go-api", false},
 		{"valid with dots", "my.template", false},
+		{"dot prefix rejected", ".hidden", true},
+		{"dot prefix .git", ".git", true},
 		{"valid with spaces", "my template", false},
 		{"empty", "", true},
 		{"dot", ".", true},
@@ -794,6 +796,63 @@ func TestUT_Remove_SymlinkDir(t *testing.T) {
 	// The decoy directory should still exist with its contents
 	assert.DirExists(t, decoyDir)
 	assert.FileExists(t, filepath.Join(decoyDir, "decoy.txt"))
+}
+
+// selectiveFailResolver fails for specific refs.
+type selectiveFailResolver struct {
+	failRefs map[string]bool
+}
+
+func (r *selectiveFailResolver) Resolve(_ context.Context, input string, _ remote.ResolveOptions) (string, error) {
+	if r.failRefs[input] {
+		return "", fmt.Errorf("simulated failure for %s", input)
+	}
+	if _, err := os.Stat(input); err != nil {
+		return "", fmt.Errorf("local path not found: %w", err)
+	}
+	return input, nil
+}
+
+func TestUT_UpdateAll_PartialFailure(t *testing.T) {
+	dataDir := t.TempDir()
+
+	// Create two templates with different source directories
+	src1 := t.TempDir()
+	createTagTemplate(t, src1, "alpha", "alpha desc", "1.0.0")
+
+	src2 := t.TempDir()
+	createTagTemplate(t, src2, "beta", "beta desc", "1.0.0")
+
+	// Use a normal resolver for the initial add
+	lib := NewWithDir(dataDir, &localResolver{})
+
+	_, err := lib.Add(context.Background(), AddOptions{Ref: src1, Name: "alpha"})
+	require.NoError(t, err)
+	_, err = lib.Add(context.Background(), AddOptions{Ref: src2, Name: "beta"})
+	require.NoError(t, err)
+
+	// Now use a selective-fail resolver that fails for src2
+	failLib := NewWithDir(dataDir, &selectiveFailResolver{
+		failRefs: map[string]bool{src2: true},
+	})
+
+	results, err := failLib.UpdateAll(context.Background())
+
+	// Should have partial results (alpha succeeded)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "alpha", results[0].Name)
+
+	// Should have an error (beta failed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "beta")
+}
+
+func TestUT_ValidateName_DotPrefix(t *testing.T) {
+	// Dot-prefixed names are rejected to prevent hidden directories
+	for _, name := range []string{".hidden", ".git", ".ssh", ".config"} {
+		err := validateName(name)
+		assert.ErrorIs(t, err, ErrInvalidName, "dot-prefix name %q should be rejected", name)
+	}
 }
 
 func TestUT_Update_RefetchesFromSource(t *testing.T) {

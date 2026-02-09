@@ -1,13 +1,14 @@
 package library
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -45,6 +46,12 @@ func New(dataDir string) (*Library, error) {
 		dataDir:  dataDir,
 		resolver: resolver,
 	}, nil
+}
+
+// NewReadOnly creates a Library without a resolver (for read-only operations like ls, inspect, edit, rm).
+// Operations that require resolving templates (add, update) will return an error.
+func NewReadOnly(dataDir string) *Library {
+	return &Library{dataDir: dataDir}
 }
 
 // NewWithDir creates a Library with explicit dependencies (for testing).
@@ -315,8 +322,8 @@ func (l *Library) List() ([]*Entry, error) {
 		entries = append(entries, entry)
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
+	slices.SortFunc(entries, func(a, b *Entry) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	return entries, nil
@@ -448,6 +455,9 @@ func validateName(name string) error {
 	}
 	if name == "." || name == ".." {
 		return fmt.Errorf("%w: reserved name", ErrInvalidName)
+	}
+	if strings.HasPrefix(name, ".") {
+		return fmt.Errorf("%w: name cannot start with a dot", ErrInvalidName)
 	}
 	for _, r := range name {
 		if r < 0x20 || r == 0x7F {

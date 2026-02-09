@@ -28,3 +28,11 @@ func TestUT_DataHome_CustomXDG(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(custom, "tag"), got)
 }
+
+func TestUT_DataHome_RelativePathRejected(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "relative/path")
+
+	_, err := DataHome()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "absolute path")
+}
