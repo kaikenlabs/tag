@@ -1,0 +1,111 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: tag
+    binary: tag
+    main: ./main.go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.CommitHash={{.Commit}}
+      - -X main.BuildDate={{.Date}}
+
+archives:
+  - id: tag
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - CLAUDE.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  abbrev: 7
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Performance Improvements
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Documentation
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - '^build:'
+      - '^style:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: kaikenlabs
+    name: tag
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## tag {{ .Tag }}
+
+    **Release Date:** {{ .Date }}
+
+    ### Installation
+
+    Download the appropriate binary for your platform below, or use:
+
+    ```bash
+    # macOS/Linux
+    curl -sL https://github.com/kaikenlabs/tag/releases/download/{{ .Tag }}/tag_{{ .Version }}_$(uname -s)_$(uname -m).tar.gz | tar xz
+
+    # Or with Go
+    go install github.com/kaikenlabs/tag@{{ .Tag }}
+    ```
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/kaikenlabs/tag/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    **Verification**: Download `checksums.txt` and verify with `sha256sum -c checksums.txt`

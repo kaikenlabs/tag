@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    # Only run if CI workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Get previous tag
+        id: previoustag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV_TAG"
+
+      - name: Determine version bump
+        id: semver
+        run: |
+          # Get commits since last tag
+          PREV_TAG="${{ steps.previoustag.outputs.tag }}"
+          
+          if [ "$PREV_TAG" = "v0.0.0" ]; then
+            # First release
+            NEW_VERSION="v0.1.0"
+          else
+            # Parse current version
+            CURRENT_VERSION=${PREV_TAG#v}
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          
+            # Get commits since last tag
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"%s")
+          
+            # Check for breaking changes (major bump)
+            if echo "$COMMITS" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE:"; then
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+            # Check for features (minor bump)
+            elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:"; then
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            # Check for fixes (patch bump)
+            elif echo "$COMMITS" | grep -qE "^fix(\(.+\))?:"; then
+              PATCH=$((PATCH + 1))
+            else
+              # No conventional commits found, default to patch
+              PATCH=$((PATCH + 1))
+            fi
+          
+            NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Check if version already exists
+        id: check_tag
+        run: |
+          VERSION="${{ steps.semver.outputs.version }}"
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $VERSION already exists, skipping release"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $VERSION does not exist, proceeding with release"
+          fi
+
+      - name: Create and push tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.semver.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+
+      - name: Run GoReleaser
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          retention-days: 7

@@ -158,7 +158,7 @@ func TestUT_VariableCollector_PromptForRequired(t *testing.T) {
 	}
 
 	opts := Options{
-		IsTTY:    true,
+		IsTTY: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -180,7 +180,7 @@ func TestUT_VariableCollector_SkipPrivateVars(t *testing.T) {
 	}
 
 	opts := Options{
-		IsTTY:    true,
+		IsTTY: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -207,7 +207,7 @@ func TestUT_VariableCollector_PromptForVarsWithDefaults(t *testing.T) {
 	}
 
 	opts := Options{
-		IsTTY:    true,
+		IsTTY: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -272,7 +272,7 @@ func TestUT_VariableCollector_SkipDerivedVars(t *testing.T) {
 	}
 
 	opts := Options{
-		IsTTY:    true,
+		IsTTY: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -301,7 +301,7 @@ func TestUT_VariableCollector_DerivedVarsWithMethodCalls(t *testing.T) {
 	}
 
 	opts := Options{
-		IsTTY:    true,
+		IsTTY: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -379,7 +379,7 @@ func TestUT_VariableCollector_ChoicePrompt(t *testing.T) {
 	}
 
 	opts := Options{
-		IsTTY:    true,
+		IsTTY: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -404,7 +404,7 @@ func TestUT_VariableCollector_BooleanPrompt(t *testing.T) {
 	}
 
 	opts := Options{
-		IsTTY:    true,
+		IsTTY: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -429,7 +429,7 @@ func TestUT_VariableCollector_NumberPrompt(t *testing.T) {
 	}
 
 	opts := Options{
-		IsTTY:    true,
+		IsTTY: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -606,7 +606,7 @@ func TestUT_VariableCollector_ReplayOverridesDefaults(t *testing.T) {
 	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
-		NoInput: true,
+		NoInput:     true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -633,7 +633,7 @@ func TestUT_VariableCollector_ReplayNotFound(t *testing.T) {
 	opts := Options{
 		Replay:      true,
 		TemplateRef: "gh:nonexistent/repo",
-		NoInput: true,
+		NoInput:     true,
 	}
 
 	_, err := collector.Collect(config, opts)
@@ -654,7 +654,7 @@ func TestUT_VariableCollector_ReplayWithoutTemplateRef(t *testing.T) {
 	opts := Options{
 		Replay:      true,
 		TemplateRef: "", // Missing template ref
-		NoInput: true,
+		NoInput:     true,
 	}
 
 	_, err := collector.Collect(config, opts)
@@ -728,7 +728,7 @@ func TestUT_VariableCollector_ReplayTypeCoercion(t *testing.T) {
 	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
-		NoInput: true,
+		NoInput:     true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -764,7 +764,7 @@ func TestUT_VariableCollector_ReplayIgnoresRemovedVars(t *testing.T) {
 	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
-		NoInput: true,
+		NoInput:     true,
 	}
 
 	vars, err := collector.Collect(config, opts)

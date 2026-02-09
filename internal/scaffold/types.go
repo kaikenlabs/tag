@@ -14,7 +14,7 @@ type TemplateConfig struct {
 	Version     string                 `json:"version,omitempty"`
 	Vars        map[string]VariableDef `json:"-"` // Custom unmarshaling needed
 	RawVars     map[string]any         `json:"vars"`
-	Hooks *types.HooksConfig `json:"hooks,omitempty"`
+	Hooks       *types.HooksConfig     `json:"hooks,omitempty"`
 }
 
 // HooksConfig is an alias for types.HooksConfig.
@@ -215,4 +215,3 @@ type Options struct {
 	AllowRecursiveRender bool              // Allow recursive template rendering in variable values (--allow-recursive-render flag)
 	IsTTY                bool              // Whether stdin is a TTY (set automatically if not provided)
 }
-

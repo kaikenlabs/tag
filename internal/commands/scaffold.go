@@ -206,8 +206,8 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 		return err
 	}
 
-	if err := promptForProjectDir(prompter, &opts); err != nil {
-		return err
+	if promptErr := promptForProjectDir(prompter, &opts); promptErr != nil {
+		return promptErr
 	}
 
 	// Update opts to use the converted template directory
