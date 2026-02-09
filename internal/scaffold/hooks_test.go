@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/shlex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1207,6 +1208,8 @@ func TestUT_ResolveHookCmd(t *testing.T) {
 		{"already absolute unchanged", "/usr/bin/python3 hooks/setup.py", "/tmpl", "/usr/bin/python3 hooks/setup.py"},
 		{"bare command unchanged", "echo hello", "/tmpl", "echo hello"},
 		{"command with args", "hooks/run.sh --verbose", "/tmpl", "/tmpl/hooks/run.sh --verbose"},
+		{"quoted path with spaces", `"hooks/my script.py" --flag`, "/tmpl", "'/tmpl/hooks/my script.py' --flag"},
+		{"base dir with spaces", "hooks/run.sh", "/my templates", "'/my templates/hooks/run.sh'"},
 	}
 
 	for _, tt := range tests {
@@ -1214,6 +1217,45 @@ func TestUT_ResolveHookCmd(t *testing.T) {
 			result := resolveHookCmd(tt.cmd, tt.baseDir)
 			assert.Equal(t, tt.expected, result)
 		})
+	}
+}
+
+func TestUT_ShellJoin(t *testing.T) {
+	tests := []struct {
+		name     string
+		argv     []string
+		expected string
+	}{
+		{"simple", []string{"echo", "hello"}, "echo hello"},
+		{"single arg", []string{"/bin/sh"}, "/bin/sh"},
+		{"arg with space", []string{"/path/my file.py", "--flag"}, "'/path/my file.py' --flag"},
+		{"arg with single quote", []string{"it's", "here"}, `'it'\''s' here`},
+		{"empty arg", []string{"cmd", "", "arg"}, "cmd '' arg"},
+		{"arg with backslash", []string{`path\to\file`}, `'path\to\file'`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := shellJoin(tt.argv)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUT_ShellJoin_RoundTrip(t *testing.T) {
+	// Verify that shellJoin output can be re-parsed by shlex.Split correctly
+	testCases := [][]string{
+		{"/path/to/script.py", "--verbose"},
+		{"/path/with spaces/script.py", "--flag", "value"},
+		{"cmd", "arg with spaces", "normal"},
+		{"/simple/path"},
+	}
+
+	for _, argv := range testCases {
+		joined := shellJoin(argv)
+		reparsed, err := shlex.Split(joined)
+		require.NoError(t, err, "shellJoin output should be parseable: %q", joined)
+		assert.Equal(t, argv, reparsed, "round-trip failed for %v -> %q", argv, joined)
 	}
 }
 

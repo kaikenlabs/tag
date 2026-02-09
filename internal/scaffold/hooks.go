@@ -465,9 +465,28 @@ func resolveHookCmd(cmd, baseDir string) string {
 		return cmd
 	}
 
-	// Replace the relative path with an absolute one
-	absPath := filepath.Join(baseDir, cmdPath)
-	return absPath + cmd[len(cmdPath):]
+	// Replace argv[0] with absolute path and reconstruct the command.
+	// We reconstruct from argv rather than slicing the original string
+	// because shlex.Split strips quotes, so byte offsets won't match
+	// for quoted paths (e.g., '"hooks/my script.py" --flag').
+	argv[0] = filepath.Join(baseDir, cmdPath)
+	return shellJoin(argv)
+}
+
+// shellJoin reconstructs a command string from an argv slice, quoting
+// arguments that contain spaces or shell-special characters so that
+// shlex.Split will re-parse them correctly.
+func shellJoin(argv []string) string {
+	parts := make([]string, len(argv))
+	for i, arg := range argv {
+		if arg == "" || strings.ContainsAny(arg, " \t\"'\\") {
+			// Use single-quote escaping (POSIX): wrap in '' and escape embedded '.
+			parts[i] = "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
+		} else {
+			parts[i] = arg
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // RunArgvHooks executes pre-split argv hook commands and prints their output.
