@@ -8,10 +8,11 @@
 #
 # Options:
 #   --version VERSION   Install a specific version (default: latest)
-#   --dir DIR           Installation directory (default: ./bin)
+#   --dir DIR           Installation directory (default: ~/.local/bin)
 #   --no-verify         Skip checksum verification
 #
 # Environment:
+#   XDG_BIN_HOME        Override install directory (default: ~/.local/bin)
 #   GITHUB_TOKEN        Optional token for GitHub API (avoids rate limits)
 
 set -e
@@ -21,8 +22,8 @@ REPO="tag"
 BINARY="tag"
 GITHUB_RELEASES="https://github.com/${OWNER}/${REPO}/releases"
 
-# Defaults
-INSTALL_DIR="./bin"
+# Defaults — respect XDG_BIN_HOME, fall back to ~/.local/bin
+INSTALL_DIR="${XDG_BIN_HOME:-${HOME}/.local/bin}"
 VERSION=""
 VERIFY_CHECKSUM=1
 
@@ -35,7 +36,7 @@ Usage:
 
 Options:
     --version VERSION   Install a specific version (default: latest)
-    --dir DIR           Installation directory (default: ./bin)
+    --dir DIR           Installation directory (default: \$XDG_BIN_HOME or ~/.local/bin)
     --no-verify         Skip checksum verification
     -h, --help          Show this help message
 EOF
