@@ -7,22 +7,29 @@ on:
     branches: [main]
 
 jobs:
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.8
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       - name: Run vet
         run: go vet ./...
-
-      - name: Run lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
 
       - name: Run unit tests
         run: go test -coverprofile=coverage.out -failfast ./...
