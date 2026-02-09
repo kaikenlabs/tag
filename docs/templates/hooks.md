@@ -1,6 +1,6 @@
 # Hooks Guide
 
-Hooks allow you to run shell commands before and after scaffold operations. This is useful for validation, initialization, and post-processing tasks.
+Hooks allow you to run commands and scripts before and after scaffold operations. This is useful for validation, initialization, and post-processing tasks.
 
 ## Overview
 
@@ -36,11 +36,27 @@ Define hooks in `tag.template.json`:
 
 ## Hook Execution
 
-### Shell Execution
+### Script Execution
 
-Hooks are executed via the system shell:
-- **Unix/macOS**: `/bin/sh -c "command"`
-- **Windows**: `cmd.exe /C "command"`
+Hooks are executed as direct commands (no shell wrapper). Bare commands like `go`, `npm`, and `git` are looked up on `PATH` as usual.
+
+For script files (paths containing `/` or starting with `.`), TAG automatically resolves the interpreter:
+
+1. **Shebang line** (`#!`): If the script starts with a shebang, the OS handles execution normally.
+2. **Extension fallback**: If there is no shebang, TAG prepends an interpreter based on the file extension.
+3. **No match**: If the extension is unrecognized, the file is executed as-is.
+
+### Supported Script Languages
+
+| Extension | Interpreter | Notes |
+|-----------|-------------|-------|
+| `.py` | `python3` or `python` | Tries `python3` first, falls back to `python` |
+| `.sh` | `sh` | Only when no shebang is present |
+| `.rb` | `ruby` | |
+| `.js` | `node` | |
+| `.pl` | `perl` | |
+
+Scripts with a shebang (`#!/usr/bin/env python3`, `#!/bin/bash`, etc.) are always executed using the shebang, regardless of extension.
 
 ### Sequential Execution
 
@@ -360,6 +376,18 @@ fi
 
 ### Python Post-Processing
 
+Python scripts are executed automatically — TAG resolves the interpreter from the `.py` extension:
+
+```json
+{
+  "hooks": {
+    "post_scaffold": ["./scripts/finalize.py"]
+  }
+}
+```
+
+You can also specify the interpreter explicitly if preferred:
+
 ```json
 {
   "hooks": {
@@ -373,14 +401,16 @@ fi
 ```json
 {
   "hooks": {
-    "post_scaffold": ["node ./scripts/setup.js"]
+    "post_scaffold": ["./scripts/setup.js"]
   }
 }
 ```
 
 ## Migrating from Cookiecutter Hooks
 
-Cookiecutter hooks use Python scripts. When converting:
+Cookiecutter hooks (`hooks/pre_gen_project.py`, `hooks/post_gen_project.py`) work natively in TAG. The `tag convert` command copies hook files and generates the appropriate hooks configuration automatically.
+
+Python hooks are executed using the system's `python3` (or `python`) interpreter — no manual conversion to shell scripts is required.
 
 1. **Simple Commands**: Convert directly
    ```python
@@ -391,11 +421,11 @@ Cookiecutter hooks use Python scripts. When converting:
    "git init"
    ```
 
-2. **Python Logic**: Use shell scripts or keep Python
+2. **Python Hooks**: Reference the script directly — TAG resolves the interpreter
    ```json
    {
      "hooks": {
-       "post_scaffold": ["python3 ./hooks/post_gen_project.py"]
+       "post_scaffold": ["hooks/post_gen_project.py"]
      }
    }
    ```
@@ -409,6 +439,8 @@ Cookiecutter hooks use Python scripts. When converting:
    import os
    project_name = os.environ.get('TAG_VAR_PROJECT_NAME')
    ```
+
+> **Note**: TAG tries `python3` first, then `python`. If neither is installed, the hook will fail with a clear "command not found" error.
 
 ## See Also
 

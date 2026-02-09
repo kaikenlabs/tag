@@ -231,6 +231,8 @@ func (r *ArgvHookRunner) RunArgv(phase HookPhase, commands [][]string, workDir s
 		execArgv[0] = cmdPath
 		copy(execArgv[1:], argv[1:])
 
+		execArgv = resolveInterpreter(execArgv, workDir)
+
 		cmdDisplay := strings.Join(argv, " ")
 		result := execWithTimeout(cmdDisplay, execArgv, workDir, env)
 		results = append(results, result)
