@@ -38,9 +38,9 @@ func CreateMemoryLoaderFromMap(templates map[string]string) loaders.Loader {
 	return loaders.MustNewMemoryLoader(normalized)
 }
 
-// LoadTemplateFiles loads all template files from a directory.
-// This is useful for batch processing templates.
-func LoadTemplateFiles(dir, suffix string) (map[string]string, error) {
+// LoadTemplateTree recursively loads all template files from a directory tree.
+// Files are filtered by the given suffix. This is useful for batch processing templates.
+func LoadTemplateTree(dir, suffix string) (map[string]string, error) {
 	templates := make(map[string]string)
 
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {

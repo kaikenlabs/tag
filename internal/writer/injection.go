@@ -2,13 +2,16 @@ package writer
 
 import (
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
-type InjectClause string
+// InjectClause is an alias for types.InjectClause.
+type InjectClause = types.InjectClause
 
 const (
-	InjectBefore InjectClause = "Before"
-	InjectAfter  InjectClause = "After"
+	InjectBefore = types.InjectBefore
+	InjectAfter  = types.InjectAfter
 )
 
 type Inject struct {

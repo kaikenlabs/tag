@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // Metadata extraction and parsing errors.
@@ -28,12 +30,12 @@ const (
 	ActionInject Action = "Inject"
 )
 
-// InjectClause represents where to inject content relative to a marker.
-type InjectClause string
+// InjectClause is an alias for types.InjectClause.
+type InjectClause = types.InjectClause
 
 const (
-	InjectBefore InjectClause = "Before"
-	InjectAfter  InjectClause = "After"
+	InjectBefore = types.InjectBefore
+	InjectAfter  = types.InjectAfter
 )
 
 // Metadata represents the parsed metadata from a template's --- block.

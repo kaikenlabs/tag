@@ -255,7 +255,7 @@ func TestUT_CreateFileSystemLoader_NotExists(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not exist")
 }
 
-func TestUT_LoadTemplateFiles(t *testing.T) {
+func TestUT_LoadTemplateTree(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test files
@@ -266,7 +266,7 @@ func TestUT_LoadTemplateFiles(t *testing.T) {
 	err = os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("not a template"), 0o644)
 	require.NoError(t, err)
 
-	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	templates, err := LoadTemplateTree(tmpDir, "tmpl")
 	require.NoError(t, err)
 
 	assert.Len(t, templates, 2)
@@ -275,7 +275,7 @@ func TestUT_LoadTemplateFiles(t *testing.T) {
 	assert.NotContains(t, templates, "c.txt")
 }
 
-func TestUT_LoadTemplateFiles_Subdirectories(t *testing.T) {
+func TestUT_LoadTemplateTree_Subdirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 	subDir := filepath.Join(tmpDir, "sub")
 	err := os.Mkdir(subDir, 0o755)
@@ -286,7 +286,7 @@ func TestUT_LoadTemplateFiles_Subdirectories(t *testing.T) {
 	err = os.WriteFile(filepath.Join(subDir, "nested.tmpl"), []byte("nested"), 0o644)
 	require.NoError(t, err)
 
-	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	templates, err := LoadTemplateTree(tmpDir, "tmpl")
 	require.NoError(t, err)
 
 	assert.Len(t, templates, 2)
@@ -294,8 +294,8 @@ func TestUT_LoadTemplateFiles_Subdirectories(t *testing.T) {
 	assert.Equal(t, "nested", templates[filepath.Join("sub", "nested.tmpl")])
 }
 
-func TestUT_LoadTemplateFiles_NotExists(t *testing.T) {
-	_, err := LoadTemplateFiles("/nonexistent", "tmpl")
+func TestUT_LoadTemplateTree_NotExists(t *testing.T) {
+	_, err := LoadTemplateTree("/nonexistent", "tmpl")
 	assert.Error(t, err)
 }
 
@@ -320,7 +320,7 @@ func TestUT_Loader_Integration_WithEngine(t *testing.T) {
 	assert.Equal(t, "Hello, World!", result)
 }
 
-func TestUT_LoadTemplateFiles_SkipsSymlinks(t *testing.T) {
+func TestUT_LoadTemplateTree_SkipsSymlinks(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a real template file
@@ -338,7 +338,7 @@ func TestUT_LoadTemplateFiles_SkipsSymlinks(t *testing.T) {
 	err = os.Symlink(outsideFile, symlinkPath)
 	require.NoError(t, err)
 
-	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	templates, err := LoadTemplateTree(tmpDir, "tmpl")
 	require.NoError(t, err)
 
 	// Should only contain the real file, not the symlinked one
@@ -347,7 +347,7 @@ func TestUT_LoadTemplateFiles_SkipsSymlinks(t *testing.T) {
 	assert.NotContains(t, templates, "linked.tmpl")
 }
 
-func TestUT_LoadTemplateFiles_SkipsSymlinkDirs(t *testing.T) {
+func TestUT_LoadTemplateTree_SkipsSymlinkDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a real template file
@@ -364,7 +364,7 @@ func TestUT_LoadTemplateFiles_SkipsSymlinkDirs(t *testing.T) {
 	err = os.Symlink(outsideDir, symlinkDir)
 	require.NoError(t, err)
 
-	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	templates, err := LoadTemplateTree(tmpDir, "tmpl")
 	require.NoError(t, err)
 
 	// Should only contain the real file

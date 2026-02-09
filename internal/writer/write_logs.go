@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 )
 
+// fileLog is a dry-run writer that logs output to console instead of writing to disk.
+// ReadFile and OpenFile perform real I/O because the inject and append operations
+// need to read existing file content to compute the merged output, even in dry-run mode.
 type fileLog struct{}
 
 var _ fileReadWrite = (*fileLog)(nil)
