@@ -46,7 +46,6 @@ func createTestConfig(t *testing.T, basePath string) *config.Config {
 	return &config.Config{
 		Env: config.Env{
 			Path:       basePath,
-			Extension:  ".tmpl",
 			SharedPath: "_shared",
 			BundlePath: "_bundles",
 		},
@@ -65,7 +64,6 @@ func createTestCLIContext(t *testing.T, args []string, flagValues map[string]int
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: flags.DryRunFlag},
 			&cli.StringFlag{Name: flags.PathFlag, Value: ".tag.templates"},
-			&cli.StringFlag{Name: flags.ExtensionFlag, Value: ".tmpl"},
 			&cli.StringFlag{Name: flags.SharedPathFlag, Value: "_shared"},
 			&cli.StringFlag{Name: flags.BundlePathFlag, Value: "_bundles"},
 			&cli.BoolFlag{Name: "bundle"},
@@ -126,7 +124,7 @@ func createGenerator(t *testing.T, basePath, generatorName, templateContent stri
 		t.Fatalf("failed to create generator dir: %v", err)
 	}
 
-	templatePath := filepath.Join(genDir, generatorName+".tmpl")
+	templatePath := filepath.Join(genDir, generatorName+".go")
 	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
 		t.Fatalf("failed to write template file: %v", err)
 	}

@@ -66,19 +66,13 @@ func main() {
 				Usage:   "Shared template directory name",
 				Aliases: []string{"sp"},
 				EnvVars: []string{"TAG_SHARED_PATH"},
-			}, &cli.StringFlag{
+			},
+			&cli.StringFlag{
 				Name:    flags.BundlePathFlag,
 				Value:   "_bundles",
 				Usage:   "Bundles directory name",
 				Aliases: []string{"bp"},
 				EnvVars: []string{"TAG_BUNDLE_PATH"},
-			},
-			&cli.StringFlag{
-				Name:    flags.ExtensionFlag,
-				Value:   ".tmpl",
-				Usage:   "Template file extension.",
-				Aliases: []string{"x"},
-				EnvVars: []string{"TAG_EXTENSION"},
 			},
 		},
 	}

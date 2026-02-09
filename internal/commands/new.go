@@ -48,7 +48,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	slog.Info(chalk.Green("creating new generator"), "path", cfg.Env.Path)
-	dirPath := filepath.Join(cfg.Env.Path, generator, fmt.Sprintf("%s%s", generator, cfg.Env.Extension))
+	dirPath := filepath.Join(cfg.Env.Path, generator, generator+".go")
 
 	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)

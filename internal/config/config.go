@@ -19,7 +19,6 @@ type Config struct {
 }
 type Env struct {
 	Path       string `json:"TAG_PATH"`
-	Extension  string `json:"TAG_EXTENSION"`
 	SharedPath string `json:"TAG_SHARED_PATH"`
 	BundlePath string `json:"TAG_BUNDLE_PATH"`
 }
@@ -58,7 +57,6 @@ func CreateConfigFile(c *cli.Context) error {
 	cfg := Config{
 		Env: Env{
 			Path:       c.String(flags.PathFlag),
-			Extension:  c.String(flags.ExtensionFlag),
 			SharedPath: c.String(flags.SharedPathFlag),
 			BundlePath: c.String(flags.BundlePathFlag),
 		},

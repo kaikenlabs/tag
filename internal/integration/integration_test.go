@@ -243,7 +243,7 @@ func TestIT_GenerateCreate(t *testing.T) {
 
 	workDir := setupWorkDir(t, "")
 
-	gen, err := engine.NewGenerator(false, generatorDir, "", ".tmpl")
+	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
 	err = gen.Generate(engine.Data{Name: "user_service"})
@@ -262,7 +262,7 @@ func TestIT_GenerateInjectAfter(t *testing.T) {
 
 	workDir := setupWorkDir(t, preExistingDir)
 
-	gen, err := engine.NewGenerator(false, generatorDir, "", ".tmpl")
+	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
 	err = gen.Generate(engine.Data{Name: "users"})
@@ -281,7 +281,7 @@ func TestIT_GenerateInjectBefore(t *testing.T) {
 
 	workDir := setupWorkDir(t, preExistingDir)
 
-	gen, err := engine.NewGenerator(false, generatorDir, "", ".tmpl")
+	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
 	err = gen.Generate(engine.Data{Name: "users"})
@@ -300,7 +300,7 @@ func TestIT_GenerateAppend(t *testing.T) {
 
 	workDir := setupWorkDir(t, preExistingDir)
 
-	gen, err := engine.NewGenerator(false, generatorDir, "", ".tmpl")
+	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
 	err = gen.Generate(engine.Data{Name: "users"})
@@ -335,7 +335,7 @@ func TestIT_GenerateBundle(t *testing.T) {
 	for _, genRef := range bundle.Generators {
 		genDir := filepath.Join(generatorsDir, genRef.Name)
 
-		gen, err := engine.NewGeneratorWithEngine(tmplEngine, false, genDir, "", ".tmpl")
+		gen, err := engine.NewGeneratorWithEngine(tmplEngine, false, genDir, "")
 		require.NoError(t, err)
 
 		err = gen.Generate(engine.Data{Name: "order"})
@@ -356,7 +356,7 @@ func TestIT_GenerateMixed(t *testing.T) {
 
 	workDir := setupWorkDir(t, preExistingDir)
 
-	gen, err := engine.NewGenerator(false, generatorDir, "", ".tmpl")
+	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
 	err = gen.Generate(engine.Data{Name: "auth"})

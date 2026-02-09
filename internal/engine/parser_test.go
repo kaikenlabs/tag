@@ -60,38 +60,28 @@ func newTestParser(t *testing.T) TemplateParser {
 }
 
 func TestUT_LoadTemplateFiles(t *testing.T) {
-	type args struct {
-		fileSuffix string
-		dirPath    string
-	}
 	tests := []struct {
 		name    string
-		args    args
+		dirPath string
 		want    int
 		wantErr bool
 	}{
 		{
-			name: "should load all templates from directory",
-			args: args{
-				fileSuffix: "tmpl",
-				dirPath:    "testdata/generators",
-			},
+			name:    "should load all templates from directory",
+			dirPath: "testdata/generators",
 			want:    7,
 			wantErr: false,
 		},
 		{
-			name: "should return error if not exists",
-			args: args{
-				fileSuffix: "tmpl",
-				dirPath:    "testdata/nonexistent",
-			},
+			name:    "should return error if not exists",
+			dirPath: "testdata/nonexistent",
 			want:    0,
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := LoadTemplateFiles(tt.args.dirPath, tt.args.fileSuffix)
+			got, err := LoadTemplateFiles(tt.dirPath)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

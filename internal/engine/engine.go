@@ -19,30 +19,30 @@ const (
 
 // NewGenerator creates a Generator with the standard pipeline.
 // It creates a new template engine, loads templates, and wires up the parser and writer.
-func NewGenerator(dryRun bool, dirPath, sharedPath, fileSuffix string) (Generator, error) {
+func NewGenerator(dryRun bool, dirPath, sharedPath string) (Generator, error) {
 	tmplEngine, err := template.NewEngine()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create template engine: %w", err)
 	}
-	return NewGeneratorWithEngine(tmplEngine, dryRun, dirPath, sharedPath, fileSuffix)
+	return NewGeneratorWithEngine(tmplEngine, dryRun, dirPath, sharedPath)
 }
 
 // NewGeneratorWithEngine creates a Generator using an existing template engine.
 // This allows sharing a template engine (and its cache) across multiple generators,
 // such as when running a bundle of generators.
-func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath, fileSuffix string) (Generator, error) {
+func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath string) (Generator, error) {
 	if dryRun {
 		slog.Info(chalk.Cyan("DRYRUN MODE"))
 	}
 
 	// Load primary templates
-	templates, err := LoadTemplateFiles(dirPath, fileSuffix)
+	templates, err := LoadTemplateFiles(dirPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot load templates: %w", err)
 	}
 
 	// Load shared templates (non-fatal)
-	sharedTemplates, sharedErr := LoadTemplateFiles(sharedPath, fileSuffix)
+	sharedTemplates, sharedErr := LoadTemplateFiles(sharedPath)
 	if sharedErr != nil {
 		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
 	}

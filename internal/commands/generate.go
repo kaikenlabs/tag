@@ -26,6 +26,8 @@ var newEngine = engine.NewGenerator
 // It can be replaced in tests to inject a mock generator.
 var newBundleEngine = engine.NewGeneratorWithEngine
 
+
+
 func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name: "generate",
@@ -139,7 +141,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 			return app.Errorf("generator %s not found in: %s", generator.Name, cfg.Env.Path)
 		}
 
-		gen, err := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath, cfg.Env.Extension)
+		gen, err := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath)
 		if err != nil {
 			return app.Errorf("error creating engine: %w", err)
 		}
@@ -179,7 +181,7 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
 	}
 
-	gen, err := newEngine(c.Bool(flags.DryRunFlag), dirPath, sharedPath, cfg.Env.Extension)
+	gen, err := newEngine(c.Bool(flags.DryRunFlag), dirPath, sharedPath)
 	if err != nil {
 		return app.Errorf("error creating engine: %w", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/kaikenlabs/tag/internal/template"
 )
@@ -171,8 +170,8 @@ func mergeParserMetadata(cliMeta map[string]string, templateMeta map[string]stri
 	return result
 }
 
-// LoadTemplateFiles loads templates from a directory.
-func LoadTemplateFiles(dirPath string, fileSuffix string) (map[string]string, error) {
+// LoadTemplateFiles loads all files from a directory as templates.
+func LoadTemplateFiles(dirPath string) (map[string]string, error) {
 	rootTemplates := map[string]string{}
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -180,16 +179,17 @@ func LoadTemplateFiles(dirPath string, fileSuffix string) (map[string]string, er
 	}
 
 	for _, file := range files {
-		fileLocation := filepath.Join(dirPath, file.Name())
-		if strings.HasSuffix(file.Name(), fileSuffix) {
-			slog.Debug("loading template", "file", fileLocation)
-			data, err := os.ReadFile(filepath.Clean(fileLocation))
-			if err != nil {
-				slog.Error("cannot read file", "file", fileLocation)
-				return rootTemplates, err
-			}
-			rootTemplates[fileLocation] = string(data)
+		if file.IsDir() {
+			continue
 		}
+		fileLocation := filepath.Join(dirPath, file.Name())
+		slog.Debug("loading template", "file", fileLocation)
+		data, err := os.ReadFile(filepath.Clean(fileLocation))
+		if err != nil {
+			slog.Error("cannot read file", "file", fileLocation)
+			return rootTemplates, err
+		}
+		rootTemplates[fileLocation] = string(data)
 	}
 	return rootTemplates, nil
 }
