@@ -18,12 +18,12 @@ const MaxConfigFileSize = 10 * 1024 * 1024
 
 // Scaffold orchestrates the scaffolding process.
 type Scaffold struct {
-	validator   *schema.Validator
-	collector   VariableCollector
-	processor   PathProcessor
-	writer      OutputWriter
-	engine      template.TemplateRenderer
-	prompter    Prompter
+	validator  *schema.Validator
+	collector  VariableCollector
+	processor  PathProcessor
+	writer     OutputWriter
+	engine     template.TemplateRenderer
+	prompter   Prompter
 	hookRunner HookRunner // Executes pre/post scaffold hooks
 }
 
@@ -51,12 +51,12 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 	writer := NewOutputWriter(engine, processor)
 
 	return &Scaffold{
-		validator:   validator,
-		collector:   collector,
-		processor:   processor,
-		writer:      writer,
-		engine:      engine,
-		prompter:    prompter,
+		validator:  validator,
+		collector:  collector,
+		processor:  processor,
+		writer:     writer,
+		engine:     engine,
+		prompter:   prompter,
 		hookRunner: NewHookRunner(),
 	}, nil
 }
