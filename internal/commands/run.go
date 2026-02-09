@@ -38,7 +38,7 @@ EXAMPLES:
 }
 
 func runAction(c *cli.Context) error {
-	lib, err := newReadOnlyLibrary()
+	lib, err := newLocalLibrary()
 	if err != nil {
 		return app.Errorf("failed to initialize library: %w", err)
 	}
@@ -56,12 +56,12 @@ func runAction(c *cli.Context) error {
 	// Get entry first — provides both path and source in one lookup
 	entry, err := lib.Get(templateName)
 	if err != nil {
-		return app.Errorf("failed to find template: %w", err)
+		return asAppError(err)
 	}
 
 	templateDir, err := lib.TemplatePath(templateName)
 	if err != nil {
-		return app.Errorf("failed to find template: %w", err)
+		return asAppError(err)
 	}
 
 	meta, err := scaffold.ParseMetaFlags(c.StringSlice("meta"))
@@ -69,22 +69,9 @@ func runAction(c *cli.Context) error {
 		return app.Errorf("invalid meta flag: %w", err)
 	}
 
-	opts := scaffold.Options{
-		TemplateDir:          templateDir,
-		OutputDir:            c.String("output"),
-		ProjectName:          projectName,
-		ValuesFile:           c.String("values"),
-		Meta:                 meta,
-		NoInput:              c.Bool("no-input"),
-		Force:                c.Bool("force"),
-		Replay:               c.Bool("replay"),
-		NoSave:               c.Bool("no-save"),
-		TemplateRef:          entry.Source,
-		AcceptHooks:          c.Bool("accept-hooks"),
-		IsRemote:             false, // Library templates are local
-		AllowRecursiveRender: c.Bool("allow-recursive-render"),
-		IsTTY:                scaffold.IsTTY(),
-	}
+	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
+	opts.TemplateRef = entry.Source
+	opts.IsRemote = false // Library templates are local
 
 	s, err := scaffold.NewScaffold(opts)
 	if err != nil {
@@ -124,7 +111,7 @@ func pickTemplate(lib *library.Library) (string, error) {
 	}
 
 	if len(entries) == 0 {
-		return "", errors.New("no templates installed; add one with: tag lib add <ref>")
+		return "", app.Errorf("no templates installed; add one with: tag lib add <ref>")
 	}
 
 	// Build display items

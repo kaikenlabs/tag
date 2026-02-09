@@ -48,9 +48,9 @@ func New(dataDir string) (*Library, error) {
 	}, nil
 }
 
-// NewReadOnly creates a Library without a resolver (for read-only operations like ls, inspect, edit, rm).
-// Operations that require resolving templates (add, update) will return an error.
-func NewReadOnly(dataDir string) *Library {
+// NewLocal creates a Library without a resolver (for local-only operations like ls, inspect, edit, rm).
+// Operations that require resolving remote templates (add, update) will return an error.
+func NewLocal(dataDir string) *Library {
 	return &Library{dataDir: dataDir}
 }
 
@@ -155,8 +155,8 @@ func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 }
 
 // storeTemplate copies or converts a template into the library destination.
-// On update, it uses an atomic swap to avoid data loss if the copy/conversion fails.
-// On fresh add, it uses deferred cleanup to remove partial writes on failure.
+// Uses atomic swap when updating or when the destination already exists (inconsistent state).
+// Uses deferred cleanup for fresh adds to remove partial writes on failure.
 func storeTemplate(ctx context.Context, resolvedDir, destPath, name string, opts AddOptions, isUpdate bool) (*AddResult, error) {
 	result := &AddResult{
 		Name:        name,
@@ -165,21 +165,23 @@ func storeTemplate(ctx context.Context, resolvedDir, destPath, name string, opts
 		TemplateDir: destPath,
 	}
 
-	if isUpdate {
+	// Use atomic swap for updates, or if dest exists on disk despite not being in registry
+	// (inconsistent state — avoid data loss).
+	if isUpdate || pathExists(destPath) {
 		return storeTemplateAtomic(ctx, resolvedDir, destPath, name, opts, result)
 	}
 
 	return storeTemplateFresh(ctx, resolvedDir, destPath, name, opts, result)
 }
 
+// pathExists reports whether a path exists on disk (using Lstat to not follow symlinks).
+func pathExists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
 // storeTemplateFresh writes to destPath directly with deferred cleanup on failure.
 func storeTemplateFresh(ctx context.Context, resolvedDir, destPath, name string, opts AddOptions, result *AddResult) (*AddResult, error) {
-	// Guard: if destPath already exists on disk but registry said "not exists",
-	// we have inconsistent state. Route to atomic path to avoid data loss.
-	if _, err := os.Lstat(destPath); err == nil {
-		return storeTemplateAtomic(ctx, resolvedDir, destPath, name, opts, result)
-	}
-
 	success := false
 	defer func() {
 		if !success {

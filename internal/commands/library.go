@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/library"
+	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/xdg"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -60,13 +61,13 @@ func newLibrary() (*library.Library, error) {
 	return library.New(dataDir)
 }
 
-// newReadOnlyLibrary creates a library without a resolver (for ls, inspect, edit, rm).
-func newReadOnlyLibrary() (*library.Library, error) {
+// newLocalLibrary creates a library without a resolver (for ls, inspect, edit, rm).
+func newLocalLibrary() (*library.Library, error) {
 	dataDir, err := xdg.DataHome()
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine data directory: %w", err)
 	}
-	return library.NewReadOnly(dataDir), nil
+	return library.NewLocal(dataDir), nil
 }
 
 func libAddCommand() *cli.Command {
@@ -101,7 +102,7 @@ func libAddCommand() *cli.Command {
 				Force: c.Bool("force"),
 			})
 			if err != nil {
-				return app.Errorf("failed to add template: %w", err)
+				return asAppError(err)
 			}
 
 			printAddResult(result)
@@ -142,14 +143,14 @@ func libListCommand() *cli.Command {
 		Aliases: []string{"list"},
 		Usage:   "List installed templates",
 		Action: func(c *cli.Context) error {
-			lib, err := newReadOnlyLibrary()
+			lib, err := newLocalLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
 			}
 
 			entries, err := lib.List()
 			if err != nil {
-				return app.Errorf("failed to list templates: %w", err)
+				return asAppError(err)
 			}
 
 			if len(entries) == 0 {
@@ -193,14 +194,14 @@ func libRemoveCommand() *cli.Command {
 				return app.Errorf("template name is required\n\nUsage: tag lib rm <name>")
 			}
 
-			lib, err := newReadOnlyLibrary()
+			lib, err := newLocalLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
 			}
 
 			name := c.Args().Get(0)
 			if err := lib.Remove(name); err != nil {
-				return app.Errorf("failed to remove template: %w", err)
+				return asAppError(err)
 			}
 
 			fmt.Printf("Removed template %q\n", name)
@@ -233,7 +234,7 @@ func updateSingleTemplate(c *cli.Context, lib *library.Library) error {
 	name := c.Args().Get(0)
 	result, err := lib.Update(c.Context, name)
 	if err != nil {
-		return app.Errorf("failed to update template: %w", err)
+		return asAppError(err)
 	}
 	printAddResult(result)
 	return nil
@@ -251,7 +252,7 @@ func updateAllTemplates(c *cli.Context, lib *library.Library) error {
 	}
 
 	if err != nil {
-		return app.Errorf("failed to update templates: %w", err)
+		return asAppError(err)
 	}
 
 	return nil
@@ -267,7 +268,7 @@ func libInspectCommand() *cli.Command {
 				return app.Errorf("template name is required\n\nUsage: tag lib inspect <name>")
 			}
 
-			lib, err := newReadOnlyLibrary()
+			lib, err := newLocalLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
 			}
@@ -275,12 +276,12 @@ func libInspectCommand() *cli.Command {
 			name := c.Args().Get(0)
 			entry, err := lib.Get(name)
 			if err != nil {
-				return app.Errorf("failed to get template: %w", err)
+				return asAppError(err)
 			}
 
 			templateDir, err := lib.TemplatePath(name)
 			if err != nil {
-				return app.Errorf("failed to get template path: %w", err)
+				return asAppError(err)
 			}
 
 			printInspect(entry, templateDir)
@@ -306,7 +307,7 @@ func printInspect(entry *library.Entry, templateDir string) {
 		fmt.Printf("Converted:    from %s\n", entry.ConvertedFrom)
 	}
 
-	// Read and display template config
+	// Read and display template config using typed parser
 	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -316,55 +317,72 @@ func printInspect(entry *library.Entry, templateDir string) {
 		return
 	}
 
-	var config map[string]any
-	if err := json.Unmarshal(data, &config); err != nil {
+	config, err := scaffold.ParseTemplateConfig(data)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not parse %s: %v\n", types.TemplateConfigFile, err)
 		return
 	}
 
-	if vars, ok := config["vars"].(map[string]any); ok && len(vars) > 0 {
+	if len(config.Vars) > 0 {
 		fmt.Println()
 		fmt.Println("Variables:")
-		names := sortedKeys(vars)
+		names := make([]string, 0, len(config.Vars))
+		for name := range config.Vars {
+			names = append(names, name)
+		}
+		slices.Sort(names)
 		for _, name := range names {
-			val := vars[name]
-			switch v := val.(type) {
-			case map[string]any:
-				if t, ok := v["type"].(string); ok {
-					fmt.Printf("  %-20s (%s)\n", name, t)
-				} else {
-					fmt.Printf("  %-20s (object)\n", name)
-				}
+			v := config.Vars[name]
+			switch {
+			case v.Type == scaffold.VarTypeChoice:
+				fmt.Printf("  %-20s (choice: %s)\n", name, joinOptions(v.Options))
+			case v.Type != "" && v.Type != scaffold.VarTypeString:
+				fmt.Printf("  %-20s (%s)\n", name, v.Type)
+			case v.Default != nil:
+				fmt.Printf("  %-20s = %v\n", name, v.Default)
 			default:
-				fmt.Printf("  %-20s = %v\n", name, val)
+				fmt.Printf("  %-20s (string)\n", name)
 			}
 		}
 	}
 
-	if hooks, ok := config["hooks"].(map[string]any); ok && len(hooks) > 0 {
-		fmt.Println()
-		fmt.Println("Hooks:")
-		phases := sortedKeys(hooks)
-		for _, phase := range phases {
-			cmds := hooks[phase]
-			fmt.Printf("  %s:\n", phase)
-			if cmdList, ok := cmds.([]any); ok {
-				for _, cmd := range cmdList {
-					fmt.Printf("    - %v\n", cmd)
+	if config.Hooks != nil {
+		hasHooks := len(config.Hooks.PreScaffold) > 0 || len(config.Hooks.PostScaffold) > 0
+		if hasHooks {
+			fmt.Println()
+			fmt.Println("Hooks:")
+			if len(config.Hooks.PreScaffold) > 0 {
+				fmt.Println("  pre_scaffold:")
+				for _, cmd := range config.Hooks.PreScaffold {
+					fmt.Printf("    - %s\n", cmd)
+				}
+			}
+			if len(config.Hooks.PostScaffold) > 0 {
+				fmt.Println("  post_scaffold:")
+				for _, cmd := range config.Hooks.PostScaffold {
+					fmt.Printf("    - %s\n", cmd)
 				}
 			}
 		}
 	}
 }
 
-// sortedKeys returns the keys of a map in sorted order.
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// joinOptions formats choice options for display.
+func joinOptions(opts []string) string {
+	if len(opts) <= 3 {
+		return fmt.Sprintf("%v", opts)
 	}
-	slices.Sort(keys)
-	return keys
+	return fmt.Sprintf("%v +%d more", opts[:3], len(opts)-3)
+}
+
+// asAppError wraps library errors as CommandErrors without adding redundant context.
+// LibraryError already contains operation and name context, so we pass its message through directly.
+func asAppError(err error) error {
+	var libErr *library.LibraryError
+	if errors.As(err, &libErr) {
+		return app.Errorf("%s", libErr.Error())
+	}
+	return app.Errorf("%w", err)
 }
 
 func libEditCommand() *cli.Command {
@@ -377,7 +395,7 @@ func libEditCommand() *cli.Command {
 				return app.Errorf("template name is required\n\nUsage: tag lib edit <name>")
 			}
 
-			lib, err := newReadOnlyLibrary()
+			lib, err := newLocalLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
 			}
@@ -385,7 +403,7 @@ func libEditCommand() *cli.Command {
 			name := c.Args().Get(0)
 			path, err := lib.TemplatePath(name)
 			if err != nil {
-				return app.Errorf("failed to get template path: %w", err)
+				return asAppError(err)
 			}
 
 			fmt.Println(path)

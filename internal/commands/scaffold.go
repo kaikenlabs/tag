@@ -106,22 +106,9 @@ func scaffoldAction(c *cli.Context) error {
 	isRemote := !remote.IsLocal(templateRef)
 
 	// Build options
-	opts := scaffold.Options{
-		TemplateDir:          templateDir,
-		OutputDir:            c.String("output"),
-		ProjectName:          projectName,
-		ValuesFile:           c.String("values"),
-		Meta:                 meta,
-		NoInput:              c.Bool("no-input"),
-		Force:                c.Bool("force"),
-		Replay:               c.Bool("replay"),
-		NoSave:               c.Bool("no-save"),
-		TemplateRef:          templateRef, // Pass original reference for replay ID generation
-		AcceptHooks:          c.Bool("accept-hooks"),
-		IsRemote:             isRemote,
-		AllowRecursiveRender: c.Bool("allow-recursive-render"),
-		IsTTY:                scaffold.IsTTY(),
-	}
+	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
+	opts.TemplateRef = templateRef // Original reference for replay ID generation
+	opts.IsRemote = isRemote
 
 	// Create and run scaffold
 	s, err := scaffold.NewScaffold(opts)
