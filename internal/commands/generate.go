@@ -26,8 +26,6 @@ var newEngine = engine.NewGenerator
 // It can be replaced in tests to inject a mock generator.
 var newBundleEngine = engine.NewGeneratorWithEngine
 
-
-
 func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name: "generate",

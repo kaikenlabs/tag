@@ -70,4 +70,3 @@ func NewExecuteError(template string, err error) error {
 		Err:      fmt.Errorf("%w: %v", ErrExecute, err),
 	}
 }
-
