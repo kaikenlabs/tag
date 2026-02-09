@@ -62,7 +62,6 @@ tag generate handler UserAuth
 | [Template Syntax](docs/templates/syntax.md) | Jinja2/Gonja syntax guide |
 | [Filter Reference](docs/templates/filters.md) | Available template filters |
 | [Hooks Guide](docs/templates/hooks.md) | Pre and post hooks |
-| [Migration Guide](docs/migration/v1-to-v2.md) | Migrating from TAG v1 |
 | [tag.template.json](docs/reference/tag.template.json.md) | Configuration reference |
 | [Remote References](docs/reference/remote-refs.md) | Remote template formats |
 
@@ -215,7 +214,6 @@ Only `display_name` is prompted; `package_name` is computed as `my_package`.
 | `--dry-run` | `-d` | false | Preview without writing |
 | `--path` | `-tp` | `.tag.templates` | Templates directory |
 | `--shared` | `-sp` | `_shared` | Shared templates directory |
-| `--extension` | `-x` | `.tmpl` | Template file extension |
 
 ## Development
 

@@ -1,7 +1,7 @@
 package writer
 
 import (
-	"fmt"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -45,7 +45,7 @@ func TestWrite_WriteFile_should_not_return_error(t *testing.T) {
 func TestWrite_WriteFile_write_error_should_return_error(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 	mockWr.WriteFileFunc = func(name string, data []byte, perm fs.FileMode) error {
-		return fmt.Errorf("error")
+		return errors.New("error")
 	}
 	w := Write{
 		mx:  sync.Mutex{},
@@ -168,7 +168,7 @@ func TestUT_AppendFile_PathContainment(t *testing.T) {
 		openCalled := false
 		mockWr.OpenFileFunc = func(name string, flag int, perm fs.FileMode) (*os.File, error) {
 			openCalled = true
-			return nil, nil
+			return nil, nil //nolint:nilnil // mock function that should never be called
 		}
 
 		w := Write{
@@ -188,7 +188,7 @@ func TestUT_AppendFile_PathContainment(t *testing.T) {
 		openCalled := false
 		mockWr.OpenFileFunc = func(name string, flag int, perm fs.FileMode) (*os.File, error) {
 			openCalled = true
-			return nil, nil
+			return nil, nil //nolint:nilnil // mock function that should never be called
 		}
 
 		w := Write{
@@ -301,7 +301,7 @@ func TestWrite_AppendFile_should_return_ok(t *testing.T) {
 func TestWrite_AppendFile_open_file_error_should_return_error(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 	mockWr.OpenFileFunc = func(name string, flag int, perm fs.FileMode) (*os.File, error) {
-		return nil, fmt.Errorf("error")
+		return nil, errors.New("error")
 	}
 
 	w := Write{
@@ -316,7 +316,7 @@ func TestWrite_AppendFile_open_file_error_should_return_error(t *testing.T) {
 func TestWrite_AppendFile_write_file_error_should_return_error(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 	mockWr.WriteFunc = func(file *os.File, b []byte) (int, error) {
-		return 0, fmt.Errorf("error")
+		return 0, errors.New("error")
 	}
 
 	w := Write{
@@ -349,7 +349,7 @@ func TestWrite_InjectIntoFile_inject_after_should_return_no_error(t *testing.T) 
 func TestWrite_InjectIntoFile_read_file_error_should_return_error(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 	mockWr.ReadFileFunc = func(name string) ([]byte, error) {
-		return nil, fmt.Errorf("error")
+		return nil, errors.New("error")
 	}
 
 	w := Write{
@@ -406,7 +406,7 @@ func TestWrite_InjectIntoFile_write_file_error_should_return_error(t *testing.T)
 		return []byte(" // before "), nil
 	}
 	mockWr.WriteFileFunc = func(name string, data []byte, perm fs.FileMode) error {
-		return fmt.Errorf("error")
+		return errors.New("error")
 	}
 
 	w := Write{

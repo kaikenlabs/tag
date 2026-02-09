@@ -110,7 +110,7 @@ func TestUT_CopyHooks_DryRun(t *testing.T) {
 	hookPath := filepath.Join(hooksDir, "pre_gen_project.sh")
 	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/bash\necho hello"), 0o755))
 
-	processor := NewHooksProcessor(tmpDir, destDir, true) // dry-run = true
+	processor := NewHooksProcessor(tmpDir, destDir, true) // dryRun: true
 	findings, err := processor.CopyHooks()
 
 	require.NoError(t, err)
@@ -132,7 +132,7 @@ func TestUT_CopyHooks_ActualCopy(t *testing.T) {
 	hookPath := filepath.Join(hooksDir, "pre_gen_project.sh")
 	require.NoError(t, os.WriteFile(hookPath, hookContent, 0o755))
 
-	processor := NewHooksProcessor(tmpDir, destDir, false) // dry-run = false
+	processor := NewHooksProcessor(tmpDir, destDir, false) // dryRun: false
 	findings, err := processor.CopyHooks()
 
 	require.NoError(t, err)

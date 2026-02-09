@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -101,13 +102,14 @@ func TestUT_BuildHookEnv_ComplexVariables(t *testing.T) {
 
 	// Verify JSON encoding
 	for _, e := range env {
-		if strings.HasPrefix(e, "TAG_VAR_FEATURES=") {
-			value := strings.TrimPrefix(e, "TAG_VAR_FEATURES=")
-			var arr []string
-			err := json.Unmarshal([]byte(value), &arr)
-			require.NoError(t, err)
-			assert.Equal(t, []string{"auth", "logging", "metrics"}, arr)
+		value, found := strings.CutPrefix(e, "TAG_VAR_FEATURES=")
+		if !found {
+			continue
 		}
+		var arr []string
+		err := json.Unmarshal([]byte(value), &arr)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"auth", "logging", "metrics"}, arr)
 	}
 }
 
@@ -192,12 +194,13 @@ func TestUT_BuildHookEnv_SanitizesValues(t *testing.T) {
 
 	// Newlines should be replaced with spaces
 	for _, e := range env {
-		if strings.HasPrefix(e, "TAG_VAR_PROJECT_NAME=") {
-			value := strings.TrimPrefix(e, "TAG_VAR_PROJECT_NAME=")
-			assert.NotContains(t, value, "\n")
-			assert.Equal(t, "test injection", value)
-			return
+		value, found := strings.CutPrefix(e, "TAG_VAR_PROJECT_NAME=")
+		if !found {
+			continue
 		}
+		assert.NotContains(t, value, "\n")
+		assert.Equal(t, "test injection", value)
+		return
 	}
 	t.Error("TAG_VAR_PROJECT_NAME not found in env")
 }
@@ -1119,12 +1122,9 @@ func TestIT_Scaffold_NoHooksConfigured(t *testing.T) {
 
 func assertEnvContains(t *testing.T, env []string, expected string) {
 	t.Helper()
-	for _, e := range env {
-		if e == expected {
-			return
-		}
+	if !slices.Contains(env, expected) {
+		t.Errorf("expected env to contain %q, but it didn't.\nEnv: %v", expected, filterTagEnv(env))
 	}
-	t.Errorf("expected env to contain %q, but it didn't.\nEnv: %v", expected, filterTagEnv(env))
 }
 
 func assertEnvContainsPrefix(t *testing.T, env []string, prefix string) {

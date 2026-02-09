@@ -1,13 +1,49 @@
 package scaffold
 
 import (
-	"fmt"
+	"errors"
+	"regexp"
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/template"
 )
+
+// =============================================================================
+// Test-only helpers (moved from processor.go — only used by tests)
+// =============================================================================
+
+// simpleVarRegex extracts simple variable names from {{ vars.name }} patterns.
+// This is used for ExtractPlaceholders - complex expressions are not fully parsed.
+var simpleVarRegex = regexp.MustCompile(`\{\{\s*vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
+
+// ExtractPlaceholders returns variable names found in simple {{ vars.name }} patterns.
+// Note: This does not extract variables from complex expressions like method calls.
+func ExtractPlaceholders(path string) []string {
+	matches := simpleVarRegex.FindAllStringSubmatch(path, -1)
+	vars := make([]string, 0, len(matches))
+	seen := make(map[string]bool)
+
+	for _, match := range matches {
+		if len(match) >= 2 && !seen[match[1]] {
+			vars = append(vars, match[1])
+			seen[match[1]] = true
+		}
+	}
+
+	return vars
+}
+
+// HasPlaceholders checks if a path contains any Jinja2-style placeholders.
+func HasPlaceholders(path string) bool {
+	return placeholderDetectRegex.MatchString(path)
+}
+
+// =============================================================================
+// Test types and helpers
+// =============================================================================
 
 // mockTemplateExecutor implements template.TemplateExecutor for testing.
 type mockTemplateExecutor struct {
@@ -86,11 +122,6 @@ func TestUT_PathProcessor_SimpleVar(t *testing.T) {
 			name:     "python __init__.py not a placeholder",
 			path:     "{{ vars.project_name }}/src/__init__.py",
 			expected: "my_project/src/__init__.py",
-		},
-		{
-			name:     "cookiecutter alias",
-			path:     "{{ cookiecutter.project_name }}/main.go",
-			expected: "my_project/main.go",
 		},
 	}
 
@@ -248,8 +279,8 @@ func TestUT_PathProcessor_ComplexExpressions(t *testing.T) {
 			expected: "My_Cool_Package",
 		},
 		{
-			name:     "chained filters (recommended approach)",
-			path:     "{{ cookiecutter.package_display_name | lower | replace(' ', '_') | replace('-', '_') }}",
+			name:     "chained filters",
+			path:     "{{ vars.package_display_name | lower | replace(' ', '_') | replace('-', '_') }}",
 			expected: "my_cool_package",
 		},
 		{
@@ -263,8 +294,8 @@ func TestUT_PathProcessor_ComplexExpressions(t *testing.T) {
 			expected: "My_Cool_Package",
 		},
 		{
-			name:     "chained methods (Cookiecutter style)",
-			path:     "{{ cookiecutter.package_display_name.lower().replace(' ', '_').replace('-', '_') }}",
+			name:     "chained methods",
+			path:     "{{ vars.package_display_name.lower().replace(' ', '_').replace('-', '_') }}",
 			expected: "my_cool_package",
 		},
 	}
@@ -314,11 +345,6 @@ func TestUT_ExtractPlaceholders(t *testing.T) {
 			path:     "__init__.py",
 			expected: []string{},
 		},
-		{
-			name:     "cookiecutter alias",
-			path:     "{{ cookiecutter.name }}",
-			expected: []string{"name"},
-		},
 	}
 
 	for _, tt := range tests {
@@ -337,7 +363,7 @@ func TestUT_HasPlaceholders(t *testing.T) {
 	}{
 		{"has placeholder", "{{ vars.name }}", true},
 		{"has placeholder with filter", "{{ vars.name | snake }}", true},
-		{"cookiecutter alias", "{{ cookiecutter.name }}", true},
+		{"vars with filter", "{{ vars.name | snake }}", true},
 		{"has conditional block", `{% if vars.feature %}file.go{% endif %}`, true},
 		{"no placeholder", "cmd/main.go", false},
 		{"python dunder not a placeholder", "__init__.py", false},
@@ -385,20 +411,8 @@ func TestUT_PathProcessor_ConditionalFilename(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "cookiecutter conditional true",
-			path:     `handlers/{% if cookiecutter.use_consumer == "yes" %}amqp.go{% endif %}`,
-			vars:     map[string]any{"use_consumer": "yes"},
-			expected: "handlers/amqp.go",
-		},
-		{
-			name:     "cookiecutter conditional false",
-			path:     `handlers/{% if cookiecutter.use_consumer == "yes" %}amqp.go{% endif %}`,
-			vars:     map[string]any{"use_consumer": "no"},
-			expected: "",
-		},
-		{
 			name:     "no-space comparison operator",
-			path:     `{% if cookiecutter.use_http=="yes" %}http.go{% endif %}`,
+			path:     `{% if vars.use_http=="yes" %}http.go{% endif %}`,
 			vars:     map[string]any{"use_http": "yes"},
 			expected: "http.go",
 		},
@@ -496,7 +510,7 @@ func TestUT_PathProcessor_WithMockExecutor(t *testing.T) {
 
 func TestUT_PathProcessor_MockExecutorError(t *testing.T) {
 	mock := &mockTemplateExecutor{
-		executeToStringErr: fmt.Errorf("mock render error"),
+		executeToStringErr: errors.New("mock render error"),
 	}
 	processor := NewPathProcessor(mock)
 

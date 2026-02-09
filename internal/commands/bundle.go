@@ -7,23 +7,21 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kaikenlabs/tag/pkg/app"
-
-	"github.com/kaikenlabs/tag/internal/engine"
-	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
-	"github.com/urfave/cli/v2"
+	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/types"
+	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
 )
-
-const BundleExtension = ".json"
 
 func BundleCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:      "new-bundle",
 		Aliases:   []string{"nb"},
-		Usage:     fmt.Sprintf("creates a new bundle with the specified %s", chalk.Yellow("bundle-name")),
+		Usage:     "creates a new bundle with the specified " + chalk.Yellow("bundle-name"),
 		Args:      true,
 		ArgsUsage: "<bundle-name>",
 		Action: func(c *cli.Context) error {
@@ -50,7 +48,7 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	slog.Info(chalk.Green("creating new bundle"), "path", cfg.Env.Path)
-	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, BundleExtension))
+	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, types.BundleExtension))
 
 	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
@@ -64,8 +62,8 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 		return app.Errorf("error creating base template: %w", err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Warn("error closing file", "error", err.Error())
+		if closeErr := file.Close(); closeErr != nil {
+			slog.Warn("error closing file", "error", closeErr.Error())
 		}
 	}()
 

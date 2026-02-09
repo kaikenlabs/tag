@@ -3,6 +3,8 @@ package scaffold
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // TemplateConfig represents the structure of tag.template.json.
@@ -12,14 +14,11 @@ type TemplateConfig struct {
 	Version     string                 `json:"version,omitempty"`
 	Vars        map[string]VariableDef `json:"-"` // Custom unmarshaling needed
 	RawVars     map[string]any         `json:"vars"`
-	Hooks       *HooksConfig           `json:"hooks,omitempty"`
+	Hooks *types.HooksConfig `json:"hooks,omitempty"`
 }
 
-// HooksConfig defines pre and post scaffold hooks.
-type HooksConfig struct {
-	PreScaffold  []string `json:"pre_scaffold,omitempty"`
-	PostScaffold []string `json:"post_scaffold,omitempty"`
-}
+// HooksConfig is an alias for types.HooksConfig.
+type HooksConfig = types.HooksConfig
 
 // VariableType represents the type of a template variable.
 type VariableType string
@@ -148,13 +147,12 @@ func parseLongFormVariable(name string, obj map[string]any) (VariableDef, error)
 // IsPrivate returns true if the variable is a computed/private variable.
 // Private variables start with an underscore and are not prompted.
 func (v VariableDef) IsPrivate(name string) bool {
-	return len(name) > 0 && name[0] == '_'
+	return name != "" && name[0] == '_'
 }
 
 // IsDerived returns true if the variable's default is a template expression
 // that references other variables. Derived variables are not prompted;
 // their values are computed from other variables during rendering.
-// This follows Cookiecutter's behavior for derived variables.
 func (v VariableDef) IsDerived() bool {
 	if v.Default == nil {
 		return false
@@ -164,18 +162,16 @@ func (v VariableDef) IsDerived() bool {
 		return false
 	}
 	// Check if default contains template expressions referencing variables
-	// Supports both {{ vars.name }} and {{ cookiecutter.name }} syntax
 	return containsTemplateExpression(defaultStr)
 }
 
 // containsTemplateExpression checks if a string contains Jinja2-style
 // template expressions that reference variables.
 func containsTemplateExpression(s string) bool {
-	// Look for {{ vars. or {{ cookiecutter. patterns
-	// Also handles whitespace variations like {{vars. or {{ cookiecutter.
-	for i := 0; i < len(s)-2; i++ {
+	// Look for {{ vars. patterns
+	// Also handles whitespace variations like {{vars.
+	for i := range len(s) - 2 {
 		if s[i] == '{' && s[i+1] == '{' {
-			// Found opening braces, look for vars. or cookiecutter.
 			rest := s[i+2:]
 			// Skip whitespace
 			j := 0
@@ -185,10 +181,6 @@ func containsTemplateExpression(s string) bool {
 			if j < len(rest) {
 				remaining := rest[j:]
 				if len(remaining) >= 5 && remaining[:5] == "vars." {
-					return true
-				}
-				// "cookiecutter." is 13 characters
-				if len(remaining) >= 13 && remaining[:13] == "cookiecutter." {
 					return true
 				}
 			}
@@ -203,7 +195,7 @@ func (v VariableDef) GetPrompt(name string) string {
 	if v.Prompt != "" {
 		return v.Prompt
 	}
-	return fmt.Sprintf("Enter value for %s", name)
+	return "Enter value for " + name
 }
 
 // Options represents scaffold command options.
@@ -221,28 +213,6 @@ type Options struct {
 	AcceptHooks          bool              // Accept hooks without prompting (--accept-hooks flag)
 	IsRemote             bool              // Whether the template source is remote
 	AllowRecursiveRender bool              // Allow recursive template rendering in variable values (--allow-recursive-render flag)
+	IsTTY                bool              // Whether stdin is a TTY (set automatically if not provided)
 }
 
-// CollectOptions contains options for variable collection.
-// Most fields overlap with Options; use Options.CollectOpts() to convert.
-type CollectOptions struct {
-	ValuesFile  string            // Path to values JSON file
-	Meta        map[string]string // CLI meta overrides
-	NoPrompt    bool              // Skip interactive prompts
-	IsTTY       bool              // Whether stdin is a TTY
-	Replay      bool              // Load and use saved replay values
-	TemplateRef string            // Original template reference (for replay ID lookup)
-}
-
-// CollectOpts builds a CollectOptions from the scaffold Options,
-// reducing manual field-by-field copying at the call site.
-func (o Options) CollectOpts() CollectOptions {
-	return CollectOptions{
-		ValuesFile:  o.ValuesFile,
-		Meta:        o.Meta,
-		NoPrompt:    o.NoInput,
-		IsTTY:       IsTTY(),
-		Replay:      o.Replay,
-		TemplateRef: o.TemplateRef,
-	}
-}

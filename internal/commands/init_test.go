@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/config"
-	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/config"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 )
 
 func TestUT_InitAction_CreatesDirectories(t *testing.T) {
@@ -24,11 +25,10 @@ func TestUT_InitAction_CreatesDirectories(t *testing.T) {
 		os.Remove(config.File) // Clean up config file
 	})
 
-	ctx := createTestCLIContext(t, []string{}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{}, map[string]any{
 		flags.PathFlag:       ".tag.templates",
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
-		flags.ExtensionFlag:  ".tmpl",
 	})
 
 	err = initAction(ctx)
@@ -59,11 +59,10 @@ func TestUT_InitAction_CreatesConfigFile(t *testing.T) {
 		_ = os.Chdir(oldDir)
 	})
 
-	ctx := createTestCLIContext(t, []string{}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{}, map[string]any{
 		flags.PathFlag:       ".tag.templates",
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
-		flags.ExtensionFlag:  ".tmpl",
 	})
 
 	err = initAction(ctx)
@@ -75,10 +74,10 @@ func TestUT_InitAction_CreatesConfigFile(t *testing.T) {
 	require.FileExists(t, configPath)
 
 	// Verify config file can be loaded
-	cfg, err := config.LoadConfigFile()
+	cfg, err := config.LoadConfigFile(".")
 	require.NoError(t, err)
 	assert.Equal(t, ".tag.templates", cfg.Env.Path)
-	assert.Equal(t, ".tmpl", cfg.Env.Extension)
+	assert.Equal(t, "_shared", cfg.Env.SharedPath)
 }
 
 func TestUT_InitAction_IdempotentExecution(t *testing.T) {
@@ -92,11 +91,10 @@ func TestUT_InitAction_IdempotentExecution(t *testing.T) {
 		_ = os.Chdir(oldDir)
 	})
 
-	ctx := createTestCLIContext(t, []string{}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{}, map[string]any{
 		flags.PathFlag:       ".tag.templates",
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
-		flags.ExtensionFlag:  ".tmpl",
 	})
 
 	// First init
@@ -119,11 +117,10 @@ func TestUT_InitAction_CustomPaths(t *testing.T) {
 		_ = os.Chdir(oldDir)
 	})
 
-	ctx := createTestCLIContext(t, []string{}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{}, map[string]any{
 		flags.PathFlag:       "custom_templates",
 		flags.SharedPathFlag: "custom_shared",
 		flags.BundlePathFlag: "custom_bundles",
-		flags.ExtensionFlag:  ".gotmpl",
 	})
 
 	err = initAction(ctx)

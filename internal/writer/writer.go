@@ -15,12 +15,21 @@ const (
 	FileModeDefault = 0o644
 )
 
+// NewFileWriter creates a new writer with a cached working directory,
+// returning the FileWriter interface for dependency injection.
+func NewFileWriter(dryRun bool) (FileWriter, error) {
+	w, err := New(dryRun)
+	if err != nil {
+		return nil, err
+	}
+	return &w, nil
+}
+
 // New creates a new writer with a cached working directory.
 // The working directory is resolved once at construction time and reused
 // for path containment validation on every write operation.
 //
-// Deprecated: New returns a concrete Write value. Callers should program
-// against the FileWriter interface instead so the writer can be injected.
+// Deprecated: Use NewFileWriter instead, which returns the FileWriter interface.
 func New(dryRun bool) (Write, error) {
 	cwd, err := os.Getwd()
 	if err != nil {

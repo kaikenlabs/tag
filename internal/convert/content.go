@@ -46,6 +46,8 @@ var (
 )
 
 // Analyze scans content for Jinja2/Gonja incompatibilities.
+//
+//nolint:funlen // comprehensive content analysis requires checking many patterns
 func (a *ContentAnalyzer) Analyze(path string, content []byte) []Incompatibility {
 	// Skip binary files
 	if !fileutil.IsTextContent(content) {
@@ -169,11 +171,6 @@ func (a *ContentAnalyzer) Analyze(path string, content []byte) []Incompatibility
 	}
 
 	return findings
-}
-
-// AnalyzeString is a convenience method for analyzing string content.
-func (a *ContentAnalyzer) AnalyzeString(path, content string) []Incompatibility {
-	return a.Analyze(path, []byte(content))
 }
 
 // KnownGonjaFilters is a list of filters supported by Gonja.

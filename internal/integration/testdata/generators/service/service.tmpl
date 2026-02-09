@@ -1,0 +1,14 @@
+---
+to: app/service/{{ name | snake }}.go
+---
+package service
+
+// {{ name | pascal }} handles business logic.
+type {{ name | pascal }} struct {
+	name string
+}
+
+// New{{ name | pascal }} creates a new {{ name | pascal }}.
+func New{{ name | pascal }}(name string) *{{ name | pascal }} {
+	return &{{ name | pascal }}{name: name}
+}

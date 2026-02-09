@@ -14,35 +14,34 @@ const (
 	metaKeyValueDelimiter = "="
 	doubleQuote           = '"'
 	singleQuote           = '\''
-	emptyString           = ""
 )
 
 // NewGenerator creates a Generator with the standard pipeline.
 // It creates a new template engine, loads templates, and wires up the parser and writer.
-func NewGenerator(dryRun bool, dirPath, sharedPath, fileSuffix string) (Generator, error) {
+func NewGenerator(dryRun bool, dirPath, sharedPath string) (Generator, error) {
 	tmplEngine, err := template.NewEngine()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create template engine: %w", err)
 	}
-	return NewGeneratorWithEngine(tmplEngine, dryRun, dirPath, sharedPath, fileSuffix)
+	return NewGeneratorWithEngine(tmplEngine, dryRun, dirPath, sharedPath)
 }
 
 // NewGeneratorWithEngine creates a Generator using an existing template engine.
 // This allows sharing a template engine (and its cache) across multiple generators,
 // such as when running a bundle of generators.
-func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath, fileSuffix string) (Generator, error) {
+func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath string) (Generator, error) {
 	if dryRun {
 		slog.Info(chalk.Cyan("DRYRUN MODE"))
 	}
 
 	// Load primary templates
-	templates, err := LoadTemplateFiles(dirPath, fileSuffix)
+	templates, err := LoadTemplateFiles(dirPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot load templates: %w", err)
 	}
 
 	// Load shared templates (non-fatal)
-	sharedTemplates, sharedErr := LoadTemplateFiles(sharedPath, fileSuffix)
+	sharedTemplates, sharedErr := LoadTemplateFiles(sharedPath)
 	if sharedErr != nil {
 		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
 	}
@@ -56,12 +55,12 @@ func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, s
 
 	// Create parser and writer with injected dependencies
 	parser := NewParserWithExecutor(tmplEngine, templates, sharedTemplates)
-	w, err := writer.New(dryRun) //nolint:staticcheck // only available constructor; result used as FileWriter interface
+	w, err := writer.NewFileWriter(dryRun)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create writer: %w", err)
 	}
 
-	core := NewCore(parser, &w)
+	core := NewCore(parser, w)
 	return &core, nil
 }
 
@@ -103,7 +102,7 @@ func (c *Core) Generate(data Data) error {
 		case template.ActionInject:
 			if err := c.fwr.InjectIntoFile(item.To, item.Output, writer.Inject{
 				Matcher: item.InjectMatcher,
-				Clause:  writer.InjectClause(item.InjectClause),
+				Clause:  item.InjectClause,
 			}); err != nil {
 				slog.Error("cannot inject to file", "file", item.To, "error", err)
 				return err
@@ -148,29 +147,19 @@ func generateMeta(meta []string) (result map[string]string) {
 
 func processValue(value string) string {
 	value = strings.TrimSpace(value)
-	if value == emptyString {
-		return emptyString
+	if len(value) < 2 {
+		return value
 	}
 
-	hasMatchingQuotes := func(s string, quote rune) bool {
-		return len(s) >= 2 && rune(s[0]) == quote && rune(s[len(s)-1]) == quote
+	first, last := value[0], value[len(value)-1]
+	// Strip matching boundary quotes (single or double)
+	if (first == doubleQuote && last == doubleQuote) ||
+		(first == singleQuote && last == singleQuote) {
+		return value[1 : len(value)-1]
 	}
 
-	if hasMatchingQuotes(value, doubleQuote) {
-		quoteCount := strings.Count(value, string(doubleQuote))
-		if quoteCount >= 2 {
-			return value[1 : len(value)-1]
-		}
-	} else if value[0] == doubleQuote {
-		return value[1:]
-	}
-
-	if hasMatchingQuotes(value, singleQuote) {
-		quoteCount := strings.Count(value, string(singleQuote))
-		if quoteCount >= 2 {
-			return value[1 : len(value)-1]
-		}
-	} else if value[0] == singleQuote {
+	// Strip leading unmatched quote
+	if first == doubleQuote || first == singleQuote {
 		return value[1:]
 	}
 
@@ -179,20 +168,20 @@ func processValue(value string) string {
 
 func parseKeyValue(part string) (string, string, bool) {
 	part = strings.TrimSpace(part)
-	if part == emptyString {
-		return emptyString, emptyString, false
+	if part == "" {
+		return "", "", false
 	}
 
 	kv := strings.SplitN(part, metaKeyValueDelimiter, 2)
 	if len(kv) != 2 {
-		return emptyString, emptyString, false
+		return "", "", false
 	}
 
 	key := strings.TrimSpace(kv[0])
 	value := processValue(kv[1])
 
-	if key == emptyString || (value == emptyString && kv[1] == emptyString) {
-		return emptyString, emptyString, false
+	if key == "" || (value == "" && kv[1] == "") {
+		return "", "", false
 	}
 
 	return key, value, true

@@ -95,14 +95,14 @@ func NewFileProcessingError(file, message string, err error) *FileProcessingErro
 	return &FileProcessingError{File: file, Message: message, Err: err}
 }
 
-// ErrCookiecutterDetected represents a Cookiecutter template detection.
+// CookiecutterDetectedError represents a Cookiecutter template detection.
 // It carries the path to the detected cookiecutter.json file.
-type ErrCookiecutterDetected struct {
+type CookiecutterDetectedError struct {
 	CookiecutterPath string
 }
 
-func (e *ErrCookiecutterDetected) Error() string {
-	return fmt.Sprintf("cookiecutter template detected: %s", e.CookiecutterPath)
+func (e *CookiecutterDetectedError) Error() string {
+	return "cookiecutter template detected: " + e.CookiecutterPath
 }
 
 // ErrHookFailed is returned when a hook command fails.

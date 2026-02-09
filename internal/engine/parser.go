@@ -3,9 +3,9 @@ package engine
 import (
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/kaikenlabs/tag/internal/template"
 )
@@ -140,7 +140,6 @@ func enrichContextWithMetadata(ctx template.Context, metadata *template.Metadata
 	if !ok {
 		vars = make(map[string]any)
 		ctx["vars"] = vars
-		ctx["cookiecutter"] = vars // Keep alias in sync
 	}
 
 	// Add extra metadata to vars (template-defined values)
@@ -155,24 +154,20 @@ func enrichContextWithMetadata(ctx template.Context, metadata *template.Metadata
 
 // mergeParserMetadata combines CLI metadata with template-defined metadata.
 // CLI values take precedence over template-defined values.
-func mergeParserMetadata(cliMeta map[string]string, templateMeta map[string]string) map[string]string {
+func mergeParserMetadata(cliMeta, templateMeta map[string]string) map[string]string {
 	result := make(map[string]string)
 
 	// Add template-defined metadata first
-	for k, v := range templateMeta {
-		result[k] = v
-	}
+	maps.Copy(result, templateMeta)
 
 	// Override with CLI metadata
-	for k, v := range cliMeta {
-		result[k] = v
-	}
+	maps.Copy(result, cliMeta)
 
 	return result
 }
 
-// LoadTemplateFiles loads templates from a directory.
-func LoadTemplateFiles(dirPath string, fileSuffix string) (map[string]string, error) {
+// LoadTemplateFiles loads all files from a directory as templates.
+func LoadTemplateFiles(dirPath string) (map[string]string, error) {
 	rootTemplates := map[string]string{}
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -180,16 +175,17 @@ func LoadTemplateFiles(dirPath string, fileSuffix string) (map[string]string, er
 	}
 
 	for _, file := range files {
-		fileLocation := filepath.Join(dirPath, file.Name())
-		if strings.HasSuffix(file.Name(), fileSuffix) {
-			slog.Debug("loading template", "file", fileLocation)
-			data, err := os.ReadFile(filepath.Clean(fileLocation))
-			if err != nil {
-				slog.Error("cannot read file", "file", fileLocation)
-				return rootTemplates, err
-			}
-			rootTemplates[fileLocation] = string(data)
+		if file.IsDir() {
+			continue
 		}
+		fileLocation := filepath.Join(dirPath, file.Name())
+		slog.Debug("loading template", "file", fileLocation)
+		data, err := os.ReadFile(filepath.Clean(fileLocation))
+		if err != nil {
+			slog.Error("cannot read file", "file", fileLocation)
+			return rootTemplates, err
+		}
+		rootTemplates[fileLocation] = string(data)
 	}
 	return rootTemplates, nil
 }

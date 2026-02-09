@@ -1,11 +1,42 @@
 package schema
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// =============================================================================
+// Test-only helpers (moved from validate.go — only used by tests)
+// =============================================================================
+
+// MustNewValidator creates a new validator and panics on error.
+// Use this only when you're certain the embedded schema is valid.
+func MustNewValidator() *Validator {
+	v, err := NewValidator()
+	if err != nil {
+		panic(fmt.Sprintf("failed to create schema validator: %v", err))
+	}
+	return v
+}
+
+// ValidateString validates a JSON string against the schema.
+func (v *Validator) ValidateString(jsonStr string) error {
+	return v.Validate([]byte(jsonStr))
+}
+
+// IsValidationError checks if an error is a ValidationError.
+func IsValidationError(err error) bool {
+	var validationErr *ValidationError
+	return errors.As(err, &validationErr)
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
 
 func TestUT_SchemaValidator_ValidConfig(t *testing.T) {
 	tests := []struct {

@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
-	"github.com/urfave/cli/v2"
 )
 
 const File = ".tagconfig.json"
@@ -19,7 +21,6 @@ type Config struct {
 }
 type Env struct {
 	Path       string `json:"TAG_PATH"`
-	Extension  string `json:"TAG_EXTENSION"`
 	SharedPath string `json:"TAG_SHARED_PATH"`
 	BundlePath string `json:"TAG_BUNDLE_PATH"`
 }
@@ -36,13 +37,14 @@ func CheckConfig(cfg *Config) error {
 	return nil
 }
 
-// LoadConfigFile loads the configuration from the config file.
+// LoadConfigFile loads the configuration from the config file in the given directory.
 // Returns nil config if the file doesn't exist, or an error if parsing fails.
-func LoadConfigFile() (*Config, error) {
-	if _, err := os.Stat(File); err != nil {
-		return nil, nil
+func LoadConfigFile(dir string) (*Config, error) {
+	path := filepath.Join(dir, File)
+	if _, err := os.Stat(path); err != nil {
+		return nil, nil //nolint:nilerr,nilnil // missing config file is not an error, returns nil config
 	}
-	data, err := os.ReadFile(File)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, app.Errorf("cannot load config file: %w", err)
 	}
@@ -58,7 +60,6 @@ func CreateConfigFile(c *cli.Context) error {
 	cfg := Config{
 		Env: Env{
 			Path:       c.String(flags.PathFlag),
-			Extension:  c.String(flags.ExtensionFlag),
 			SharedPath: c.String(flags.SharedPathFlag),
 			BundlePath: c.String(flags.BundlePathFlag),
 		},

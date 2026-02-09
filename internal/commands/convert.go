@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/kaikenlabs/tag/internal/convert"
 	"github.com/kaikenlabs/tag/pkg/app"
-	"github.com/urfave/cli/v2"
 )
 
 // ConvertCommand returns the convert command definition with subcommands.

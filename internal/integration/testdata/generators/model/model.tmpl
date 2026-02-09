@@ -1,0 +1,10 @@
+---
+to: app/models/{{ name | snake }}.go
+---
+package models
+
+// {{ name | pascal }} represents a {{ name }} entity.
+type {{ name | pascal }} struct {
+	ID   int
+	Name string
+}

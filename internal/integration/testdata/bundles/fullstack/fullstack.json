@@ -1,0 +1,7 @@
+{
+    "name": "fullstack",
+    "generators": [
+        {"name": "model"},
+        {"name": "repository"}
+    ]
+}

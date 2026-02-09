@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -133,54 +134,26 @@ func parseShorthand(input, prefix string, provider Provider, host string) (*Refe
 	owner := parts[0]
 	repo := strings.TrimSuffix(parts[1], ".git") // Strip .git if present
 	subPath := ""
-
-	// Validate owner and repo against path traversal
-	if err := validateRefComponent("owner", owner); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-	if err := validateRefComponent("repo", repo); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-
 	if len(parts) > 2 {
 		subPath = strings.Join(parts[2:], "/")
 	}
 
-	// If version contains a path (e.g., @v1.0.0/subdir), split it
-	if version != "" {
-		if slashIdx := strings.Index(version, "/"); slashIdx != -1 {
-			if subPath != "" {
-				// Both repo path and version path have subpaths - combine them
-				subPath = version[slashIdx+1:] + "/" + subPath
-			} else {
-				subPath = version[slashIdx+1:]
-			}
-			version = version[:slashIdx]
-		}
+	ref, err := buildReference(refParts{
+		input:    input,
+		host:     host,
+		owner:    owner,
+		repo:     repo,
+		version:  version,
+		subPath:  subPath,
+		cloneURL: fmt.Sprintf("https://%s/%s/%s.git", host, owner, repo),
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	// Normalize: remove trailing slashes from subpath
-	subPath = strings.TrimSuffix(subPath, "/")
-
-	// Validate subpath against path traversal
-	if err := validateSubPath(subPath); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-
-	// Build clone URL
-	cloneURL := fmt.Sprintf("https://%s/%s/%s.git", host, owner, repo)
-
-	return &Reference{
-		Original: input,
-		Type:     ReferenceTypeGit,
-		Provider: provider,
-		Host:     host,
-		Owner:    owner,
-		Repo:     repo,
-		Version:  version,
-		SubPath:  subPath,
-		URL:      cloneURL,
-	}, nil
+	// Override provider (shorthand has explicit provider from prefix, not host lookup)
+	ref.Provider = provider
+	return ref, nil
 }
 
 // parseHTTPURL parses HTTP(S) URLs, determining if they're Git repos or zip files.
@@ -222,12 +195,6 @@ func parseHTTPURL(input string) (*Reference, error) {
 
 // parseGitHTTPURL parses Git repository HTTP URLs.
 func parseGitHTTPURL(input string, parsed *url.URL, version string) (*Reference, error) {
-	// Determine provider from host
-	provider := ProviderGeneric
-	if p, ok := hostToProvider[parsed.Host]; ok {
-		provider = p
-	}
-
 	// Parse path: /user/repo.git or /user/repo or /user/repo/tree/branch/subdir
 	path := strings.TrimPrefix(parsed.Path, "/")
 	path = strings.TrimSuffix(path, ".git")
@@ -240,14 +207,6 @@ func parseGitHTTPURL(input string, parsed *url.URL, version string) (*Reference,
 	owner := parts[0]
 	repo := parts[1]
 	subPath := ""
-
-	// Validate owner and repo against path traversal
-	if err := validateRefComponent("owner", owner); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-	if err := validateRefComponent("repo", repo); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
 
 	// Handle GitHub/GitLab web URLs: /user/repo/tree/branch/subdir or /user/repo/blob/branch/file
 	if len(parts) > 3 && (parts[2] == "tree" || parts[2] == "blob") {
@@ -263,38 +222,15 @@ func parseGitHTTPURL(input string, parsed *url.URL, version string) (*Reference,
 		subPath = strings.Join(parts[2:], "/")
 	}
 
-	// Handle version with embedded subpath
-	if version != "" {
-		if slashIdx := strings.Index(version, "/"); slashIdx != -1 {
-			if subPath == "" {
-				subPath = version[slashIdx+1:]
-			}
-			version = version[:slashIdx]
-		}
-	}
-
-	// Normalize subpath
-	subPath = strings.TrimSuffix(subPath, "/")
-
-	// Validate subpath against path traversal
-	if err := validateSubPath(subPath); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-
-	// Build clone URL (without tree/blob path components)
-	cloneURL := fmt.Sprintf("https://%s/%s/%s.git", parsed.Host, owner, repo)
-
-	return &Reference{
-		Original: input,
-		Type:     ReferenceTypeGit,
-		Provider: provider,
-		Host:     parsed.Host,
-		Owner:    owner,
-		Repo:     repo,
-		Version:  version,
-		SubPath:  subPath,
-		URL:      cloneURL,
-	}, nil
+	return buildReference(refParts{
+		input:    input,
+		host:     parsed.Host,
+		owner:    owner,
+		repo:     repo,
+		version:  version,
+		subPath:  subPath,
+		cloneURL: fmt.Sprintf("https://%s/%s/%s.git", parsed.Host, owner, repo),
+	})
 }
 
 // gitURLRegex matches git+ssh:// and git:// URLs.
@@ -316,53 +252,14 @@ func parseGitURL(input string) (*Reference, error) {
 	// matches[6] = version (optional)
 	// matches[7] = subpath (optional)
 
-	host := matches[3]
-	owner := matches[4]
-	repo := matches[5]
-	version := matches[6]
-	subPath := strings.TrimPrefix(matches[7], "/")
-
-	// Validate owner and repo against path traversal
-	if err := validateRefComponent("owner", owner); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-	if err := validateRefComponent("repo", repo); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-
-	// Handle version with embedded subpath
-	if version != "" {
-		if slashIdx := strings.Index(version, "/"); slashIdx != -1 {
-			if subPath == "" {
-				subPath = version[slashIdx+1:]
-			}
-			version = version[:slashIdx]
-		}
-	}
-
-	subPath = strings.TrimSuffix(subPath, "/")
-
-	// Validate subpath against path traversal
-	if err := validateSubPath(subPath); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-
-	provider := ProviderGeneric
-	if p, ok := hostToProvider[host]; ok {
-		provider = p
-	}
-
-	return &Reference{
-		Original: input,
-		Type:     ReferenceTypeGit,
-		Provider: provider,
-		Host:     host,
-		Owner:    owner,
-		Repo:     repo,
-		Version:  version,
-		SubPath:  subPath,
-		URL:      input, // Keep original URL for SSH
-	}, nil
+	return buildReference(refParts{
+		input:   input,
+		host:    matches[3],
+		owner:   matches[4],
+		repo:    matches[5],
+		version: matches[6],
+		subPath: strings.TrimPrefix(matches[7], "/"),
+	})
 }
 
 // sshStyleRegex matches git@host:user/repo.git format.
@@ -375,42 +272,14 @@ func parseSSHStyle(input string) (*Reference, error) {
 		return nil, &ParseError{Input: input, Message: "invalid SSH URL format, expected git@host:user/repo"}
 	}
 
-	host := matches[1]
-	owner := matches[2]
-	repo := matches[3]
-	version := strings.TrimPrefix(matches[5], "@")
-	subPath := strings.TrimPrefix(matches[6], "/")
-	subPath = strings.TrimSuffix(subPath, "/")
-
-	// Validate owner and repo against path traversal
-	if err := validateRefComponent("owner", owner); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-	if err := validateRefComponent("repo", repo); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-
-	// Validate subpath against path traversal
-	if err := validateSubPath(subPath); err != nil {
-		return nil, &ParseError{Input: input, Message: err.Error()}
-	}
-
-	provider := ProviderGeneric
-	if p, ok := hostToProvider[host]; ok {
-		provider = p
-	}
-
-	return &Reference{
-		Original: input,
-		Type:     ReferenceTypeGit,
-		Provider: provider,
-		Host:     host,
-		Owner:    owner,
-		Repo:     repo,
-		Version:  version,
-		SubPath:  subPath,
-		URL:      input, // Keep original for SSH auth
-	}, nil
+	return buildReference(refParts{
+		input:   input,
+		host:    matches[1],
+		owner:   matches[2],
+		repo:    matches[3],
+		version: strings.TrimPrefix(matches[5], "@"),
+		subPath: strings.TrimPrefix(matches[6], "/"),
+	})
 }
 
 // parseLocalPath parses local file system paths.
@@ -528,6 +397,77 @@ func sanitizeForPath(s string) string {
 	return pathSanitizer.Replace(s)
 }
 
+// refParts holds the raw parsed components from any URL format.
+// buildReference validates and normalizes them into a Reference.
+type refParts struct {
+	input    string
+	host     string
+	owner    string
+	repo     string
+	version  string
+	subPath  string
+	cloneURL string // pre-built clone URL (empty → use input as URL)
+}
+
+// buildReference validates owner/repo, splits embedded version subpaths,
+// normalizes the subpath, and resolves the provider from the host.
+// This consolidates the shared validation logic across all parse functions.
+func buildReference(p refParts) (*Reference, error) {
+	// Validate owner and repo against path traversal
+	if err := validateRefComponent("owner", p.owner); err != nil {
+		return nil, &ParseError{Input: p.input, Message: err.Error()}
+	}
+	if err := validateRefComponent("repo", p.repo); err != nil {
+		return nil, &ParseError{Input: p.input, Message: err.Error()}
+	}
+
+	// Split version with embedded subpath (e.g., "v1.0.0/subdir")
+	if p.version != "" {
+		if slashIdx := strings.Index(p.version, "/"); slashIdx != -1 {
+			versionSubPath := p.version[slashIdx+1:]
+			p.version = p.version[:slashIdx]
+			if p.subPath != "" {
+				// Both repo path and version path have subpaths - combine them
+				p.subPath = versionSubPath + "/" + p.subPath
+			} else {
+				p.subPath = versionSubPath
+			}
+		}
+	}
+
+	// Normalize: remove trailing slashes from subpath
+	p.subPath = strings.TrimSuffix(p.subPath, "/")
+
+	// Validate subpath against path traversal
+	if err := validateSubPath(p.subPath); err != nil {
+		return nil, &ParseError{Input: p.input, Message: err.Error()}
+	}
+
+	// Resolve provider from host
+	provider := ProviderGeneric
+	if pr, ok := hostToProvider[p.host]; ok {
+		provider = pr
+	}
+
+	// Determine URL
+	refURL := p.cloneURL
+	if refURL == "" {
+		refURL = p.input
+	}
+
+	return &Reference{
+		Original: p.input,
+		Type:     ReferenceTypeGit,
+		Provider: provider,
+		Host:     p.host,
+		Owner:    p.owner,
+		Repo:     p.repo,
+		Version:  p.version,
+		SubPath:  p.subPath,
+		URL:      refURL,
+	}, nil
+}
+
 // validateRefComponent checks that a reference component (owner, repo) is safe.
 // It rejects empty strings, path traversal sequences, and path separators.
 func validateRefComponent(name, value string) error {
@@ -561,18 +501,14 @@ func validateSubPath(subPath string) error {
 	}
 
 	// Reject any ".." component in the raw path (defense-in-depth: reject before normalization)
-	for _, part := range strings.Split(subPath, "/") {
-		if part == ".." {
-			return fmt.Errorf("subpath contains path traversal component: %s", subPath)
-		}
+	if slices.Contains(strings.Split(subPath, "/"), "..") {
+		return fmt.Errorf("subpath contains path traversal component: %s", subPath)
 	}
 
 	// Also check the cleaned path for ".." components
 	cleaned := filepath.Clean(subPath)
-	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
-		if part == ".." {
-			return fmt.Errorf("subpath contains path traversal component: %s", subPath)
-		}
+	if slices.Contains(strings.Split(cleaned, string(filepath.Separator)), "..") {
+		return fmt.Errorf("subpath contains path traversal component: %s", subPath)
 	}
 
 	return nil

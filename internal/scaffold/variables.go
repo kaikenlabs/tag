@@ -14,7 +14,7 @@ import (
 
 // VariableCollector gathers variable values from all sources.
 type VariableCollector interface {
-	Collect(config *TemplateConfig, opts CollectOptions) (map[string]any, error)
+	Collect(config *TemplateConfig, opts Options) (map[string]any, error)
 }
 
 // DefaultVariableCollector implements VariableCollector with the standard priority chain.
@@ -31,7 +31,9 @@ func NewVariableCollector(prompter Prompter) *DefaultVariableCollector {
 // defaults -> --replay -> --values file -> prompts -> --meta flags
 //
 // Each layer overwrites the previous, with --meta having highest priority.
-func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectOptions) (map[string]any, error) {
+//
+//nolint:gocognit,cyclop // orchestration function coordinates multiple input sources
+func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options) (map[string]any, error) {
 	vars := make(map[string]any)
 	// Track which variables were explicitly provided (from replay or values file)
 	// These should not be re-prompted even in interactive mode
@@ -49,14 +51,15 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 	}
 
 	// Step 2: Load replay values (if --replay flag is set)
+	//nolint:nestif // replay variable resolution requires nested conditions
 	if opts.Replay {
 		if opts.TemplateRef == "" {
-			return nil, fmt.Errorf("--replay requires template reference to be set")
+			return nil, errors.New("--replay requires template reference to be set")
 		}
 		replayData, err := replay.Load(opts.TemplateRef)
 		if err != nil {
 			if errors.Is(err, replay.ErrReplayNotFound) {
-				return nil, fmt.Errorf("no saved replay data found for this template (use scaffold without --replay first)")
+				return nil, errors.New("no saved replay data found for this template (use scaffold without --replay first)")
 			}
 			if errors.Is(err, replay.ErrReplayCorrupt) {
 				return nil, fmt.Errorf("replay file is corrupt: %w (delete it and try again)", err)
@@ -97,7 +100,7 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 	// Step 4: Interactive prompts for variables (if TTY)
 	// Prompt for all non-private, non-derived variables, even if they have defaults.
 	// Skip only if the value was explicitly provided via replay or values file.
-	if opts.IsTTY && !opts.NoPrompt {
+	if opts.IsTTY && !opts.NoInput {
 		for _, name := range varNames {
 			def := config.Vars[name]
 
@@ -268,7 +271,7 @@ func coerceValue(value string, varType VariableType) (any, error) {
 // This is used for replay values which are already typed from JSON.
 func coerceAnyValue(value any, varType VariableType) (any, error) {
 	if value == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil value is not an error
 	}
 
 	switch varType {

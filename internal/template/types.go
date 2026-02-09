@@ -1,6 +1,6 @@
 // Package template provides a Jinja2-compatible template engine using Gonja.
-// It supports aliased namespaces (vars.*, cookiecutter.*) and custom filters
-// for case transformation, inflection, and string operations.
+// It supports the vars.* namespace and custom filters for case transformation,
+// inflection, and string operations.
 package template
 
 // Context represents the template execution context.
@@ -15,11 +15,3 @@ type Template interface {
 
 // Option configures the template engine.
 type Option func(*Engine)
-
-// WithBaseDir sets the base directory for template loading.
-// This is used for resolving relative paths in extends and include directives.
-func WithBaseDir(dir string) Option {
-	return func(e *Engine) {
-		e.baseDir = dir
-	}
-}

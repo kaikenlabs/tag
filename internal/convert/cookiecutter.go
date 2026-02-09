@@ -3,13 +3,13 @@ package convert
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/remote"
-	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -47,7 +47,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 
 	// 2. Verify it's a Cookiecutter template
 	cookiecutterPath := filepath.Join(templateDir, types.CookiecutterConfigFile)
-	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) {
+	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) { //nolint:govet // shadow in if-init is idiomatic
 		return nil, ErrNoCookiecutterConfig
 	}
 
@@ -62,9 +62,11 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	result.Destination = destDir
 
 	// 4. Check if output exists
+	//nolint:nestif // dry-run branching requires nested conditions for file operations
 	if !opts.DryRun {
 		// Safety check: prevent dangerous --force operations
-		absDestDir, err := filepath.Abs(destDir)
+		var absDestDir string
+		absDestDir, err = filepath.Abs(destDir)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve output path: %w", err)
 		}
@@ -72,7 +74,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 			return nil, fmt.Errorf("unsafe output directory: %s", destDir)
 		}
 
-		if info, err := os.Stat(destDir); err == nil && info.IsDir() {
+		if info, err := os.Stat(destDir); err == nil && info.IsDir() { //nolint:govet // shadow in if-init is idiomatic
 			if !opts.Force {
 				return nil, fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, destDir)
 			}
@@ -110,14 +112,14 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	// Add shell hooks to config
 	preHooks, postHooks := SuggestTagHooksConfig(hookFindings)
 	if len(preHooks) > 0 || len(postHooks) > 0 {
-		tagConfig.Hooks = &scaffold.HooksConfig{
+		tagConfig.Hooks = &types.HooksConfig{
 			PreScaffold:  preHooks,
 			PostScaffold: postHooks,
 		}
 	}
 
 	// 7. Walk and convert template files
-	err = c.processTemplateFiles(templateDir, destDir, tagConfig, result, opts.DryRun)
+	err = c.processTemplateFiles(templateDir, destDir, result, opts.DryRun)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +137,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 		}
 
 		tagConfigPath := filepath.Join(destDir, types.TemplateConfigFile)
-		if err := os.WriteFile(tagConfigPath, tagJSON, 0o644); err != nil {
+		if err := os.WriteFile(tagConfigPath, tagJSON, 0o600); err != nil {
 			return nil, fmt.Errorf("failed to write tag.template.json: %w", err)
 		}
 	}
@@ -165,7 +167,7 @@ func (c *Converter) resolveSource(ctx context.Context, source string) (string, e
 
 // processTemplateFiles walks the template directory and converts files.
 // Uses filepath.WalkDir instead of filepath.Walk to avoid following symlinked directories.
-func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffold.TemplateConfig, result *Result, dryRun bool) error {
+func (c *Converter) processTemplateFiles(srcDir, destDir string, result *Result, dryRun bool) error {
 	return filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -227,11 +229,12 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 		if d.IsDir() {
 			// Create directory
 			if !dryRun {
-				info, err := d.Info()
+				var info fs.FileInfo
+				info, err = d.Info()
 				if err != nil {
 					return fmt.Errorf("failed to get directory info %s: %w", destPath, err)
 				}
-				if err := os.MkdirAll(destPath, info.Mode()); err != nil {
+				if err := os.MkdirAll(destPath, info.Mode()); err != nil { //nolint:govet // shadow in if-init is idiomatic
 					return fmt.Errorf("failed to create directory %s: %w", destPath, err)
 				}
 			}
@@ -252,13 +255,29 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 		result.Incompatibilities = append(result.Incompatibilities, findings...)
 
 		// Write to destination
+		//nolint:nestif // dry-run branching requires nested conditions for file operations
 		if !dryRun {
 			// Ensure parent directory exists
 			if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 
-			// Copy file
+			// For text files, convert cookiecutter.* references to vars.*
+			if fileutil.IsTextContent(content) {
+				converted, changed := ConvertContent(string(content))
+				if changed {
+					info, infoErr := d.Info()
+					if infoErr != nil {
+						return fmt.Errorf("failed to get file info %s: %w", relPath, infoErr)
+					}
+					if err := os.WriteFile(destPath, []byte(converted), info.Mode()); err != nil {
+						return fmt.Errorf("failed to write %s: %w", relPath, err)
+					}
+					return nil
+				}
+			}
+
+			// Binary files or text without cookiecutter references: raw copy
 			if err := fileutil.CopyFile(path, destPath); err != nil {
 				return fmt.Errorf("failed to copy %s: %w", relPath, err)
 			}
@@ -266,55 +285,4 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 
 		return nil
 	})
-}
-
-// ConvertInPlace converts a Cookiecutter template in-place by writing
-// tag.template.json to the same directory as cookiecutter.json.
-// Unlike Convert(), this does not copy files to a new directory.
-func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) error {
-	// Verify it's a Cookiecutter template
-	cookiecutterPath := filepath.Join(templateDir, types.CookiecutterConfigFile)
-	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) {
-		return ErrNoCookiecutterConfig
-	}
-
-	// Read and convert cookiecutter.json
-	configData, err := os.ReadFile(cookiecutterPath)
-	if err != nil {
-		return fmt.Errorf("failed to read cookiecutter.json: %w", err)
-	}
-
-	tagConfig, _, _, err := ConvertCookiecutterConfig(configData)
-	if err != nil {
-		return err
-	}
-
-	// Process hooks (detect only, don't copy - they're already in place)
-	hooksProcessor := NewHooksProcessor(templateDir, templateDir, false)
-	hookFindings, err := hooksProcessor.DetectHooks()
-	if err != nil {
-		return fmt.Errorf("failed to detect hooks: %w", err)
-	}
-
-	// Add shell hooks to config
-	preHooks, postHooks := SuggestTagHooksConfig(hookFindings)
-	if len(preHooks) > 0 || len(postHooks) > 0 {
-		tagConfig.Hooks = &scaffold.HooksConfig{
-			PreScaffold:  preHooks,
-			PostScaffold: postHooks,
-		}
-	}
-
-	// Write tag.template.json
-	tagJSON, err := GenerateTagTemplateJSON(tagConfig, "", "Converted from Cookiecutter template")
-	if err != nil {
-		return fmt.Errorf("failed to generate tag.template.json: %w", err)
-	}
-
-	tagConfigPath := filepath.Join(templateDir, types.TemplateConfigFile)
-	if err := os.WriteFile(tagConfigPath, tagJSON, 0o644); err != nil {
-		return fmt.Errorf("failed to write tag.template.json: %w", err)
-	}
-
-	return nil
 }

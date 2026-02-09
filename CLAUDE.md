@@ -17,12 +17,12 @@ TAG is a Go-based CLI tool for template-driven code generation and project scaff
 **Key Features**:
 - Template engine: Gonja (Jinja2-compatible)
 - Remote templates: `gh:`, `gl:`, `bb:` shorthands, Git URLs, zip files
-- Variable namespace: `{{ vars.* }}` (aliased as `{{ cookiecutter.* }}` for compatibility)
+- Variable namespace: `{{ vars.* }}`
 - Path placeholders: `{{ vars.name }}` and `{{ vars.name | filter }}` in file/directory names
 - Template config: `tag.template.json` with JSON Schema validation
 - Replay system: Auto-save inputs for reproducible scaffolding
 - Hooks: Pre and post scaffold command execution
-- Cookiecutter auto-detection: Automatic conversion when scaffolding Cookiecutter templates
+- Cookiecutter support: Auto-detection and conversion when scaffolding Cookiecutter templates
 
 ## Template Syntax
 
@@ -169,6 +169,9 @@ Variables are resolved in this order (highest priority first):
 - **Regular variables**: Prompted during scaffolding
 - **Private variables** (prefix `_`): Not prompted, for internal use
 - **Derived variables**: Default contains `{{ vars.* }}`, not prompted, computed from other vars
+
+### Generator File Processing
+Generator directories (used with `tag generate`) load **all files** in the directory regardless of extension. Files keep their natural extension (e.g., `.go`, `.ts`, `.py`). Each file contains YAML frontmatter (between `---` delimiters) specifying the action (create/inject/append) and destination path, followed by the template body.
 
 ### Path Processing
 Paths with `{{ vars.name }}` or `{{ vars.name | filter }}` are processed using Gonja. Supports:

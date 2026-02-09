@@ -16,7 +16,7 @@ import (
 
 const AppName = "tag"
 
-//nolint:gochecknoglobals
+//nolint:gochecknoglobals // version/commit/date are set by ldflags at build time
 var (
 	Version    string
 	CommitHash string
@@ -30,7 +30,7 @@ func main() {
 
 	setLogger()
 
-	cfg, err := config.LoadConfigFile()
+	cfg, err := config.LoadConfigFile(".")
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
@@ -66,19 +66,13 @@ func main() {
 				Usage:   "Shared template directory name",
 				Aliases: []string{"sp"},
 				EnvVars: []string{"TAG_SHARED_PATH"},
-			}, &cli.StringFlag{
+			},
+			&cli.StringFlag{
 				Name:    flags.BundlePathFlag,
 				Value:   "_bundles",
 				Usage:   "Bundles directory name",
 				Aliases: []string{"bp"},
 				EnvVars: []string{"TAG_BUNDLE_PATH"},
-			},
-			&cli.StringFlag{
-				Name:    flags.ExtensionFlag,
-				Value:   ".tmpl",
-				Usage:   "Template file extension.",
-				Aliases: []string{"x"},
-				EnvVars: []string{"TAG_EXTENSION"},
 			},
 		},
 	}

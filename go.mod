@@ -1,6 +1,6 @@
 module github.com/kaikenlabs/tag
 
-go 1.25.0
+go 1.25.6
 
 require (
 	github.com/gobuffalo/flect v1.0.3

@@ -5,10 +5,11 @@ import (
 	"strings"
 
 	"github.com/gobuffalo/flect"
-	"github.com/kaikenlabs/tag/internal/formats"
 	"github.com/nikolalohinski/gonja/v2/exec"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/kaikenlabs/tag/internal/formats"
 )
 
 // titleCaser is a cached English title caser to avoid allocation per filter call.
@@ -74,129 +75,38 @@ func registerFilter(filters *exec.FilterSet, name string, fn exec.FilterFunction
 	return nil
 }
 
+// makeSimpleFilter creates a zero-arg filter that transforms the input string.
+func makeSimpleFilter(name string, fn func(string) string) exec.FilterFunction {
+	return func(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+		if in.IsError() {
+			return in
+		}
+		if err := params.Take(); err != nil {
+			return exec.AsValue(fmt.Errorf("%s: %w", name, err))
+		}
+		return exec.AsValue(fn(in.String()))
+	}
+}
+
 // Case transformation filters
-
-func filterSnake(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("snake: %w", err))
-	}
-	return exec.AsValue(formats.CaseSnake(in.String()))
-}
-
-func filterPascal(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("pascal: %w", err))
-	}
-	return exec.AsValue(formats.CasePascal(in.String()))
-}
-
-func filterCamel(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("camel: %w", err))
-	}
-	return exec.AsValue(formats.CaseCamel(in.String()))
-}
-
-func filterKebab(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("kebab: %w", err))
-	}
-	return exec.AsValue(formats.CaseKebab(in.String()))
-}
-
-func filterLower(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("lower: %w", err))
-	}
-	return exec.AsValue(strings.ToLower(in.String()))
-}
-
-func filterUpper(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("upper: %w", err))
-	}
-	return exec.AsValue(strings.ToUpper(in.String()))
-}
-
-func filterTitle(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("title: %w", err))
-	}
-	return exec.AsValue(titleCaser.String(in.String()))
-}
+var (
+	filterSnake  = makeSimpleFilter("snake", formats.CaseSnake)
+	filterPascal = makeSimpleFilter("pascal", formats.CasePascal)
+	filterCamel  = makeSimpleFilter("camel", formats.CaseCamel)
+	filterKebab  = makeSimpleFilter("kebab", formats.CaseKebab)
+	filterLower  = makeSimpleFilter("lower", strings.ToLower)
+	filterUpper  = makeSimpleFilter("upper", strings.ToUpper)
+	filterTitle  = makeSimpleFilter("title", titleCaser.String)
+)
 
 // Inflection filters
-
-func filterPlural(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("plural: %w", err))
-	}
-	return exec.AsValue(flect.Pluralize(in.String()))
-}
-
-func filterSingular(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("singular: %w", err))
-	}
-	return exec.AsValue(flect.Singularize(in.String()))
-}
-
-func filterOrdinalize(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("ordinalize: %w", err))
-	}
-	return exec.AsValue(flect.Ordinalize(in.String()))
-}
-
-func filterTitleize(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("titleize: %w", err))
-	}
-	return exec.AsValue(flect.Titleize(in.String()))
-}
-
-func filterHumanize(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() {
-		return in
-	}
-	if err := params.Take(); err != nil {
-		return exec.AsValue(fmt.Errorf("humanize: %w", err))
-	}
-	return exec.AsValue(flect.Humanize(in.String()))
-}
+var (
+	filterPlural     = makeSimpleFilter("plural", flect.Pluralize)
+	filterSingular   = makeSimpleFilter("singular", flect.Singularize)
+	filterOrdinalize = makeSimpleFilter("ordinalize", flect.Ordinalize)
+	filterTitleize   = makeSimpleFilter("titleize", flect.Titleize)
+	filterHumanize   = makeSimpleFilter("humanize", flect.Humanize)
+)
 
 // String operation filters
 
@@ -326,7 +236,7 @@ func filterTruncate(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *ex
 		return exec.AsValue(fmt.Errorf("truncate: expected 1-2 arguments, got %d", len(p)))
 	}
 
-	length := int(p[0].Integer())
+	length := p[0].Integer()
 	if length < 0 {
 		return exec.AsValue(fmt.Errorf("truncate: length must be non-negative, got %d", length))
 	}

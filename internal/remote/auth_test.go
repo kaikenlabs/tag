@@ -3,10 +3,37 @@ package remote
 import (
 	"testing"
 
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// MockAuthProvider is a test double for AuthProvider.
+type MockAuthProvider struct {
+	Tokens map[Provider]string
+}
+
+// TokenFor returns tokens from the mock's Tokens map.
+func (m *MockAuthProvider) TokenFor(provider Provider) (string, bool) {
+	if m.Tokens == nil {
+		return "", false
+	}
+	token, ok := m.Tokens[provider]
+	return token, ok
+}
+
+// GitAuth returns auth for testing.
+func (m *MockAuthProvider) GitAuth(ref *Reference) (transport.AuthMethod, error) {
+	token, ok := m.TokenFor(ref.Provider)
+	if !ok || token == "" {
+		return nil, nil //nolint:nilnil // nil token means no auth configured, which is a valid state
+	}
+	return &githttp.BasicAuth{
+		Username: "x-access-token",
+		Password: token,
+	}, nil
+}
 
 func TestUT_EnvAuthProvider_GitHubToken(t *testing.T) {
 	provider := NewEnvAuthProvider()

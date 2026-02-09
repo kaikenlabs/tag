@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/types/flags"
-	"github.com/urfave/cli/v2"
 )
 
 // mockGenerator is a test double for engine.Generator.
@@ -46,7 +47,6 @@ func createTestConfig(t *testing.T, basePath string) *config.Config {
 	return &config.Config{
 		Env: config.Env{
 			Path:       basePath,
-			Extension:  ".tmpl",
 			SharedPath: "_shared",
 			BundlePath: "_bundles",
 		},
@@ -58,14 +58,13 @@ func createTestConfig(t *testing.T, basePath string) *config.Config {
 }
 
 // createTestCLIContext creates a cli.Context for testing with the given args and flags.
-func createTestCLIContext(t *testing.T, args []string, flagValues map[string]interface{}) *cli.Context {
+func createTestCLIContext(t *testing.T, args []string, flagValues map[string]any) *cli.Context {
 	t.Helper()
 
 	app := &cli.App{
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: flags.DryRunFlag},
 			&cli.StringFlag{Name: flags.PathFlag, Value: ".tag.templates"},
-			&cli.StringFlag{Name: flags.ExtensionFlag, Value: ".tmpl"},
 			&cli.StringFlag{Name: flags.SharedPathFlag, Value: "_shared"},
 			&cli.StringFlag{Name: flags.BundlePathFlag, Value: "_bundles"},
 			&cli.BoolFlag{Name: "bundle"},
@@ -126,7 +125,7 @@ func createGenerator(t *testing.T, basePath, generatorName, templateContent stri
 		t.Fatalf("failed to create generator dir: %v", err)
 	}
 
-	templatePath := filepath.Join(genDir, generatorName+".tmpl")
+	templatePath := filepath.Join(genDir, generatorName+".go")
 	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
 		t.Fatalf("failed to write template file: %v", err)
 	}

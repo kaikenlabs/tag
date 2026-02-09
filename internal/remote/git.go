@@ -182,7 +182,7 @@ func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
 
 	// Try as tag
 	tagRef := plumbing.NewTagReferenceName(ref.Version)
-	if _, err := repo.Reference(tagRef, true); err == nil {
+	if _, err := repo.Reference(tagRef, true); err == nil { //nolint:govet // shadow in if-init is idiomatic
 		err = wt.Checkout(&git.CheckoutOptions{
 			Branch: tagRef,
 			Force:  true,
@@ -194,7 +194,7 @@ func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
 
 	// Try as remote branch
 	branchRef := plumbing.NewRemoteReferenceName("origin", ref.Version)
-	if _, err := repo.Reference(branchRef, true); err == nil {
+	if _, err := repo.Reference(branchRef, true); err == nil { //nolint:govet // shadow in if-init is idiomatic
 		err = wt.Checkout(&git.CheckoutOptions{
 			Branch: branchRef,
 			Force:  true,
@@ -226,7 +226,7 @@ func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
 // wrapCloneError wraps clone errors with helpful messages.
 // Error messages are sanitized to prevent leaking credential fragments.
 func (f *GitFetcher) wrapCloneError(ref *Reference, err error) error {
-	errStr := sanitizeErrorMessage(err.Error(), ref.Provider)
+	errStr := sanitizeErrorMessage(err.Error())
 
 	// Check for auth errors
 	if strings.Contains(errStr, "authentication") ||
@@ -254,7 +254,7 @@ func (f *GitFetcher) wrapCloneError(ref *Reference, err error) error {
 }
 
 // sanitizeErrorMessage strips potential credential fragments from error messages.
-func sanitizeErrorMessage(msg string, provider Provider) string {
+func sanitizeErrorMessage(msg string) string {
 	// Redact any token-like strings (long alphanumeric sequences that look like tokens)
 	// Common token patterns: ghp_*, glpat-*, ATATT*, etc.
 	tokenPrefixes := []string{"ghp_", "gho_", "ghs_", "ghr_", "glpat-", "ATATT"}
@@ -273,11 +273,10 @@ func sanitizeErrorMessage(msg string, provider Provider) string {
 	if idx := strings.Index(msg, "://"); idx >= 0 {
 		// Look for user:pass@ pattern after ://
 		rest := msg[idx+3:]
-		if atIdx := strings.Index(rest, "@"); atIdx >= 0 {
+		if beforeAt, afterAt, found := strings.Cut(rest, "@"); found {
 			// Check if there's a colon before the @ (indicating user:pass)
-			beforeAt := rest[:atIdx]
 			if strings.Contains(beforeAt, ":") {
-				msg = msg[:idx+3] + "[REDACTED]@" + rest[atIdx+1:]
+				msg = msg[:idx+3] + "[REDACTED]@" + afterAt
 			}
 		}
 	}
@@ -301,7 +300,7 @@ func looksLikeCommitSHA(s string) bool {
 		return false
 	}
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}

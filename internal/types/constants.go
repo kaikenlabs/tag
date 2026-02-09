@@ -19,4 +19,21 @@ const (
 
 	// BundlesDir is the default subdirectory for bundles.
 	BundlesDir = "_bundles"
+
+	// BundleExtension is the file extension for bundle definition files.
+	BundleExtension = ".json"
 )
+
+// InjectClause represents where to inject content relative to a marker.
+type InjectClause string
+
+const (
+	InjectBefore InjectClause = "Before"
+	InjectAfter  InjectClause = "After"
+)
+
+// HooksConfig defines pre and post scaffold hooks.
+type HooksConfig struct {
+	PreScaffold  []string `json:"pre_scaffold,omitempty"`
+	PostScaffold []string `json:"post_scaffold,omitempty"`
+}

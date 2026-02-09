@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // Metadata extraction and parsing errors.
@@ -28,12 +30,12 @@ const (
 	ActionInject Action = "Inject"
 )
 
-// InjectClause represents where to inject content relative to a marker.
-type InjectClause string
+// InjectClause is an alias for types.InjectClause.
+type InjectClause = types.InjectClause
 
 const (
-	InjectBefore InjectClause = "Before"
-	InjectAfter  InjectClause = "After"
+	InjectBefore = types.InjectBefore
+	InjectAfter  = types.InjectAfter
 )
 
 // Metadata represents the parsed metadata from a template's --- block.
@@ -75,7 +77,7 @@ const (
 //	inject: true
 //	---
 //	template body here
-func ExtractMetadata(content string) (metaRaw string, bodyRaw string, err error) {
+func ExtractMetadata(content string) (metaRaw, bodyRaw string, err error) {
 	lines := strings.Split(content, tokenNewLine)
 	var metaLines []string
 	dashCount := 0
@@ -115,6 +117,8 @@ func ExtractMetadata(content string) (metaRaw string, bodyRaw string, err error)
 // ParseMetadata parses rendered metadata lines into a Metadata struct.
 // The input should be the metadata content after template rendering.
 // Each line should be in "key: value" format.
+//
+//nolint:cyclop // metadata parsing handles multiple format variations
 func ParseMetadata(rendered string) (*Metadata, error) {
 	meta := &Metadata{
 		Action: ActionCreate, // Default action
@@ -132,13 +136,13 @@ func ParseMetadata(rendered string) (*Metadata, error) {
 		}
 
 		// Split on first colon only (value may contain colons)
-		idx := strings.Index(trimmed, tokenColon)
-		if idx == -1 {
+		rawKey, rawValue, found := strings.Cut(trimmed, tokenColon)
+		if !found {
 			return nil, fmt.Errorf("%w: %q (missing colon)", ErrMalformedMetadata, trimmed)
 		}
 
-		key := strings.TrimSpace(trimmed[:idx])
-		value := strings.TrimSpace(trimmed[idx+1:])
+		key := strings.TrimSpace(rawKey)
+		value := strings.TrimSpace(rawValue)
 
 		switch key {
 		case fieldTo:

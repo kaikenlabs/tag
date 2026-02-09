@@ -3,12 +3,13 @@
 define TOOLS
     mockgen:github.com/golang/mock/mockgen
     gojq:github.com/itchyny/gojq/cmd/gojq
-    golangci-lint:github.com/golangci/golangci-lint/cmd/golangci-lint
+    golangci-lint:github.com/golangci/golangci-lint/v2/cmd/golangci-lint
     gofumpt:mvdan.cc/gofumpt
     gotest:github.com/rakyll/gotest
     godepgraph:github.com/kisielk/godepgraph
     gosec:github.com/securego/gosec/v2/cmd/gosec
     govulncheck:golang.org/x/vuln/cmd/govulncheck
+    deadcode:golang.org/x/tools/cmd/deadcode
 endef
 
 # Convert the TOOLS definition into variables

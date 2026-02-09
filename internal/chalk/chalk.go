@@ -41,24 +41,9 @@ func Blue(msg string) string {
 	return colourTerminalOutput(msg, blue)
 }
 
-// Purple - colour purple
-func Purple(msg string) string {
-	return colourTerminalOutput(msg, purple)
-}
-
 // Cyan - colour cyan
 func Cyan(msg string) string {
 	return colourTerminalOutput(msg, cyan)
-}
-
-// Gray - colour gray
-func Gray(msg string) string {
-	return colourTerminalOutput(msg, gray)
-}
-
-// White - colour white
-func White(msg string) string {
-	return colourTerminalOutput(msg, white)
 }
 
 func colourTerminalOutput(msg string, colourCode colourCode) string {

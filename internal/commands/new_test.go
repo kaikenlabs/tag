@@ -6,18 +6,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/types/flags"
-	"github.com/kaikenlabs/tag/pkg/app"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+
+	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
 )
 
 func TestUT_NewAction_MissingGeneratorName(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{}, map[string]any{
 		flags.PathFlag: tmpDir,
 	})
 
@@ -42,7 +43,7 @@ func TestUT_NewAction_ValidGeneratorCreation(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
 		flags.PathFlag: tmpDir,
 		"package":      "mypackage",
 	})
@@ -52,7 +53,7 @@ func TestUT_NewAction_ValidGeneratorCreation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify generator file was created
-	generatorPath := filepath.Join(tmpDir, "myGenerator", "myGenerator.tmpl")
+	generatorPath := filepath.Join(tmpDir, "myGenerator", "myGenerator.go")
 	require.FileExists(t, generatorPath)
 
 	// Verify content contains expected template structure
@@ -69,7 +70,7 @@ func TestUT_NewAction_CustomPackage(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
 		flags.PathFlag: tmpDir,
 		"package":      "custompackage",
 	})
@@ -78,7 +79,7 @@ func TestUT_NewAction_CustomPackage(t *testing.T) {
 
 	require.NoError(t, err)
 
-	generatorPath := filepath.Join(tmpDir, "myGenerator", "myGenerator.tmpl")
+	generatorPath := filepath.Join(tmpDir, "myGenerator", "myGenerator.go")
 	data, err := os.ReadFile(generatorPath)
 	require.NoError(t, err)
 
@@ -90,7 +91,7 @@ func TestUT_NewAction_CreatesDirectory(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"newgenerator"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"newgenerator"}, map[string]any{
 		flags.PathFlag: tmpDir,
 	})
 
@@ -108,29 +109,11 @@ func TestUT_NewAction_CreatesDirectory(t *testing.T) {
 	assert.True(t, info.IsDir())
 }
 
-func TestUT_NewAction_UsesConfigExtension(t *testing.T) {
-	tmpDir := setupTempDir(t)
-	cfg := createTestConfig(t, tmpDir)
-	cfg.Env.Extension = ".gotmpl" // Custom extension
-
-	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]interface{}{
-		flags.PathFlag: tmpDir,
-	})
-
-	err := newAction(ctx, cfg)
-
-	require.NoError(t, err)
-
-	// Verify generator file uses custom extension
-	generatorPath := filepath.Join(tmpDir, "myGenerator", "myGenerator.gotmpl")
-	require.FileExists(t, generatorPath)
-}
-
 func TestUT_NewAction_TemplateContent(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
 		flags.PathFlag: tmpDir,
 		"package":      "testpkg",
 	})
@@ -139,7 +122,7 @@ func TestUT_NewAction_TemplateContent(t *testing.T) {
 
 	require.NoError(t, err)
 
-	generatorPath := filepath.Join(tmpDir, "myGenerator", "myGenerator.tmpl")
+	generatorPath := filepath.Join(tmpDir, "myGenerator", "myGenerator.go")
 	data, err := os.ReadFile(generatorPath)
 	require.NoError(t, err)
 

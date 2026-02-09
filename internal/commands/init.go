@@ -9,18 +9,17 @@ import (
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
-	"github.com/urfave/cli/v2"
 )
 
 func InitCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "init",
-		Usage: fmt.Sprintf("initialises %s's configuration and directory", chalk.Yellow("tag")),
-		Action: func(c *cli.Context) error {
-			return initAction(c)
-		},
+		Name:   "init",
+		Usage:  fmt.Sprintf("initialises %s's configuration and directory", chalk.Yellow("tag")),
+		Action: initAction,
 	}
 }
 

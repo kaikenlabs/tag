@@ -25,24 +25,6 @@ func TestUT_NewContext_CreatesNamespace(t *testing.T) {
 	assert.Equal(t, "John Doe", varsMap["author"])
 }
 
-func TestUT_NewContext_CookiecutterAlias(t *testing.T) {
-	vars := map[string]any{
-		"project_name": "my-project",
-	}
-
-	ctx := NewContext("my-project", vars)
-
-	// Check that cookiecutter points to the same data as vars
-	varsMap := ctx["vars"].(map[string]any)
-	cookiecutterMap := ctx["cookiecutter"].(map[string]any)
-
-	assert.Equal(t, varsMap["project_name"], cookiecutterMap["project_name"])
-
-	// Verify they're the same map (aliased)
-	varsMap["new_key"] = "new_value"
-	assert.Equal(t, "new_value", cookiecutterMap["new_key"])
-}
-
 func TestUT_NewContext_ComputesNameOptions(t *testing.T) {
 	ctx := NewContext("MyProject", nil)
 
@@ -72,16 +54,6 @@ func TestUT_Context_InTemplate(t *testing.T) {
 
 	t.Run("access vars namespace", func(t *testing.T) {
 		tmpl := `{{ vars.project_name }}`
-		vars := map[string]any{"project_name": "my-project"}
-		ctx := NewContext("test", vars)
-
-		result, err := engine.ExecuteToString(tmpl, ctx)
-		require.NoError(t, err)
-		assert.Equal(t, "my-project", result)
-	})
-
-	t.Run("access cookiecutter namespace", func(t *testing.T) {
-		tmpl := `{{ cookiecutter.project_name }}`
 		vars := map[string]any{"project_name": "my-project"}
 		ctx := NewContext("test", vars)
 

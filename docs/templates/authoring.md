@@ -21,7 +21,7 @@ my-template/
 │   └── .gitignore
 └── _generators/                         # Optional: becomes .tag.templates/ in output
     └── handler/
-        └── handler.tmpl
+        └── handler.go
 ```
 
 ## File Processing Rules
@@ -148,9 +148,7 @@ In this example:
 - `package_name` will NOT be prompted (derived from `project_name`)
 - `docker_image` will NOT be prompted (derived from `project_name`)
 
-**Detection rules:** A variable is considered derived if its default value is a string containing:
-- `{{ vars.` - TAG's variable namespace
-- `{{ cookiecutter.` - Cookiecutter compatibility namespace
+**Detection rules:** A variable is considered derived if its default value is a string containing `{{ vars.`.
 
 > **Note**: Derived variables are passed through as template expressions and evaluated during rendering. This allows complex computations like `{{ vars.name.lower().replace(' ', '_') }}`.
 
@@ -173,14 +171,13 @@ Use Jinja2-style `{{ vars.name }}` syntax in file and directory names:
 {{ vars.model | plural }}/         → users/
 ```
 
-### Method Calls (Cookiecutter Compatibility)
+### Method Calls
 
-TAG also supports Python-style method calls for Cookiecutter compatibility:
+TAG also supports Python-style method calls:
 
 ```
 {{ vars.name.lower() }}/                              → myproject/
 {{ vars.name.lower().replace(' ', '_') }}/            → my_project/
-{{ cookiecutter.name.lower().replace('-', '_') }}/    → my_project/
 ```
 
 ### Supported Path Filters
@@ -238,16 +235,6 @@ Variables available in scaffold templates:
 | Variable | Type | Description |
 |----------|------|-------------|
 | `vars` | `map[string]any` | All user-defined variables |
-| `cookiecutter` | `map[string]any` | Alias for `vars` (Cookiecutter compat) |
-| `<varname>` | `any` | Each variable also available at root level |
-
-All variables defined in `tag.template.json` are available both in the `vars` namespace and directly at the root level:
-
-```jinja2
-{# Both are equivalent #}
-{{ vars.project_name }}
-{{ project_name }}
-```
 
 > **Note**: For generator templates (used with `tag generate`), different context variables are available. See [Generate Command](../commands/generate.md) for details.
 
@@ -262,9 +249,9 @@ my-template/
 │   └── ...
 └── _generators/
     ├── handler/
-    │   └── handler.tmpl
+    │   └── handler.go
     └── model/
-        └── model.tmpl
+        └── model.go
 ```
 
 This becomes `.tag.templates/` in the generated project, allowing users to run `tag generate` commands.
@@ -422,7 +409,7 @@ go-api-template/
 │   └── README.md.tmpl
 └── _generators/
     └── handler/
-        └── handler.tmpl
+        └── handler.go
 ```
 
 **tag.template.json:**

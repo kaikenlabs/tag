@@ -1,0 +1,9 @@
+---
+to: app/{{ name | snake }}.go
+---
+package app
+
+// {{ name | pascal }}Setup initializes the {{ name }} subsystem.
+func {{ name | pascal }}Setup() {
+	// setup {{ name }}
+}

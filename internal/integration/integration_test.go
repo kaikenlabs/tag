@@ -2,6 +2,9 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,7 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kaikenlabs/tag/internal/convert"
+	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/template"
 )
 
 // getTestdataDir returns the absolute path to the testdata directory.
@@ -166,4 +171,196 @@ func TestIT_ScaffoldCookiecutter(t *testing.T) {
 
 	// Compare against golden files (walk expected, check in actual)
 	compareDirectories(t, expectedDir, scaffoldDir)
+}
+
+// --- Generate integration test helpers ---
+
+// setupWorkDir creates a temp working directory, optionally copies pre-existing
+// files into it, changes to that directory, and returns the directory path.
+// The original working directory is restored on test cleanup.
+func setupWorkDir(t *testing.T, preExistingDir string) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+	if preExistingDir != "" {
+		copyDir(t, preExistingDir, tmpDir)
+	}
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { os.Chdir(oldDir) })
+	return tmpDir
+}
+
+// copyDir recursively copies src directory contents into dst.
+func copyDir(t *testing.T, src, dst string) {
+	t.Helper()
+	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		require.NoError(t, err)
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return nil
+		}
+
+		dstPath := filepath.Join(dst, relPath)
+		if d.IsDir() {
+			return os.MkdirAll(dstPath, 0o755)
+		}
+
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil { //nolint:govet // shadow in if-init is idiomatic
+			return err
+		}
+		dstFile, err := os.Create(dstPath)
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+
+		_, err = io.Copy(dstFile, srcFile)
+		return err
+	})
+	require.NoError(t, err)
+}
+
+// --- Generate integration tests ---
+
+// TestIT_GenerateCreate tests a single generator with the Create action.
+// It verifies that the engine creates files at the correct path with
+// name filters (snake, pascal) applied correctly.
+func TestIT_GenerateCreate(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "service")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-create")
+
+	workDir := setupWorkDir(t, "")
+
+	gen, err := engine.NewGenerator(false, generatorDir, "")
+	require.NoError(t, err)
+
+	err = gen.Generate(engine.Data{Name: "user_service"})
+	require.NoError(t, err)
+
+	compareDirectories(t, expectedDir, workDir)
+}
+
+// TestIT_GenerateInjectAfter tests the inject-after action.
+// It verifies that content is injected after a marker string in a pre-existing file.
+func TestIT_GenerateInjectAfter(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "inject-after")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "inject-after")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-inject-after")
+
+	workDir := setupWorkDir(t, preExistingDir)
+
+	gen, err := engine.NewGenerator(false, generatorDir, "")
+	require.NoError(t, err)
+
+	err = gen.Generate(engine.Data{Name: "users"})
+	require.NoError(t, err)
+
+	compareDirectories(t, expectedDir, workDir)
+}
+
+// TestIT_GenerateInjectBefore tests the inject-before action.
+// It verifies that content is injected before a marker string in a pre-existing file.
+func TestIT_GenerateInjectBefore(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "inject-before")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "inject-before")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-inject-before")
+
+	workDir := setupWorkDir(t, preExistingDir)
+
+	gen, err := engine.NewGenerator(false, generatorDir, "")
+	require.NoError(t, err)
+
+	err = gen.Generate(engine.Data{Name: "users"})
+	require.NoError(t, err)
+
+	compareDirectories(t, expectedDir, workDir)
+}
+
+// TestIT_GenerateAppend tests the append action.
+// It verifies that content is appended to the end of a pre-existing file.
+func TestIT_GenerateAppend(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "appender")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "append")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-append")
+
+	workDir := setupWorkDir(t, preExistingDir)
+
+	gen, err := engine.NewGenerator(false, generatorDir, "")
+	require.NoError(t, err)
+
+	err = gen.Generate(engine.Data{Name: "users"})
+	require.NoError(t, err)
+
+	compareDirectories(t, expectedDir, workDir)
+}
+
+// TestIT_GenerateBundle tests bundle execution with multiple generators.
+// It verifies that a bundle JSON definition correctly runs all listed generators
+// using a shared template engine.
+func TestIT_GenerateBundle(t *testing.T) {
+	testdataDir := getTestdataDir()
+	bundlePath := filepath.Join(testdataDir, "bundles", "fullstack", "fullstack.json")
+	generatorsDir := filepath.Join(testdataDir, "generators")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-bundle")
+
+	workDir := setupWorkDir(t, "")
+
+	// Load bundle JSON
+	data, err := os.ReadFile(bundlePath)
+	require.NoError(t, err)
+
+	var bundle engine.Bundle
+	err = json.Unmarshal(data, &bundle)
+	require.NoError(t, err)
+
+	// Create shared template engine (same pattern as generateBundle in commands)
+	tmplEngine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	for _, genRef := range bundle.Generators {
+		genDir := filepath.Join(generatorsDir, genRef.Name)
+
+		gen, err := engine.NewGeneratorWithEngine(tmplEngine, false, genDir, "")
+		require.NoError(t, err)
+
+		err = gen.Generate(engine.Data{Name: "order"})
+		require.NoError(t, err)
+	}
+
+	compareDirectories(t, expectedDir, workDir)
+}
+
+// TestIT_GenerateMixed tests all three actions (create, inject, append) from
+// a single generator directory. It verifies the action ordering guarantee:
+// create first, then inject, then append.
+func TestIT_GenerateMixed(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "mixed")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "mixed")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-mixed")
+
+	workDir := setupWorkDir(t, preExistingDir)
+
+	gen, err := engine.NewGenerator(false, generatorDir, "")
+	require.NoError(t, err)
+
+	err = gen.Generate(engine.Data{Name: "auth"})
+	require.NoError(t, err)
+
+	compareDirectories(t, expectedDir, workDir)
 }

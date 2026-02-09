@@ -1,0 +1,141 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: all
+  disable:
+    # Too noisy / opinionated for this project
+    - exhaustruct      # Requires all struct fields initialized — impractical with config structs
+    - ireturn           # Returning interfaces is fine for factory patterns
+    - varnamelen        # Short var names are idiomatic Go
+    - wsl               # Whitespace style too opinionated
+    - nlreturn          # Newline before return too opinionated
+    - wrapcheck         # Not all errors need wrapping in a CLI tool
+    - err113            # Requiring sentinel errors everywhere is excessive
+    - godox             # Allow TODO/FIXME during active development
+    - depguard          # No import restrictions needed
+    - mnd               # Magic numbers in tests and CLI flags are fine
+    - gochecknoglobals  # Package-level vars are idiomatic (regexps, sentinels)
+    - gochecknoinits    # Init functions are used sparingly but legitimately
+    - tagliatelle       # Struct tag naming is project-specific
+    - testpackage       # Using same-package tests for internal testing
+    - paralleltest      # Not all tests benefit from t.Parallel()
+    - exhaustive        # Enum exhaustiveness not needed — we use default cases
+    - inamedparam       # Named interface params not required
+    - nonamedreturns    # Named returns are fine when used judiciously
+    - containedctx      # Context in structs is acceptable for our patterns
+    - noinlineerr       # Inline error handling is idiomatic
+    - funcorder         # Function ordering is subjective
+    - embeddedstructfieldcheck # Embedded struct position not critical
+    - lll               # Line length handled by formatter
+    - godot             # Comment periods not enforced
+    - interfacebloat    # Our interfaces are intentionally small (ISP)
+    - gosmopolitan      # No i18n requirements
+    - promlinter        # No Prometheus metrics
+    - forbidigo         # fmt.Print* is legitimate in a CLI tool
+    - tagalign          # Struct tag alignment is cosmetic
+    - dogsled           # Blank identifiers in multi-return are fine
+    - prealloc          # Premature optimization, rarely significant
+    - dupword           # False positives on test case names
+    - wsl_v5            # Whitespace style too opinionated (same as wsl)
+
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment  # Optimization noise, not worth the churn
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+        - opinionated
+      disabled-checks:
+        - hugeParam         # Passing structs by value is intentional in some places
+        - rangeValCopy      # Minor perf, not worth the noise
+        - unnamedResult     # Named returns are fine
+    revive:
+      rules:
+        - name: unexported-return
+          disabled: true    # Returning unexported types is fine for internal packages
+        - name: package-comments
+          disabled: true    # Not all packages need doc comments yet
+    staticcheck:
+      checks:
+        - "all"
+    cyclop:
+      max-complexity: 20
+    funlen:
+      lines: 100
+      statements: 60
+    gocognit:
+      min-complexity: 30
+    nestif:
+      min-complexity: 6
+    nakedret:
+      max-func-lines: 20
+    goconst:
+      min-len: 3
+      min-occurrences: 4
+
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Test files get relaxed rules
+      - path: '_test\.go'
+        linters:
+          - dupl
+          - gosec
+          - forcetypeassert
+          - goconst
+          - funlen
+          - gocognit
+          - cyclop
+          - maintidx
+          - errcheck
+          - errorlint
+          - unparam
+          - usetesting
+          - testifylint
+      # Testdata is not real code
+      - path: 'testdata/'
+        linters:
+          - all
+      # CLI command handlers tend to be longer / more complex
+      - path: 'internal/commands/'
+        linters:
+          - funlen
+          - cyclop
+          - gocognit
+      # Template engine has inherently complex string processing
+      - path: 'internal/template/methods\.go'
+        linters:
+          - gocognit
+          - cyclop
+      # Converter walks directories — inherently complex
+      - path: 'internal/convert/cookiecutter\.go'
+        linters:
+          - gocognit
+          - cyclop
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/kaikenlabs/tag
+
+output:
+  formats:
+    text:
+      path: stdout
+      colors: true
+  show-stats: true

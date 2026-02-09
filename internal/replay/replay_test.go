@@ -2,6 +2,7 @@ package replay
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,77 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// =============================================================================
+// Test-only helpers (moved from load.go — only used by tests)
+// =============================================================================
+
+// Exists checks if a replay file exists for the given template source.
+func Exists(templateSource string) bool {
+	templateSource = strings.TrimSpace(templateSource)
+	if templateSource == "" {
+		return false
+	}
+
+	templateID := GenerateTemplateID(templateSource)
+	if templateID == "" {
+		return false
+	}
+
+	filePath, err := getReplayFilePath(templateID)
+	if err != nil {
+		return false
+	}
+
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+
+	return !info.IsDir()
+}
+
+// GetReplayFilePath returns the full path to the replay file for the given template source.
+// This is useful for displaying to users or for cleanup operations.
+func GetReplayFilePath(templateSource string) (string, error) {
+	templateSource = strings.TrimSpace(templateSource)
+	if templateSource == "" {
+		return "", ErrEmptyTemplateSource
+	}
+
+	templateID := GenerateTemplateID(templateSource)
+	if templateID == "" {
+		return "", ErrEmptyTemplateSource
+	}
+
+	return getReplayFilePath(templateID)
+}
+
+// Delete removes the replay file for the given template source.
+// Returns nil if the file doesn't exist.
+func Delete(templateSource string) error {
+	templateSource = strings.TrimSpace(templateSource)
+	if templateSource == "" {
+		return ErrEmptyTemplateSource
+	}
+
+	templateID := GenerateTemplateID(templateSource)
+	if templateID == "" {
+		return ErrEmptyTemplateSource
+	}
+
+	filePath, err := getReplayFilePath(templateID)
+	if err != nil {
+		return NewReplayError(templateID, "delete", err)
+	}
+
+	err = os.Remove(filePath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return NewReplayError(templateID, "delete", err)
+	}
+
+	return nil
+}
 
 // =============================================================================
 // TestUT_GenerateTemplateID - Template ID generation tests

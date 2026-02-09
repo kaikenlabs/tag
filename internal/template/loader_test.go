@@ -1,13 +1,152 @@
 package template
 
 import (
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/fileutil"
 )
+
+// ---------------------------------------------------------------------------
+// Test-only types: Loader and GonjaLoader
+// These types are only used in tests within this package.
+// ---------------------------------------------------------------------------
+
+// Loader provides template loading functionality with support for
+// template inheritance (extends) and includes.
+type Loader struct {
+	baseDir string
+	fs      fs.FS
+}
+
+// NewLoader creates a new template loader with the given base directory.
+func NewLoader(baseDir string) *Loader {
+	return &Loader{
+		baseDir: baseDir,
+	}
+}
+
+// NewLoaderFS creates a new template loader with a custom filesystem.
+func NewLoaderFS(baseDir string, fsys fs.FS) *Loader {
+	return &Loader{
+		baseDir: baseDir,
+		fs:      fsys,
+	}
+}
+
+// Load reads a template from the filesystem.
+func (l *Loader) Load(path string) (string, error) {
+	fullPath, err := l.resolvePath(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to load template %q: %w", path, err)
+	}
+
+	var content []byte
+
+	if l.fs != nil {
+		// When using fs.FS, use the cleaned relative path
+		cleanPath := filepath.Clean(path)
+		content, err = fs.ReadFile(l.fs, cleanPath)
+	} else {
+		content, err = os.ReadFile(fullPath)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to load template %q: %w", path, err)
+	}
+
+	return string(content), nil
+}
+
+// Exists checks if a template exists at the given path.
+func (l *Loader) Exists(path string) bool {
+	fullPath, err := l.resolvePath(path)
+	if err != nil {
+		return false
+	}
+
+	if l.fs != nil {
+		cleanPath := filepath.Clean(path)
+		_, err = fs.Stat(l.fs, cleanPath)
+		return err == nil
+	}
+
+	_, err = os.Stat(fullPath)
+	return err == nil
+}
+
+// resolvePath resolves a template path relative to the base directory.
+// It validates that the resolved path stays within the base directory
+// to prevent path traversal attacks.
+func (l *Loader) resolvePath(path string) (string, error) {
+	// Reject absolute paths
+	if filepath.IsAbs(path) {
+		return "", fmt.Errorf("absolute paths not allowed: %s", path)
+	}
+
+	// Clean the path to resolve any . or .. segments
+	cleanPath := filepath.Clean(path)
+
+	// Reject paths that try to traverse outside base directory
+	if strings.HasPrefix(cleanPath, "..") || strings.Contains(cleanPath, string(filepath.Separator)+"..") {
+		return "", fmt.Errorf("path traversal not allowed: %s", path)
+	}
+
+	// Join with base directory
+	fullPath := filepath.Join(l.baseDir, cleanPath)
+
+	// Double-check the resolved path is within base directory
+	if err := fileutil.ValidatePathContainment(l.baseDir, fullPath); err != nil {
+		return "", fmt.Errorf("path escapes base directory: %s", path)
+	}
+
+	return fullPath, nil
+}
+
+// BaseDir returns the loader's base directory.
+func (l *Loader) BaseDir() string {
+	return l.baseDir
+}
+
+// GonjaLoader wraps our Loader to implement Gonja's loader interface.
+type GonjaLoader struct {
+	loader *Loader
+}
+
+// NewGonjaLoader creates a Gonja-compatible loader from our Loader.
+func NewGonjaLoader(loader *Loader) *GonjaLoader {
+	return &GonjaLoader{loader: loader}
+}
+
+// Resolve returns the absolute path for a template.
+// This implements part of the Gonja Loader interface.
+func (g *GonjaLoader) Resolve(path string) (string, error) {
+	fullPath, err := g.loader.resolvePath(path)
+	if err != nil {
+		return "", err
+	}
+	if !g.loader.Exists(path) {
+		return "", fmt.Errorf("template not found: %s", path)
+	}
+	return fullPath, nil
+}
+
+// Read returns the content of a template.
+// This implements part of the Gonja Loader interface.
+func (g *GonjaLoader) Read(path string) (string, error) {
+	return g.loader.Load(path)
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 func TestUT_Loader_NewLoader(t *testing.T) {
 	loader := NewLoader("/tmp/templates")
@@ -116,7 +255,7 @@ func TestUT_CreateFileSystemLoader_NotExists(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not exist")
 }
 
-func TestUT_LoadTemplateFiles(t *testing.T) {
+func TestUT_LoadTemplateTree(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test files
@@ -127,7 +266,7 @@ func TestUT_LoadTemplateFiles(t *testing.T) {
 	err = os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("not a template"), 0o644)
 	require.NoError(t, err)
 
-	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	templates, err := LoadTemplateTree(tmpDir, "tmpl")
 	require.NoError(t, err)
 
 	assert.Len(t, templates, 2)
@@ -136,7 +275,7 @@ func TestUT_LoadTemplateFiles(t *testing.T) {
 	assert.NotContains(t, templates, "c.txt")
 }
 
-func TestUT_LoadTemplateFiles_Subdirectories(t *testing.T) {
+func TestUT_LoadTemplateTree_Subdirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 	subDir := filepath.Join(tmpDir, "sub")
 	err := os.Mkdir(subDir, 0o755)
@@ -147,7 +286,7 @@ func TestUT_LoadTemplateFiles_Subdirectories(t *testing.T) {
 	err = os.WriteFile(filepath.Join(subDir, "nested.tmpl"), []byte("nested"), 0o644)
 	require.NoError(t, err)
 
-	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	templates, err := LoadTemplateTree(tmpDir, "tmpl")
 	require.NoError(t, err)
 
 	assert.Len(t, templates, 2)
@@ -155,8 +294,8 @@ func TestUT_LoadTemplateFiles_Subdirectories(t *testing.T) {
 	assert.Equal(t, "nested", templates[filepath.Join("sub", "nested.tmpl")])
 }
 
-func TestUT_LoadTemplateFiles_NotExists(t *testing.T) {
-	_, err := LoadTemplateFiles("/nonexistent", "tmpl")
+func TestUT_LoadTemplateTree_NotExists(t *testing.T) {
+	_, err := LoadTemplateTree("/nonexistent", "tmpl")
 	assert.Error(t, err)
 }
 
@@ -181,7 +320,7 @@ func TestUT_Loader_Integration_WithEngine(t *testing.T) {
 	assert.Equal(t, "Hello, World!", result)
 }
 
-func TestUT_LoadTemplateFiles_SkipsSymlinks(t *testing.T) {
+func TestUT_LoadTemplateTree_SkipsSymlinks(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a real template file
@@ -199,7 +338,7 @@ func TestUT_LoadTemplateFiles_SkipsSymlinks(t *testing.T) {
 	err = os.Symlink(outsideFile, symlinkPath)
 	require.NoError(t, err)
 
-	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	templates, err := LoadTemplateTree(tmpDir, "tmpl")
 	require.NoError(t, err)
 
 	// Should only contain the real file, not the symlinked one
@@ -208,7 +347,7 @@ func TestUT_LoadTemplateFiles_SkipsSymlinks(t *testing.T) {
 	assert.NotContains(t, templates, "linked.tmpl")
 }
 
-func TestUT_LoadTemplateFiles_SkipsSymlinkDirs(t *testing.T) {
+func TestUT_LoadTemplateTree_SkipsSymlinkDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a real template file
@@ -225,7 +364,7 @@ func TestUT_LoadTemplateFiles_SkipsSymlinkDirs(t *testing.T) {
 	err = os.Symlink(outsideDir, symlinkDir)
 	require.NoError(t, err)
 
-	templates, err := LoadTemplateFiles(tmpDir, "tmpl")
+	templates, err := LoadTemplateTree(tmpDir, "tmpl")
 	require.NoError(t, err)
 
 	// Should only contain the real file

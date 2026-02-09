@@ -71,16 +71,16 @@ func TestUT_IsCookiecutterTemplate(t *testing.T) {
 	}
 }
 
-func TestUT_ErrCookiecutterDetected(t *testing.T) {
+func TestUT_CookiecutterDetectedError(t *testing.T) {
 	t.Run("error message formatting", func(t *testing.T) {
-		err := &ErrCookiecutterDetected{CookiecutterPath: "/path/to/cookiecutter.json"}
+		err := &CookiecutterDetectedError{CookiecutterPath: "/path/to/cookiecutter.json"}
 		assert.Equal(t, "cookiecutter template detected: /path/to/cookiecutter.json", err.Error())
 	})
 
 	t.Run("errors.As matching", func(t *testing.T) {
-		originalErr := &ErrCookiecutterDetected{CookiecutterPath: "/test/path"}
+		originalErr := &CookiecutterDetectedError{CookiecutterPath: "/test/path"}
 
-		var ccErr *ErrCookiecutterDetected
+		var ccErr *CookiecutterDetectedError
 		assert.True(t, errors.As(originalErr, &ccErr))
 		assert.Equal(t, "/test/path", ccErr.CookiecutterPath)
 	})
@@ -88,7 +88,7 @@ func TestUT_ErrCookiecutterDetected(t *testing.T) {
 	t.Run("errors.As not matching non-cookiecutter error", func(t *testing.T) {
 		originalErr := errors.New("some other error")
 
-		var ccErr *ErrCookiecutterDetected
+		var ccErr *CookiecutterDetectedError
 		assert.False(t, errors.As(originalErr, &ccErr))
 	})
 }

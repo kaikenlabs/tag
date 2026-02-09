@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 // It rejects names containing path traversal sequences, path separators, or that are empty.
 func ValidateNameSafe(name string) error {
 	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("name must not be empty")
+		return errors.New("name must not be empty")
 	}
 
 	if strings.Contains(name, "..") {

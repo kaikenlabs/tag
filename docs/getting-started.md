@@ -109,4 +109,3 @@ See [Template Syntax](templates/syntax.md) for the complete syntax guide.
 - [Scaffold Command Reference](commands/scaffold.md) - All flags and options for project scaffolding
 - [Creating Templates](templates/authoring.md) - How to create your own templates
 - [Filter Reference](templates/filters.md) - Available template filters
-- [Migration from v1](migration/v1-to-v2.md) - If upgrading from TAG v1

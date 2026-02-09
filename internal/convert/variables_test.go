@@ -3,9 +3,11 @@ package convert
 import (
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 func TestUT_ConvertCookiecutterConfig_StringDefaults(t *testing.T) {
@@ -202,7 +204,7 @@ func TestUT_GenerateTagTemplateJSON(t *testing.T) {
 				"default": true,
 			},
 		},
-		Hooks: &scaffold.HooksConfig{
+		Hooks: &types.HooksConfig{
 			PreScaffold:  []string{"echo pre"},
 			PostScaffold: []string{"echo post"},
 		},

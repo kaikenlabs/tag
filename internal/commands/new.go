@@ -6,17 +6,17 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kaikenlabs/tag/pkg/app"
+	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
-	"github.com/urfave/cli/v2"
+	"github.com/kaikenlabs/tag/pkg/app"
 )
 
 func NewCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:      "new",
-		Usage:     fmt.Sprintf("creates a new generator with the specified %s", chalk.Yellow("generator-name")),
+		Usage:     "creates a new generator with the specified " + chalk.Yellow("generator-name"),
 		Args:      true,
 		ArgsUsage: "<generator-name>",
 		Action: func(c *cli.Context) error {
@@ -48,7 +48,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	slog.Info(chalk.Green("creating new generator"), "path", cfg.Env.Path)
-	dirPath := filepath.Join(cfg.Env.Path, generator, fmt.Sprintf("%s%s", generator, cfg.Env.Extension))
+	dirPath := filepath.Join(cfg.Env.Path, generator, generator+".go")
 
 	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
@@ -67,7 +67,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 		}
 	}()
 
-	if _, err := file.Write([]byte(fmt.Sprintf(newGeneratorTemplate, c.String("package"), c.String("package")))); err != nil {
+	if _, err := fmt.Fprintf(file, newGeneratorTemplate, c.String("package"), c.String("package")); err != nil {
 		return app.Errorf("error creating file %s: %w", file.Name(), err)
 	}
 

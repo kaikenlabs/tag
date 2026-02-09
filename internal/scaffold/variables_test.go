@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/replay"
 )
 
 // MockPrompter implements Prompter for testing.
@@ -76,9 +77,8 @@ func TestUT_VariableCollector_DefaultsOnly(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: true,
-		IsTTY:    false,
+	opts := Options{
+		NoInput: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -107,13 +107,12 @@ func TestUT_VariableCollector_PriorityChain(t *testing.T) {
 	err := os.WriteFile(valuesFile, []byte(`{"var2": "values_file_value", "var3": "values_file_value"}`), 0o644)
 	require.NoError(t, err)
 
-	opts := CollectOptions{
+	opts := Options{
 		ValuesFile: valuesFile,
 		Meta: map[string]string{
 			"var3": "meta_override",
 		},
-		NoPrompt: true,
-		IsTTY:    false,
+		NoInput: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -137,9 +136,8 @@ func TestUT_VariableCollector_RequiredMissing(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: true,
-		IsTTY:    false,
+	opts := Options{
+		NoInput: true,
 	}
 
 	_, err := collector.Collect(config, opts)
@@ -159,8 +157,7 @@ func TestUT_VariableCollector_PromptForRequired(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: false,
+	opts := Options{
 		IsTTY:    true,
 	}
 
@@ -182,8 +179,7 @@ func TestUT_VariableCollector_SkipPrivateVars(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: false,
+	opts := Options{
 		IsTTY:    true,
 	}
 
@@ -210,8 +206,7 @@ func TestUT_VariableCollector_PromptForVarsWithDefaults(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: false,
+	opts := Options{
 		IsTTY:    true,
 	}
 
@@ -243,9 +238,8 @@ func TestUT_VariableCollector_ValuesFileSkipsPrompt(t *testing.T) {
 	err := os.WriteFile(valuesFile, []byte(`{"file_var": "from_file"}`), 0o644)
 	require.NoError(t, err)
 
-	opts := CollectOptions{
+	opts := Options{
 		ValuesFile: valuesFile,
-		NoPrompt:   false,
 		IsTTY:      true,
 	}
 
@@ -277,8 +271,7 @@ func TestUT_VariableCollector_SkipDerivedVars(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: false,
+	opts := Options{
 		IsTTY:    true,
 	}
 
@@ -295,8 +288,7 @@ func TestUT_VariableCollector_SkipDerivedVars(t *testing.T) {
 	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
 }
 
-func TestUT_VariableCollector_DerivedVarsWithCookiecutterNamespace(t *testing.T) {
-	// Test that cookiecutter namespace is also recognized for derived variables
+func TestUT_VariableCollector_DerivedVarsWithMethodCalls(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for project_name"] = "My Project"
 	collector := NewVariableCollector(mockPrompter)
@@ -304,13 +296,11 @@ func TestUT_VariableCollector_DerivedVarsWithCookiecutterNamespace(t *testing.T)
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
 			"project_name": {Type: VarTypeString, Default: "Default Project"},
-			// Derived using cookiecutter namespace (from conversion)
-			"project_slug": {Type: VarTypeString, Default: "{{ cookiecutter.project_name | snake }}"},
+			"project_slug": {Type: VarTypeString, Default: "{{ vars.project_name | snake }}"},
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: false,
+	opts := Options{
 		IsTTY:    true,
 	}
 
@@ -320,7 +310,7 @@ func TestUT_VariableCollector_DerivedVarsWithCookiecutterNamespace(t *testing.T)
 	// project_name should be prompted
 	assert.Equal(t, "My Project", vars["project_name"])
 	// project_slug should NOT be prompted (derived)
-	assert.Equal(t, "{{ cookiecutter.project_name | snake }}", vars["project_slug"])
+	assert.Equal(t, "{{ vars.project_name | snake }}", vars["project_slug"])
 	// Only project_name was prompted
 	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
 }
@@ -336,13 +326,12 @@ func TestUT_VariableCollector_TypeCoercion(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
+	opts := Options{
 		Meta: map[string]string{
 			"bool_var":   "true",
 			"number_var": "42.5",
 		},
-		NoPrompt: true,
-		IsTTY:    false,
+		NoInput: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -362,12 +351,11 @@ func TestUT_VariableCollector_InvalidTypeCoercion(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
+	opts := Options{
 		Meta: map[string]string{
 			"number_var": "not_a_number",
 		},
-		NoPrompt: true,
-		IsTTY:    false,
+		NoInput: true,
 	}
 
 	_, err := collector.Collect(config, opts)
@@ -390,8 +378,7 @@ func TestUT_VariableCollector_ChoicePrompt(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: false,
+	opts := Options{
 		IsTTY:    true,
 	}
 
@@ -416,8 +403,7 @@ func TestUT_VariableCollector_BooleanPrompt(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: false,
+	opts := Options{
 		IsTTY:    true,
 	}
 
@@ -442,8 +428,7 @@ func TestUT_VariableCollector_NumberPrompt(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
-		NoPrompt: false,
+	opts := Options{
 		IsTTY:    true,
 	}
 
@@ -574,15 +559,14 @@ func TestUT_VariableCollector_ReplayPriority(t *testing.T) {
 	err = os.WriteFile(valuesFile, []byte(`{"var2": "values_file_value", "var3": "values_file_value"}`), 0o644)
 	require.NoError(t, err)
 
-	opts := CollectOptions{
+	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
 		ValuesFile:  valuesFile,
 		Meta: map[string]string{
 			"var3": "meta_override",
 		},
-		NoPrompt: true,
-		IsTTY:    false,
+		NoInput: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -619,11 +603,10 @@ func TestUT_VariableCollector_ReplayOverridesDefaults(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
+	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
-		NoPrompt:    true,
-		IsTTY:       false,
+		NoInput: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -647,11 +630,10 @@ func TestUT_VariableCollector_ReplayNotFound(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
+	opts := Options{
 		Replay:      true,
 		TemplateRef: "gh:nonexistent/repo",
-		NoPrompt:    true,
-		IsTTY:       false,
+		NoInput: true,
 	}
 
 	_, err := collector.Collect(config, opts)
@@ -669,11 +651,10 @@ func TestUT_VariableCollector_ReplayWithoutTemplateRef(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
+	opts := Options{
 		Replay:      true,
 		TemplateRef: "", // Missing template ref
-		NoPrompt:    true,
-		IsTTY:       false,
+		NoInput: true,
 	}
 
 	_, err := collector.Collect(config, opts)
@@ -704,10 +685,9 @@ func TestUT_VariableCollector_ReplayPromptsForNewVars(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
+	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
-		NoPrompt:    false,
 		IsTTY:       true,
 	}
 
@@ -745,11 +725,10 @@ func TestUT_VariableCollector_ReplayTypeCoercion(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
+	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
-		NoPrompt:    true,
-		IsTTY:       false,
+		NoInput: true,
 	}
 
 	vars, err := collector.Collect(config, opts)
@@ -782,11 +761,10 @@ func TestUT_VariableCollector_ReplayIgnoresRemovedVars(t *testing.T) {
 		},
 	}
 
-	opts := CollectOptions{
+	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
-		NoPrompt:    true,
-		IsTTY:       false,
+		NoInput: true,
 	}
 
 	vars, err := collector.Collect(config, opts)

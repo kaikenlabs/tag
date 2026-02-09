@@ -38,6 +38,8 @@ func NewOutputWriter(engine template.TemplateRenderer, pathProcessor PathProcess
 var _ OutputWriter = (*DefaultOutputWriter)(nil)
 
 // Write processes the template directory and writes to the output directory.
+//
+//nolint:gocognit // file processing with multiple format-dependent branches
 func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[string]any) error {
 	// Build template context
 	ctx := buildTemplateContext(vars)
@@ -238,25 +240,6 @@ func openRegularFile(path string) (*os.File, fs.FileMode, error) {
 	return f, mode, nil
 }
 
-// openAndReadRegularFile opens a file with TOCTOU-safe symlink verification and reads its content.
-// It performs: Lstat → Open → f.Stat → os.SameFile verification → Read.
-// Returns the file content and sanitized file mode, or an error if the file
-// is a symlink or was swapped between check and open.
-func openAndReadRegularFile(path string) ([]byte, fs.FileMode, error) {
-	f, mode, err := openRegularFile(path)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer f.Close()
-
-	content, err := io.ReadAll(f)
-	if err != nil {
-		return nil, 0, fmt.Errorf("read: %w", err)
-	}
-
-	return content, mode, nil
-}
-
 // processTemplate processes a text file through the template engine.
 func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content []byte, ctx template.Context, mode fs.FileMode) error {
 	// Parse and execute template
@@ -282,7 +265,6 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 func buildTemplateContext(vars map[string]any) template.Context {
 	return template.NewContextBuilder().
 		WithVars(vars).
-		WithRootVars(vars).
 		Build()
 }
 

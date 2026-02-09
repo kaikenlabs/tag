@@ -1,19 +1,19 @@
-# {{ cookiecutter.project_name }}
+# {{ vars.project_name }}
 
-{{ cookiecutter.description }}
+{{ vars.description }}
 
 ## Author
 
-{{ cookiecutter.author }}
+{{ vars.author }}
 
 ## License
 
-{% if cookiecutter.license != "Apache-2.0" %}
-This project is licensed under the {{ cookiecutter.license }} license.
+{% if vars.license != "Apache-2.0" %}
+This project is licensed under the {{ vars.license }} license.
 {% else %}
 Licensed under Apache-2.0. See LICENSE file for details.
 {% endif %}
 
 ## Version
 
-{{ cookiecutter._private_version }}
+{{ vars._private_version }}
