@@ -21,7 +21,14 @@ TAG combines the project bootstrapping capabilities of [Cookiecutter](https://co
 ### Install
 
 ```bash
+# Quick install (macOS/Linux)
+curl -sSfL https://raw.githubusercontent.com/kaikenlabs/tag/main/install.sh | sh
+
+# With Go
 go install github.com/kaikenlabs/tag@latest
+
+# Specific version
+curl -sSfL https://raw.githubusercontent.com/kaikenlabs/tag/main/install.sh | sh -s -- --version v0.2.0
 ```
 
 ### Scaffold a Project

@@ -94,11 +94,9 @@ release:
 
     ### Installation
 
-    Download the appropriate binary for your platform below, or use:
-
     ```bash
-    # macOS/Linux
-    curl -sL https://github.com/kaikenlabs/tag/releases/download/{{ .Tag }}/tag_{{ .Version }}_$(uname -s)_$(uname -m).tar.gz | tar xz
+    # macOS/Linux (recommended)
+    curl -sSfL https://raw.githubusercontent.com/kaikenlabs/tag/main/install.sh | sh -s -- --version {{ .Version }}
 
     # Or with Go
     go install github.com/kaikenlabs/tag@{{ .Tag }}

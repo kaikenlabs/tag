@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Mandatory
+
+1. Before pushing code, run the linter with `make lint`
+2. Before pushing code, run the tests with `make test`
+
 ## Project Overview
 
 TAG is a Go-based CLI tool for template-driven code generation and project scaffolding.
