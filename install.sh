@@ -19,7 +19,6 @@ set -e
 OWNER="kaikenlabs"
 REPO="tag"
 BINARY="tag"
-GITHUB_API="https://api.github.com"
 GITHUB_RELEASES="https://github.com/${OWNER}/${REPO}/releases"
 
 # Defaults
@@ -99,25 +98,6 @@ has_cmd() {
     command -v "$1" >/dev/null 2>&1
 }
 
-http_get() {
-    url="$1"
-    if has_cmd curl; then
-        if [ -n "$GITHUB_TOKEN" ]; then
-            curl -sSfL -H "Authorization: token ${GITHUB_TOKEN}" "$url"
-        else
-            curl -sSfL "$url"
-        fi
-    elif has_cmd wget; then
-        if [ -n "$GITHUB_TOKEN" ]; then
-            wget -qO- --header="Authorization: token ${GITHUB_TOKEN}" "$url"
-        else
-            wget -qO- "$url"
-        fi
-    else
-        err "either curl or wget is required"
-    fi
-}
-
 http_download() {
     url="$1"
     dest="$2"
@@ -139,11 +119,22 @@ http_download() {
 }
 
 get_latest_version() {
-    # Use the GitHub API to get the latest release tag
-    response="$(http_get "${GITHUB_API}/repos/${OWNER}/${REPO}/releases/latest")"
-    version="$(printf '%s' "$response" | grep '"tag_name"' | sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/')"
+    # Use the GitHub releases redirect to get the latest tag without consuming API quota.
+    # /releases/latest redirects to /releases/tag/vX.Y.Z — we extract the version from the URL.
+    if has_cmd curl; then
+        redirect_url="$(curl -sS -o /dev/null -w '%{redirect_url}' "${GITHUB_RELEASES}/latest")"
+    elif has_cmd wget; then
+        redirect_url="$(wget --spider -S "${GITHUB_RELEASES}/latest" 2>&1 | grep -i 'Location:' | tail -1 | awk '{print $2}' | tr -d '\r')"
+    fi
+
+    if [ -z "$redirect_url" ]; then
+        err "could not determine latest version. Use --version to specify one explicitly"
+    fi
+
+    # Extract tag from URL: https://github.com/owner/repo/releases/tag/v1.2.3 -> v1.2.3
+    version="${redirect_url##*/}"
     if [ -z "$version" ]; then
-        err "could not determine latest version (GitHub API rate limit?). Try setting GITHUB_TOKEN or use --version"
+        err "could not parse version from redirect URL: ${redirect_url}"
     fi
     echo "$version"
 }
