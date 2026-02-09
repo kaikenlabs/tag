@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// HasCookiecutterPlaceholders checks if a path contains {{ cookiecutter.* }} placeholders (test-only).
+// HasCookiecutterPlaceholders checks if a path contains cookiecutter.* references in any Jinja2 block (test-only).
 func HasCookiecutterPlaceholders(path string) bool {
-	matches := expressionBlockRegex.FindAllString(path, -1)
+	matches := templateBlockRegex.FindAllString(path, -1)
 	return slices.ContainsFunc(matches, cookiecutterNamespaceRegex.MatchString)
 }
 
@@ -26,7 +26,7 @@ var simplePatternRegex = regexp.MustCompile(
 func ConvertPathWithDetails(path string) (string, []PathConversion) {
 	var conversions []PathConversion
 
-	matches := expressionBlockRegex.FindAllStringIndex(path, -1)
+	matches := templateBlockRegex.FindAllStringIndex(path, -1)
 	if len(matches) == 0 {
 		return path, nil
 	}
@@ -289,6 +289,62 @@ func TestUT_ConvertPath_ComplexExpressions(t *testing.T) {
 			input:    "src/{{ cookiecutter.name.strip().lower() }}/{{ cookiecutter.module | snake }}",
 			expected: "src/{{ vars.name.strip().lower() }}/{{ vars.module | snake }}",
 			changed:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, changed := ConvertPath(tt.input)
+			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.changed, changed)
+		})
+	}
+}
+
+func TestUT_ConvertPath_ControlBlocks(t *testing.T) {
+	// Test control blocks ({% %}) in paths - real-world Cookiecutter templates use
+	// conditional file/directory names like {% if cookiecutter.use_feature=="yes" %}file{% endif %}
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		changed  bool
+	}{
+		{
+			name:     "if block in filename",
+			input:    `{% if cookiecutter.use_consumer=="yes" %}amqp.go{% endif %}`,
+			expected: `{% if vars.use_consumer=="yes" %}amqp.go{% endif %}`,
+			changed:  true,
+		},
+		{
+			name:     "if block in path segment",
+			input:    `{{cookiecutter.project_slug}}/handlers/{% if cookiecutter.use_consumer=="yes" %}amqp.go{% endif %}`,
+			expected: `{{vars.project_slug}}/handlers/{% if vars.use_consumer=="yes" %}amqp.go{% endif %}`,
+			changed:  true,
+		},
+		{
+			name:     "for block in path",
+			input:    `{% for item in cookiecutter.modules %}{{ item }}{% endfor %}`,
+			expected: `{% for item in vars.modules %}{{ item }}{% endfor %}`,
+			changed:  true,
+		},
+		{
+			name:     "comment block in path",
+			input:    `{# cookiecutter.note #}/src/main.go`,
+			expected: `{# vars.note #}/src/main.go`,
+			changed:  true,
+		},
+		{
+			name:     "mixed expression and control blocks",
+			input:    `{{ cookiecutter.project_name }}/{% if cookiecutter.use_docker=="yes" %}docker{% endif %}`,
+			expected: `{{ vars.project_name }}/{% if vars.use_docker=="yes" %}docker{% endif %}`,
+			changed:  true,
+		},
+		{
+			name:     "control block without cookiecutter ref unchanged",
+			input:    `{% if vars.flag %}file{% endif %}`,
+			expected: `{% if vars.flag %}file{% endif %}`,
+			changed:  false,
 		},
 	}
 
