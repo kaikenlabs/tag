@@ -7,17 +7,6 @@ package template
 // It provides data to templates through multiple namespaces.
 type Context map[string]any
 
-// NameOptions contains pre-computed name variants for convenience.
-// These are available in templates via the "n" namespace.
-type NameOptions struct {
-	SnakeCase  string
-	PascalCase string
-	CamelCase  string
-	KebabCase  string
-	LowerCase  string
-	UpperCase  string
-}
-
 // Template represents a parsed template ready for execution.
 type Template interface {
 	// Execute renders the template with the given context.

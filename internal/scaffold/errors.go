@@ -72,27 +72,27 @@ func NewPathError(path, message string, err error) *PathError {
 	return &PathError{Path: path, Message: message, Err: err}
 }
 
-// TemplateError represents an error during template processing.
-type TemplateError struct {
+// FileProcessingError represents an error during template processing.
+type FileProcessingError struct {
 	File    string
 	Message string
 	Err     error
 }
 
-func (e *TemplateError) Error() string {
+func (e *FileProcessingError) Error() string {
 	if e.Err != nil {
 		return fmt.Sprintf("template %q: %s: %v", e.File, e.Message, e.Err)
 	}
 	return fmt.Sprintf("template %q: %s", e.File, e.Message)
 }
 
-func (e *TemplateError) Unwrap() error {
+func (e *FileProcessingError) Unwrap() error {
 	return e.Err
 }
 
-// NewTemplateError creates a new template error.
-func NewTemplateError(file, message string, err error) *TemplateError {
-	return &TemplateError{File: file, Message: message, Err: err}
+// NewFileProcessingError creates a new template error.
+func NewFileProcessingError(file, message string, err error) *FileProcessingError {
+	return &FileProcessingError{File: file, Message: message, Err: err}
 }
 
 // ErrCookiecutterDetected represents a Cookiecutter template detection.

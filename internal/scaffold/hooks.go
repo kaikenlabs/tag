@@ -294,6 +294,18 @@ func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompt
 	return confirmed, nil
 }
 
+// PrintHookResults prints the output of hook execution results to stdout.
+func PrintHookResults(results []HookResult) {
+	for _, result := range results {
+		if result.Output != "" {
+			fmt.Print(result.Output)
+			if !strings.HasSuffix(result.Output, "\n") {
+				fmt.Println()
+			}
+		}
+	}
+}
+
 // RunPreScaffoldHooks executes pre-scaffold hooks and returns an error if any fail.
 // Pre-scaffold hooks run in the template directory before any files are created.
 func RunPreScaffoldHooks(runner HookRunner, hooks *HooksConfig, templateDir string, env []string) error {
@@ -305,15 +317,7 @@ func RunPreScaffoldHooks(runner HookRunner, hooks *HooksConfig, templateDir stri
 
 	results, err := runner.Run(HookPhasePre, hooks.PreScaffold, templateDir, env)
 
-	// Print output from all executed commands for debugging context
-	for _, result := range results {
-		if result.Output != "" {
-			fmt.Print(result.Output)
-			if !strings.HasSuffix(result.Output, "\n") {
-				fmt.Println()
-			}
-		}
-	}
+	PrintHookResults(results)
 
 	return err
 }
@@ -330,15 +334,7 @@ func RunPostScaffoldHooks(runner HookRunner, hooks *HooksConfig, outputDir strin
 
 	results, err := runner.Run(HookPhasePost, hooks.PostScaffold, outputDir, env)
 
-	// Print output from all executed commands
-	for _, result := range results {
-		if result.Output != "" {
-			fmt.Print(result.Output)
-			if !strings.HasSuffix(result.Output, "\n") {
-				fmt.Println()
-			}
-		}
-	}
+	PrintHookResults(results)
 
 	if err != nil {
 		// Post-scaffold failures are warnings, not errors

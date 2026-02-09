@@ -28,5 +28,5 @@ func (f *fileLog) OpenFile(name string, flag int, perm fs.FileMode) (*os.File, e
 
 func (f *fileLog) Write(file *os.File, b []byte) (n int, err error) {
 	slog.Info("logging to console", "file", file.Name(), "data", fmt.Sprintf("\n%s", string(b)))
-	return 0, nil
+	return len(b), nil
 }

@@ -549,7 +549,7 @@ func TestUT_ProcessFile_TemplateParseError(t *testing.T) {
 	err = writer.processFile(srcPath, destPath, ctx, newTestDirEntry(info))
 	require.Error(t, err)
 
-	var tmplErr *TemplateError
+	var tmplErr *FileProcessingError
 	assert.ErrorAs(t, err, &tmplErr)
 }
 
@@ -573,7 +573,7 @@ func TestUT_ProcessFile_TemplateExecuteError(t *testing.T) {
 	err = writer.processFile(srcPath, destPath, ctx, newTestDirEntry(info))
 	require.Error(t, err)
 
-	var tmplErr *TemplateError
+	var tmplErr *FileProcessingError
 	assert.ErrorAs(t, err, &tmplErr)
 }
 

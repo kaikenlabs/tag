@@ -8,6 +8,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 	"github.com/stretchr/testify/assert"
@@ -312,8 +313,8 @@ Hello {{ .Name }}`
 	})
 
 	var generateCalls int
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+	originalBundleEngine := newBundleEngine
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				generateCalls++
@@ -322,7 +323,7 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
+	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
 
 	err := generateAction(ctx, cfg)
 
@@ -355,8 +356,8 @@ Hello {{ .Name }}`
 	})
 
 	var generateCalls int
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
+	originalBundleEngine := newBundleEngine
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, fileSuffix string) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				generateCalls++
@@ -365,7 +366,7 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
+	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
 
 	err := generateAction(ctx, cfg)
 

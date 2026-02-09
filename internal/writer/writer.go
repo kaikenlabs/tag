@@ -69,6 +69,13 @@ func (w *Write) AppendFile(name string, data []byte) error {
 		slog.Error("cannot open file", "file", name, "error", err)
 		return err
 	}
+	if file != nil {
+		defer func() {
+			if err := file.Close(); err != nil {
+				slog.Error("cannot close file", "file", file.Name(), "error", err)
+			}
+		}()
+	}
 	if _, err := w.fs.Write(file, data); err != nil {
 		slog.Error("cannot append data to file", "file", file, "error", err)
 		return err
