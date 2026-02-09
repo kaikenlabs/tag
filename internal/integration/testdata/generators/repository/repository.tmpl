@@ -1,0 +1,16 @@
+---
+to: app/repositories/{{ name | snake }}_repository.go
+---
+package repositories
+
+import "app/models"
+
+// {{ name | pascal }}Repository handles {{ name }} persistence.
+type {{ name | pascal }}Repository struct {
+	db interface{}
+}
+
+// FindByID retrieves a {{ name | pascal }} by ID.
+func (r *{{ name | pascal }}Repository) FindByID(id int) (*models.{{ name | pascal }}, error) {
+	return nil, nil
+}

@@ -71,10 +71,10 @@ func TestUT_LoadTemplateFiles(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "should return inject_after.tmpl",
+			name: "should load all templates from directory",
 			args: args{
 				fileSuffix: "tmpl",
-				dirPath:    "../../example/.tag.templates/fakr",
+				dirPath:    "testdata/generators",
 			},
 			want:    7,
 			wantErr: false,
@@ -83,7 +83,7 @@ func TestUT_LoadTemplateFiles(t *testing.T) {
 			name: "should return error if not exists",
 			args: args{
 				fileSuffix: "tmpl",
-				dirPath:    "../../example/.tag.templates/flat",
+				dirPath:    "testdata/nonexistent",
 			},
 			want:    0,
 			wantErr: true,

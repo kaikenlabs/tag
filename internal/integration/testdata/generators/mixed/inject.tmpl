@@ -1,0 +1,6 @@
+---
+to: app/main.go
+inject: true
+after: // init
+---
+	{{ name | pascal }}Setup()

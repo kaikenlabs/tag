@@ -1,0 +1,6 @@
+---
+to: app/router.go
+inject: true
+after: // routes
+---
+	mux.HandleFunc("/{{ name }}", {{ name }}Handler)
