@@ -295,8 +295,7 @@ func TestUT_VariableCollector_SkipDerivedVars(t *testing.T) {
 	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
 }
 
-func TestUT_VariableCollector_DerivedVarsWithCookiecutterNamespace(t *testing.T) {
-	// Test that cookiecutter namespace is also recognized for derived variables
+func TestUT_VariableCollector_DerivedVarsWithMethodCalls(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for project_name"] = "My Project"
 	collector := NewVariableCollector(mockPrompter)
@@ -304,8 +303,7 @@ func TestUT_VariableCollector_DerivedVarsWithCookiecutterNamespace(t *testing.T)
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
 			"project_name": {Type: VarTypeString, Default: "Default Project"},
-			// Derived using cookiecutter namespace (from conversion)
-			"project_slug": {Type: VarTypeString, Default: "{{ cookiecutter.project_name | snake }}"},
+			"project_slug": {Type: VarTypeString, Default: "{{ vars.project_name | snake }}"},
 		},
 	}
 
@@ -320,7 +318,7 @@ func TestUT_VariableCollector_DerivedVarsWithCookiecutterNamespace(t *testing.T)
 	// project_name should be prompted
 	assert.Equal(t, "My Project", vars["project_name"])
 	// project_slug should NOT be prompted (derived)
-	assert.Equal(t, "{{ cookiecutter.project_name | snake }}", vars["project_slug"])
+	assert.Equal(t, "{{ vars.project_name | snake }}", vars["project_slug"])
 	// Only project_name was prompted
 	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
 }

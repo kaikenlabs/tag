@@ -273,16 +273,6 @@ func TestUT_VariableDef_IsDerived(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "cookiecutter namespace - derived",
-			def:      VariableDef{Default: "{{ cookiecutter.project_name }}"},
-			expected: true,
-		},
-		{
-			name:     "cookiecutter with method calls - derived",
-			def:      VariableDef{Default: "{{cookiecutter.package_display_name.lower().replace(' ', '_')}}"},
-			expected: true,
-		},
-		{
 			name:     "vars with filter - derived",
 			def:      VariableDef{Default: "{{ vars.project_name | snake }}"},
 			expected: true,
@@ -334,9 +324,7 @@ func TestUT_ContainsTemplateExpression(t *testing.T) {
 	}{
 		{"vars with spaces", "{{ vars.name }}", true},
 		{"vars without spaces", "{{vars.name}}", true},
-		{"cookiecutter with spaces", "{{ cookiecutter.name }}", true},
-		{"cookiecutter without spaces", "{{cookiecutter.name}}", true},
-		{"complex expression", "{{vars.package_display_name.lower().replace(' ', '_')}}", true},
+		{"vars with method calls", "{{vars.package_display_name.lower().replace(' ', '_')}}", true},
 		{"with filter", "{{ vars.name | snake }}", true},
 		{"plain string", "hello world", false},
 		{"empty string", "", false},

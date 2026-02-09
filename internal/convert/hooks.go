@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/kaikenlabs/tag/internal/fileutil"
 )
 
 // HookKind identifies the type of hook script.
@@ -130,12 +128,27 @@ func (p *HooksProcessor) CopyHooks() ([]HookFinding, error) {
 	return findings, nil
 }
 
-// copyHookFile copies a file preserving its permissions, ensuring the parent directory exists.
+// copyHookFile copies a hook file, converting {{ cookiecutter.* }} to {{ vars.* }}
+// in the file contents, and preserving its permissions.
 func copyHookFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return fileutil.CopyFile(src, dst)
+
+	content, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+
+	// Convert cookiecutter namespace references in hook content
+	converted, _ := ConvertContent(string(content))
+
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(dst, []byte(converted), info.Mode())
 }
 
 // IsHooksDir checks if a path is the hooks directory.

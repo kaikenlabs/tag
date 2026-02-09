@@ -282,7 +282,6 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 func buildTemplateContext(vars map[string]any) template.Context {
 	return template.NewContextBuilder().
 		WithVars(vars).
-		WithRootVars(vars).
 		Build()
 }
 

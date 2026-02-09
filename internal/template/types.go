@@ -1,6 +1,6 @@
 // Package template provides a Jinja2-compatible template engine using Gonja.
-// It supports aliased namespaces (vars.*, cookiecutter.*) and custom filters
-// for case transformation, inflection, and string operations.
+// It supports the vars.* namespace and custom filters for case transformation,
+// inflection, and string operations.
 package template
 
 // Context represents the template execution context.

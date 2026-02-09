@@ -296,9 +296,9 @@ func TestUT_ConvertInPlace_CreatesTagTemplateJSON(t *testing.T) {
 	assert.Contains(t, string(tagConfig), "author")
 	assert.Contains(t, string(tagConfig), "use_docker")
 
-	// Verify original template files were NOT copied (in-place means no file duplication)
-	// The {{ cookiecutter.project_name }} directory should still exist as-is
-	_, err = os.Stat(templateDir)
+	// Verify template directory was renamed from {{ cookiecutter.* }} to {{ vars.* }}
+	renamedDir := filepath.Join(srcDir, "{{ vars.project_name }}")
+	_, err = os.Stat(renamedDir)
 	require.NoError(t, err)
 
 	// Verify cookiecutter.json is still there

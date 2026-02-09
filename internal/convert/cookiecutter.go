@@ -258,7 +258,22 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 
-			// Copy file
+			// For text files, convert cookiecutter.* references to vars.*
+			if fileutil.IsTextContent(content) {
+				converted, changed := ConvertContent(string(content))
+				if changed {
+					info, infoErr := d.Info()
+					if infoErr != nil {
+						return fmt.Errorf("failed to get file info %s: %w", relPath, infoErr)
+					}
+					if err := os.WriteFile(destPath, []byte(converted), info.Mode()); err != nil {
+						return fmt.Errorf("failed to write %s: %w", relPath, err)
+					}
+					return nil
+				}
+			}
+
+			// Binary files or text without cookiecutter references: raw copy
 			if err := fileutil.CopyFile(path, destPath); err != nil {
 				return fmt.Errorf("failed to copy %s: %w", relPath, err)
 			}
@@ -270,7 +285,8 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 
 // ConvertInPlace converts a Cookiecutter template in-place by writing
 // tag.template.json to the same directory as cookiecutter.json.
-// Unlike Convert(), this does not copy files to a new directory.
+// It also converts {{ cookiecutter.* }} references to {{ vars.* }} in all
+// text files, hook files, and directory/file names.
 func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) error {
 	// Verify it's a Cookiecutter template
 	cookiecutterPath := filepath.Join(templateDir, types.CookiecutterConfigFile)
@@ -305,6 +321,11 @@ func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) erro
 		}
 	}
 
+	// Convert file contents and paths in-place
+	if err := c.convertFilesInPlace(templateDir); err != nil {
+		return err
+	}
+
 	// Write tag.template.json
 	tagJSON, err := GenerateTagTemplateJSON(tagConfig, "", "Converted from Cookiecutter template")
 	if err != nil {
@@ -314,6 +335,92 @@ func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) erro
 	tagConfigPath := filepath.Join(templateDir, types.TemplateConfigFile)
 	if err := os.WriteFile(tagConfigPath, tagJSON, 0o644); err != nil {
 		return fmt.Errorf("failed to write tag.template.json: %w", err)
+	}
+
+	return nil
+}
+
+// convertFilesInPlace walks the template directory and converts cookiecutter.*
+// references to vars.* in text file contents and renames paths.
+func (c *Converter) convertFilesInPlace(templateDir string) error {
+	// First pass: convert file contents
+	err := filepath.WalkDir(templateDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			baseName := filepath.Base(path)
+			if baseName == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		relPath, err := filepath.Rel(templateDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == types.CookiecutterConfigFile {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !fileutil.IsTextContent(content) {
+			return nil
+		}
+
+		converted, changed := ConvertContent(string(content))
+		if changed {
+			info, infoErr := d.Info()
+			if infoErr != nil {
+				return infoErr
+			}
+			return os.WriteFile(path, []byte(converted), info.Mode())
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to convert file contents: %w", err)
+	}
+
+	// Second pass: rename paths containing cookiecutter.* (bottom-up via collected list)
+	var pathsToRename []string
+	err = filepath.WalkDir(templateDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, relErr := filepath.Rel(templateDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		if relPath == "." || relPath == types.CookiecutterConfigFile {
+			return nil
+		}
+		baseName := filepath.Base(path)
+		if HasCookiecutterPlaceholders(baseName) {
+			pathsToRename = append(pathsToRename, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to scan paths: %w", err)
+	}
+
+	// Rename from deepest to shallowest to avoid breaking parent paths
+	for i := len(pathsToRename) - 1; i >= 0; i-- {
+		oldPath := pathsToRename[i]
+		dir := filepath.Dir(oldPath)
+		baseName := filepath.Base(oldPath)
+		newBase, _ := ConvertPath(baseName)
+		newPath := filepath.Join(dir, newBase)
+		if oldPath != newPath {
+			if err := os.Rename(oldPath, newPath); err != nil {
+				return fmt.Errorf("failed to rename %s: %w", oldPath, err)
+			}
+		}
 	}
 
 	return nil

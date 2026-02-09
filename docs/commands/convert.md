@@ -14,9 +14,9 @@ The `convert cookiecutter` command converts existing [Cookiecutter](https://cook
 
 The conversion process:
 1. Converts `cookiecutter.json` to `tag.template.json`
-2. Converts path placeholders from `{{ cookiecutter.var }}` to `{{ vars.var }}` syntax
+2. Converts all `cookiecutter.*` references to `vars.*` syntax (paths, file contents, hooks)
 3. Preserves derived variables (those referencing other variables)
-4. Copies and analyzes hook scripts
+4. Copies and converts hook scripts
 5. Reports any content incompatibilities between Jinja2 and Gonja
 
 > **Note**: You can also use `tag scaffold` directly on a Cookiecutter template—TAG will auto-detect it and offer to convert interactively. See [Auto-Detection](#auto-detection) below.
@@ -126,7 +126,8 @@ Example:
 ### Template Content
 
 Template content (Jinja2 syntax) is **mostly compatible**. The converter will:
-- Leave content unchanged (Gonja supports Jinja2)
+- Convert `{{ cookiecutter.* }}` references to `{{ vars.* }}` in all text files
+- Convert `{% cookiecutter.* %}` references in control blocks (if/for) to `{% vars.* %}`
 - Report incompatibilities that need manual adjustment
 - Document filter syntax differences
 
@@ -207,5 +208,4 @@ This allows seamless use of Cookiecutter templates without a separate conversion
 
 - [Scaffold Command](../commands/scaffold.md) - Using templates (includes Cookiecutter auto-detection)
 - [Template Authoring](../templates/authoring.md) - TAG template structure
-- [Migration Guide](../migration/v1-to-v2.md) - Detailed migration information
 - [tag.template.json Reference](../reference/tag.template.json.md) - Configuration format

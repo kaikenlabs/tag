@@ -139,7 +139,6 @@ func enrichContextWithMetadata(ctx template.Context, metadata *template.Metadata
 	if !ok {
 		vars = make(map[string]any)
 		ctx["vars"] = vars
-		ctx["cookiecutter"] = vars // Keep alias in sync
 	}
 
 	// Add extra metadata to vars (template-defined values)

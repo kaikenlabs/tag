@@ -1,4 +1,4 @@
-"""{{ cookiecutter.project_name }} - {{ cookiecutter.description }}"""
+"""{{ vars.project_name }} - {{ vars.description }}"""
 
-__version__ = "{{ cookiecutter._private_version }}"
-__author__ = "{{ cookiecutter.author }}"
+__version__ = "{{ vars._private_version }}"
+__author__ = "{{ vars.author }}"

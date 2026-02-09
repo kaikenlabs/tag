@@ -1,2 +1,2 @@
 #!/bin/bash
-echo "Project {{ cookiecutter.project_slug }} generated successfully!"
+echo "Project {{ vars.project_slug }} generated successfully!"

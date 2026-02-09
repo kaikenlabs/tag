@@ -276,11 +276,7 @@ Enter value for package_display_name [My Package]: Awesome Library
 
 The `package_name` will be computed as `awesome_library` and `github_repo` will also be `awesome_library`.
 
-**Detection rules:** A variable is considered derived if its default value is a string containing:
-- `{{ vars.` - TAG's variable namespace
-- `{{ cookiecutter.` - Cookiecutter compatibility namespace
-
-This automatic detection ensures converted Cookiecutter templates work seamlessly with TAG's prompting system.
+**Detection rules:** A variable is considered derived if its default value is a string containing `{{ vars.` (TAG's variable namespace).
 
 ## Hooks Configuration
 

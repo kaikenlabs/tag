@@ -11,19 +11,16 @@ Use double curly braces to output variables:
 {{ vars.author }}
 ```
 
-### Variable Namespaces
+### Variable Namespace
 
-TAG provides two equivalent namespaces:
+All variables are accessed through the `vars` namespace:
 
 ```jinja2
-{# TAG style (recommended) #}
 {{ vars.project_name }}
-
-{# Cookiecutter compatible (also works) #}
-{{ cookiecutter.project_name }}
+{{ vars.author }}
 ```
 
-Both reference the same underlying variables.
+> **Note**: The `tag convert cookiecutter` command automatically converts `{{ cookiecutter.* }}` references to `{{ vars.* }}`.
 
 ### Name Helpers (Generator Templates Only)
 
@@ -456,4 +453,3 @@ TAG uses Gonja, which is mostly compatible with Jinja2 but has minor differences
 
 - [Filter Reference](filters.md) - All available filters
 - [Template Authoring](authoring.md) - Creating templates
-- [Migration Guide](../migration/v1-to-v2.md) - Migrating from Go templates

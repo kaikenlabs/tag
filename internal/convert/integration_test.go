@@ -222,10 +222,10 @@ func TestIT_ConvertCookiecutter_ContentPreserved(t *testing.T) {
 	content, err := os.ReadFile(readmePath)
 	require.NoError(t, err)
 
-	// Content should still use cookiecutter.* syntax (Gonja supports this via alias)
-	assert.Contains(t, string(content), "{{ cookiecutter.project_name }}")
-	assert.Contains(t, string(content), "{{ cookiecutter.description }}")
-	assert.Contains(t, string(content), "{% if cookiecutter.open_source_license")
+	// Content should be converted from cookiecutter.* to vars.* syntax
+	assert.Contains(t, string(content), "{{ vars.project_name }}")
+	assert.Contains(t, string(content), "{{ vars.description }}")
+	assert.Contains(t, string(content), "{% if vars.open_source_license")
 }
 
 func TestIT_ConvertCookiecutter_HooksConfig(t *testing.T) {

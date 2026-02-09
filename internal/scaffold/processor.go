@@ -48,7 +48,7 @@ var placeholderDetectRegex = regexp.MustCompile(`\{\{.+\}\}|\{%.+%\}`)
 
 // ProcessPath replaces placeholders in a path with variable values.
 // Supports any valid Jinja2 expression including method calls.
-// Examples: {{ vars.name }}, {{ vars.name | snake }}, {{ cookiecutter.name.lower() }}
+// Examples: {{ vars.name }}, {{ vars.name | snake }}, {{ vars.name.lower() }}
 func (p *DefaultPathProcessor) ProcessPath(path string, vars map[string]any) (string, error) {
 	// Split path into segments to process each part
 	segments := strings.Split(path, string(filepath.Separator))
@@ -102,10 +102,8 @@ func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]an
 		safeVars = p.escapeNonDerivedVars(vars)
 	}
 
-	// Build context with both "vars" and "cookiecutter" namespaces
 	ctx := template.Context{
-		"vars":         safeVars,
-		"cookiecutter": safeVars, // Alias for compatibility
+		"vars": safeVars,
 	}
 
 	result := segment
@@ -178,9 +176,9 @@ func escapeTemplateSyntax(s string) string {
 	return s
 }
 
-// simpleVarRegex extracts simple variable names from {{ vars.name }} or {{ cookiecutter.name }} patterns.
+// simpleVarRegex extracts simple variable names from {{ vars.name }} patterns.
 // This is used for ExtractPlaceholders - complex expressions are not fully parsed.
-var simpleVarRegex = regexp.MustCompile(`\{\{\s*(?:vars|cookiecutter)\.([a-zA-Z_][a-zA-Z0-9_]*)`)
+var simpleVarRegex = regexp.MustCompile(`\{\{\s*vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
 
 // ExtractPlaceholders returns variable names found in simple {{ vars.name }} patterns.
 // Note: This does not extract variables from complex expressions like method calls.

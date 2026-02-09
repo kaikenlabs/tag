@@ -687,12 +687,6 @@ func TestUT_BuildTemplateContext(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "test", ctxVars["name"])
 	assert.Equal(t, "1.0", ctxVars["version"])
-
-	// Context should also have root-level vars (from WithRootVars)
-	// This makes {{ name }} work in addition to {{ vars.name }}
-	rootName, ok := ctx["name"]
-	assert.True(t, ok, "root-level vars should be set via WithRootVars")
-	assert.Equal(t, "test", rootName)
 }
 
 // --- openAndReadRegularFile (TOCTOU protection) ---

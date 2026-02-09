@@ -39,7 +39,6 @@ Generators are defined in the `.tag.templates/` directory and can:
 |------|-------|---------|-------------|
 | `--path` | `-tp` | `.tag.templates` | Templates directory path |
 | `--shared` | `-sp` | `_shared` | Shared templates directory name |
-| `--extension` | `-x` | `.tmpl` | Template file extension |
 
 ## Examples
 
@@ -85,9 +84,6 @@ tag generate handler User --dry-run
 ```bash
 # Custom templates directory
 tag generate handler User --path custom.tag.templates
-
-# Custom file extension
-tag generate handler User --extension .template
 ```
 
 ## Template Data
@@ -98,7 +94,6 @@ Generators receive the following context variables:
 |----------|------|-------------|
 | `name` | `string` | The name argument passed to the command |
 | `vars` | `map[string]any` | Key-value pairs from `--meta` flags |
-| `cookiecutter` | `map[string]any` | Alias for `vars` (compatibility) |
 | `n.pascal_case` | `string` | Name in PascalCase |
 | `n.camel_case` | `string` | Name in camelCase |
 | `n.snake_case` | `string` | Name in snake_case |
@@ -151,7 +146,6 @@ Generator behavior can be configured via `.tagconfig.json` in your project root:
 {
   "env": {
     "TAG_PATH": ".tag.templates",
-    "TAG_EXTENSION": ".tmpl",
     "TAG_SHARED_PATH": "_shared",
     "TAG_BUNDLE_PATH": "_bundles"
   },
@@ -223,4 +217,3 @@ before: "// END MARKER"
 
 - [Template Authoring](../templates/authoring.md) - Creating generators
 - [Hooks Guide](../templates/hooks.md) - Pre and post hooks
-- [Migration Guide](../migration/v1-to-v2.md) - Template syntax changes in v2

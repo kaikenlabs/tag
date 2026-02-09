@@ -108,6 +108,26 @@ func ExtractCookiecutterVars(path string) []string {
 	return vars
 }
 
+// templateBlockRegex matches all Jinja2 template blocks: {{ }}, {% %}, and {# #}.
+var templateBlockRegex = regexp.MustCompile(`\{\{[^}]+\}\}|\{%[^%]+%\}|\{#[^#]+#\}`)
+
+// ConvertContent converts cookiecutter.* references to vars.* in template file content.
+// Unlike ConvertPath which only handles {{ }} expression blocks, this also handles
+// {% %} control blocks and {# #} comment blocks.
+func ConvertContent(content string) (string, bool) {
+	converted := false
+
+	result := templateBlockRegex.ReplaceAllStringFunc(content, func(match string) string {
+		if cookiecutterNamespaceRegex.MatchString(match) {
+			converted = true
+			return cookiecutterNamespaceRegex.ReplaceAllString(match, "${1}vars.")
+		}
+		return match
+	})
+
+	return result, converted
+}
+
 // NormalizePath ensures consistent path separators and removes leading/trailing slashes.
 func NormalizePath(path string) string {
 	// Convert Windows separators to Unix

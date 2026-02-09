@@ -87,11 +87,6 @@ func TestUT_PathProcessor_SimpleVar(t *testing.T) {
 			path:     "{{ vars.project_name }}/src/__init__.py",
 			expected: "my_project/src/__init__.py",
 		},
-		{
-			name:     "cookiecutter alias",
-			path:     "{{ cookiecutter.project_name }}/main.go",
-			expected: "my_project/main.go",
-		},
 	}
 
 	for _, tt := range tests {
@@ -248,8 +243,8 @@ func TestUT_PathProcessor_ComplexExpressions(t *testing.T) {
 			expected: "My_Cool_Package",
 		},
 		{
-			name:     "chained filters (recommended approach)",
-			path:     "{{ cookiecutter.package_display_name | lower | replace(' ', '_') | replace('-', '_') }}",
+			name:     "chained filters",
+			path:     "{{ vars.package_display_name | lower | replace(' ', '_') | replace('-', '_') }}",
 			expected: "my_cool_package",
 		},
 		{
@@ -263,8 +258,8 @@ func TestUT_PathProcessor_ComplexExpressions(t *testing.T) {
 			expected: "My_Cool_Package",
 		},
 		{
-			name:     "chained methods (Cookiecutter style)",
-			path:     "{{ cookiecutter.package_display_name.lower().replace(' ', '_').replace('-', '_') }}",
+			name:     "chained methods",
+			path:     "{{ vars.package_display_name.lower().replace(' ', '_').replace('-', '_') }}",
 			expected: "my_cool_package",
 		},
 	}
@@ -314,11 +309,6 @@ func TestUT_ExtractPlaceholders(t *testing.T) {
 			path:     "__init__.py",
 			expected: []string{},
 		},
-		{
-			name:     "cookiecutter alias",
-			path:     "{{ cookiecutter.name }}",
-			expected: []string{"name"},
-		},
 	}
 
 	for _, tt := range tests {
@@ -337,7 +327,7 @@ func TestUT_HasPlaceholders(t *testing.T) {
 	}{
 		{"has placeholder", "{{ vars.name }}", true},
 		{"has placeholder with filter", "{{ vars.name | snake }}", true},
-		{"cookiecutter alias", "{{ cookiecutter.name }}", true},
+		{"vars with filter", "{{ vars.name | snake }}", true},
 		{"has conditional block", `{% if vars.feature %}file.go{% endif %}`, true},
 		{"no placeholder", "cmd/main.go", false},
 		{"python dunder not a placeholder", "__init__.py", false},
@@ -385,20 +375,8 @@ func TestUT_PathProcessor_ConditionalFilename(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "cookiecutter conditional true",
-			path:     `handlers/{% if cookiecutter.use_consumer == "yes" %}amqp.go{% endif %}`,
-			vars:     map[string]any{"use_consumer": "yes"},
-			expected: "handlers/amqp.go",
-		},
-		{
-			name:     "cookiecutter conditional false",
-			path:     `handlers/{% if cookiecutter.use_consumer == "yes" %}amqp.go{% endif %}`,
-			vars:     map[string]any{"use_consumer": "no"},
-			expected: "",
-		},
-		{
 			name:     "no-space comparison operator",
-			path:     `{% if cookiecutter.use_http=="yes" %}http.go{% endif %}`,
+			path:     `{% if vars.use_http=="yes" %}http.go{% endif %}`,
 			vars:     map[string]any{"use_http": "yes"},
 			expected: "http.go",
 		},

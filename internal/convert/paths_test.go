@@ -291,3 +291,63 @@ func TestUT_NormalizePath(t *testing.T) {
 		})
 	}
 }
+
+func TestUT_ConvertContent(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		changed  bool
+	}{
+		{
+			name:     "expression block",
+			input:    "{{ cookiecutter.name }}",
+			expected: "{{ vars.name }}",
+			changed:  true,
+		},
+		{
+			name:     "control block if",
+			input:    "{% if cookiecutter.use_docker %}yes{% endif %}",
+			expected: "{% if vars.use_docker %}yes{% endif %}",
+			changed:  true,
+		},
+		{
+			name:     "control block for",
+			input:    "{% for item in cookiecutter.items %}{{ item }}{% endfor %}",
+			expected: "{% for item in vars.items %}{{ item }}{% endfor %}",
+			changed:  true,
+		},
+		{
+			name:     "comment block",
+			input:    "{# cookiecutter.note #}",
+			expected: "{# vars.note #}",
+			changed:  true,
+		},
+		{
+			name:     "mixed blocks",
+			input:    "{% if cookiecutter.flag %}{{ cookiecutter.name }}{% endif %}",
+			expected: "{% if vars.flag %}{{ vars.name }}{% endif %}",
+			changed:  true,
+		},
+		{
+			name:     "no cookiecutter references",
+			input:    "{% if vars.flag %}{{ vars.name }}{% endif %}",
+			expected: "{% if vars.flag %}{{ vars.name }}{% endif %}",
+			changed:  false,
+		},
+		{
+			name:     "plain text unchanged",
+			input:    "Hello world",
+			expected: "Hello world",
+			changed:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, changed := ConvertContent(tt.input)
+			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.changed, changed)
+		})
+	}
+}
