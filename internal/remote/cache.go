@@ -105,9 +105,8 @@ func (c *FSCache) Get(key string) (string, bool, error) {
 	// Read and check metadata
 	meta, err := c.readMeta(key)
 	if err != nil {
-		// If metadata is corrupted or missing, treat as cache miss
-		// but don't return error - let caller re-fetch
-		return "", false, nil
+		// Cache lookup errors are treated as cache misses; let caller re-fetch.
+		return "", false, nil //nolint:nilerr // intentional: corrupted/missing metadata = cache miss
 	}
 
 	// Check expiration
@@ -120,7 +119,7 @@ func (c *FSCache) Get(key string) (string, bool, error) {
 }
 
 // Set stores a template in the cache by copying from sourcePath.
-func (c *FSCache) Set(key string, sourcePath string, meta *CacheMeta) (string, error) {
+func (c *FSCache) Set(key, sourcePath string, meta *CacheMeta) (string, error) {
 	cachePath := c.Path(key)
 
 	// Remove existing cache entry if present
@@ -189,7 +188,7 @@ func (c *FSCache) writeMeta(key string, meta *CacheMeta) error {
 		return err
 	}
 
-	return os.WriteFile(metaFile, data, 0o644)
+	return os.WriteFile(metaFile, data, 0o600)
 }
 
 // copyDir recursively copies a directory.

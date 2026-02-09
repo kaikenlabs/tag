@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,6 +66,8 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 }
 
 // Run executes the scaffolding process.
+//
+//nolint:cyclop // orchestration function coordinates multiple phases
 func (s *Scaffold) Run(opts Options) error {
 	// Step 1: Validate template directory exists
 	if _, err := os.Stat(opts.TemplateDir); os.IsNotExist(err) {
@@ -109,14 +112,15 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	// Step 5: Prepare output directory (safety checks, force handling)
-	if err := prepareOutputDir(outputDir, opts.Force); err != nil {
+	if err := prepareOutputDir(outputDir, opts.Force); err != nil { //nolint:govet // shadow in if-init is idiomatic
 		return err
 	}
 
 	// Make template directory absolute for hooks
 	templateDirAbs := opts.TemplateDir
 	if !filepath.IsAbs(templateDirAbs) {
-		cwd, err := os.Getwd()
+		var cwd string
+		cwd, err = os.Getwd()
 		if err != nil {
 			return fmt.Errorf("failed to get working directory: %w", err)
 		}
@@ -175,7 +179,7 @@ func resolveOutputDir(outputDir string, vars map[string]any) (string, error) {
 		if projectName, ok := vars["project_name"].(string); ok && projectName != "" {
 			outputDir = projectName
 		} else {
-			return "", fmt.Errorf("output directory not specified and project_name variable not set")
+			return "", errors.New("output directory not specified and project_name variable not set")
 		}
 	}
 
@@ -239,7 +243,7 @@ func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, e
 		if os.IsNotExist(err) {
 			// Check if this is a Cookiecutter template
 			if ccPath, isCookiecutter := IsCookiecutterTemplate(templateDir); isCookiecutter {
-				return nil, &ErrCookiecutterDetected{CookiecutterPath: ccPath}
+				return nil, &CookiecutterDetectedError{CookiecutterPath: ccPath}
 			}
 			return nil, fmt.Errorf("%w: %s", ErrConfigNotFound, configPath)
 		}
@@ -257,7 +261,7 @@ func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, e
 	}
 
 	// Validate against schema
-	if err := s.Validator.Validate(data); err != nil {
+	if err := s.Validator.Validate(data); err != nil { //nolint:govet // shadow in if-init is idiomatic
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
@@ -307,7 +311,7 @@ func validateSafeOutputDir(outputDir string) error {
 
 	// Reject root directories
 	if absPath == "/" || absPath == filepath.VolumeName(absPath)+string(filepath.Separator) {
-		return fmt.Errorf("cannot use root directory as output")
+		return errors.New("cannot use root directory as output")
 	}
 
 	// Reject common dangerous paths

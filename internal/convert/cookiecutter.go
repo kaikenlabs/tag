@@ -3,6 +3,7 @@ package convert
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,7 +48,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 
 	// 2. Verify it's a Cookiecutter template
 	cookiecutterPath := filepath.Join(templateDir, types.CookiecutterConfigFile)
-	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) {
+	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) { //nolint:govet // shadow in if-init is idiomatic
 		return nil, ErrNoCookiecutterConfig
 	}
 
@@ -62,9 +63,11 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	result.Destination = destDir
 
 	// 4. Check if output exists
+	//nolint:nestif // dry-run branching requires nested conditions for file operations
 	if !opts.DryRun {
 		// Safety check: prevent dangerous --force operations
-		absDestDir, err := filepath.Abs(destDir)
+		var absDestDir string
+		absDestDir, err = filepath.Abs(destDir)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve output path: %w", err)
 		}
@@ -72,7 +75,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 			return nil, fmt.Errorf("unsafe output directory: %s", destDir)
 		}
 
-		if info, err := os.Stat(destDir); err == nil && info.IsDir() {
+		if info, err := os.Stat(destDir); err == nil && info.IsDir() { //nolint:govet // shadow in if-init is idiomatic
 			if !opts.Force {
 				return nil, fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, destDir)
 			}
@@ -117,7 +120,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	}
 
 	// 7. Walk and convert template files
-	err = c.processTemplateFiles(templateDir, destDir, tagConfig, result, opts.DryRun)
+	err = c.processTemplateFiles(templateDir, destDir, result, opts.DryRun)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +138,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 		}
 
 		tagConfigPath := filepath.Join(destDir, types.TemplateConfigFile)
-		if err := os.WriteFile(tagConfigPath, tagJSON, 0o644); err != nil {
+		if err := os.WriteFile(tagConfigPath, tagJSON, 0o600); err != nil {
 			return nil, fmt.Errorf("failed to write tag.template.json: %w", err)
 		}
 	}
@@ -165,7 +168,7 @@ func (c *Converter) resolveSource(ctx context.Context, source string) (string, e
 
 // processTemplateFiles walks the template directory and converts files.
 // Uses filepath.WalkDir instead of filepath.Walk to avoid following symlinked directories.
-func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffold.TemplateConfig, result *Result, dryRun bool) error {
+func (c *Converter) processTemplateFiles(srcDir, destDir string, result *Result, dryRun bool) error {
 	return filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -227,11 +230,12 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 		if d.IsDir() {
 			// Create directory
 			if !dryRun {
-				info, err := d.Info()
+				var info fs.FileInfo
+				info, err = d.Info()
 				if err != nil {
 					return fmt.Errorf("failed to get directory info %s: %w", destPath, err)
 				}
-				if err := os.MkdirAll(destPath, info.Mode()); err != nil {
+				if err := os.MkdirAll(destPath, info.Mode()); err != nil { //nolint:govet // shadow in if-init is idiomatic
 					return fmt.Errorf("failed to create directory %s: %w", destPath, err)
 				}
 			}
@@ -252,6 +256,7 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 		result.Incompatibilities = append(result.Incompatibilities, findings...)
 
 		// Write to destination
+		//nolint:nestif // dry-run branching requires nested conditions for file operations
 		if !dryRun {
 			// Ensure parent directory exists
 			if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
@@ -281,147 +286,4 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, config *scaffol
 
 		return nil
 	})
-}
-
-// ConvertInPlace converts a Cookiecutter template in-place by writing
-// tag.template.json to the same directory as cookiecutter.json.
-// It also converts {{ cookiecutter.* }} references to {{ vars.* }} in all
-// text files, hook files, and directory/file names.
-func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) error {
-	// Verify it's a Cookiecutter template
-	cookiecutterPath := filepath.Join(templateDir, types.CookiecutterConfigFile)
-	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) {
-		return ErrNoCookiecutterConfig
-	}
-
-	// Read and convert cookiecutter.json
-	configData, err := os.ReadFile(cookiecutterPath)
-	if err != nil {
-		return fmt.Errorf("failed to read cookiecutter.json: %w", err)
-	}
-
-	tagConfig, _, _, err := ConvertCookiecutterConfig(configData)
-	if err != nil {
-		return err
-	}
-
-	// Process hooks (detect only, don't copy - they're already in place)
-	hooksProcessor := NewHooksProcessor(templateDir, templateDir, false)
-	hookFindings, err := hooksProcessor.DetectHooks()
-	if err != nil {
-		return fmt.Errorf("failed to detect hooks: %w", err)
-	}
-
-	// Add shell hooks to config
-	preHooks, postHooks := SuggestTagHooksConfig(hookFindings)
-	if len(preHooks) > 0 || len(postHooks) > 0 {
-		tagConfig.Hooks = &scaffold.HooksConfig{
-			PreScaffold:  preHooks,
-			PostScaffold: postHooks,
-		}
-	}
-
-	// Convert file contents and paths in-place
-	if err := c.convertFilesInPlace(templateDir); err != nil {
-		return err
-	}
-
-	// Write tag.template.json
-	tagJSON, err := GenerateTagTemplateJSON(tagConfig, "", "Converted from Cookiecutter template")
-	if err != nil {
-		return fmt.Errorf("failed to generate tag.template.json: %w", err)
-	}
-
-	tagConfigPath := filepath.Join(templateDir, types.TemplateConfigFile)
-	if err := os.WriteFile(tagConfigPath, tagJSON, 0o644); err != nil {
-		return fmt.Errorf("failed to write tag.template.json: %w", err)
-	}
-
-	return nil
-}
-
-// convertFilesInPlace walks the template directory and converts cookiecutter.*
-// references to vars.* in text file contents and renames paths.
-func (c *Converter) convertFilesInPlace(templateDir string) error {
-	// First pass: convert file contents
-	err := filepath.WalkDir(templateDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			baseName := filepath.Base(path)
-			if baseName == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		relPath, err := filepath.Rel(templateDir, path)
-		if err != nil {
-			return err
-		}
-		if relPath == types.CookiecutterConfigFile {
-			return nil
-		}
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if !fileutil.IsTextContent(content) {
-			return nil
-		}
-
-		converted, changed := ConvertContent(string(content))
-		if changed {
-			info, infoErr := d.Info()
-			if infoErr != nil {
-				return infoErr
-			}
-			return os.WriteFile(path, []byte(converted), info.Mode())
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to convert file contents: %w", err)
-	}
-
-	// Second pass: rename paths containing cookiecutter.* (bottom-up via collected list)
-	var pathsToRename []string
-	err = filepath.WalkDir(templateDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, relErr := filepath.Rel(templateDir, path)
-		if relErr != nil {
-			return relErr
-		}
-		if relPath == "." || relPath == types.CookiecutterConfigFile {
-			return nil
-		}
-		baseName := filepath.Base(path)
-		if HasCookiecutterPlaceholders(baseName) {
-			pathsToRename = append(pathsToRename, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to scan paths: %w", err)
-	}
-
-	// Rename from deepest to shallowest to avoid breaking parent paths
-	for i := len(pathsToRename) - 1; i >= 0; i-- {
-		oldPath := pathsToRename[i]
-		dir := filepath.Dir(oldPath)
-		baseName := filepath.Base(oldPath)
-		newBase, _ := ConvertPath(baseName)
-		newPath := filepath.Join(dir, newBase)
-		if oldPath != newPath {
-			if err := os.Rename(oldPath, newPath); err != nil {
-				return fmt.Errorf("failed to rename %s: %w", oldPath, err)
-			}
-		}
-	}
-
-	return nil
 }

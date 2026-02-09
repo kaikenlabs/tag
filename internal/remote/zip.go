@@ -85,7 +85,7 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 	}()
 
 	// Extract zip
-	if err := f.extract(zipPath, tmpDir); err != nil {
+	if err := f.extract(zipPath, tmpDir); err != nil { //nolint:govet // shadow in if-init is idiomatic
 		return "", &FetchError{Ref: ref, Message: "extraction failed", Err: err}
 	}
 
@@ -123,7 +123,7 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 
 // download fetches a remote zip file to a temporary location.
 func (f *ZipFetcher) download(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -257,7 +257,7 @@ func (f *ZipFetcher) extractFile(file *zip.File, destPath string, counter *count
 
 	// Copy through the counting writer to enforce cumulative size limit
 	counter.dst = dst
-	_, err = io.Copy(counter, src)
+	_, err = io.Copy(counter, src) //nolint:gosec // zip size is bounded by download limit and io.LimitReader earlier
 	if err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}

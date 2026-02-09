@@ -89,8 +89,7 @@ func sanitizeShorthand(source, prefix string) string {
 	// Add version if present
 	if version != "" {
 		// Version might contain subpath (v1.0.0/subdir)
-		versionParts := strings.Split(version, "/")
-		for _, vp := range versionParts {
+		for vp := range strings.SplitSeq(version, "/") {
 			if vp != "" {
 				result.WriteString("_")
 				result.WriteString(sanitizeComponent(vp))

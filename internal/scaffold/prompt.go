@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -43,7 +44,7 @@ func (p *InteractivePrompter) Input(label, defaultValue string, secret bool) (st
 
 	result, err := prompt.Run()
 	if err != nil {
-		if err == promptui.ErrInterrupt {
+		if errors.Is(err, promptui.ErrInterrupt) {
 			return "", ErrPromptCancelled
 		}
 		return "", fmt.Errorf("prompt failed: %w", err)
@@ -55,7 +56,7 @@ func (p *InteractivePrompter) Input(label, defaultValue string, secret bool) (st
 // Select prompts for a selection from a list of options.
 func (p *InteractivePrompter) Select(label string, options []string, defaultIndex int) (string, error) {
 	if len(options) == 0 {
-		return "", fmt.Errorf("no options provided for select prompt")
+		return "", errors.New("no options provided for select prompt")
 	}
 
 	// Ensure defaultIndex is valid
@@ -71,7 +72,7 @@ func (p *InteractivePrompter) Select(label string, options []string, defaultInde
 
 	_, result, err := prompt.Run()
 	if err != nil {
-		if err == promptui.ErrInterrupt {
+		if errors.Is(err, promptui.ErrInterrupt) {
 			return "", ErrPromptCancelled
 		}
 		return "", fmt.Errorf("select prompt failed: %w", err)
@@ -85,9 +86,9 @@ func (p *InteractivePrompter) Confirm(label string, defaultValue bool) (bool, er
 	// Format prompt to show default clearly
 	var promptLabel string
 	if defaultValue {
-		promptLabel = fmt.Sprintf("%s [Y/n]", label)
+		promptLabel = label + " [Y/n]"
 	} else {
-		promptLabel = fmt.Sprintf("%s [y/N]", label)
+		promptLabel = label + " [y/N]"
 	}
 
 	prompt := promptui.Prompt{
@@ -96,7 +97,7 @@ func (p *InteractivePrompter) Confirm(label string, defaultValue bool) (bool, er
 
 	result, err := prompt.Run()
 	if err != nil {
-		if err == promptui.ErrInterrupt {
+		if errors.Is(err, promptui.ErrInterrupt) {
 			return false, ErrPromptCancelled
 		}
 		return false, fmt.Errorf("confirm prompt failed: %w", err)
@@ -127,7 +128,7 @@ func (p *InteractivePrompter) Number(label string, defaultValue float64) (float6
 		Validate: func(input string) error {
 			_, err := strconv.ParseFloat(input, 64)
 			if err != nil {
-				return fmt.Errorf("invalid number")
+				return errors.New("invalid number")
 			}
 			return nil
 		},
@@ -135,7 +136,7 @@ func (p *InteractivePrompter) Number(label string, defaultValue float64) (float6
 
 	result, err := prompt.Run()
 	if err != nil {
-		if err == promptui.ErrInterrupt {
+		if errors.Is(err, promptui.ErrInterrupt) {
 			return 0, ErrPromptCancelled
 		}
 		return 0, fmt.Errorf("number prompt failed: %w", err)
@@ -147,7 +148,7 @@ func (p *InteractivePrompter) Number(label string, defaultValue float64) (float6
 // formatNumber formats a float64 for display, avoiding unnecessary decimals.
 func formatNumber(n float64) string {
 	if n == float64(int64(n)) {
-		return fmt.Sprintf("%d", int64(n))
+		return strconv.FormatInt(int64(n), 10)
 	}
 	return fmt.Sprintf("%g", n)
 }
@@ -169,7 +170,7 @@ func (p *NoopPrompter) Input(label, defaultValue string, secret bool) (string, e
 // Select returns the first option (or default) without prompting.
 func (p *NoopPrompter) Select(label string, options []string, defaultIndex int) (string, error) {
 	if len(options) == 0 {
-		return "", fmt.Errorf("no options provided")
+		return "", errors.New("no options provided")
 	}
 	if defaultIndex >= 0 && defaultIndex < len(options) {
 		return options[defaultIndex], nil

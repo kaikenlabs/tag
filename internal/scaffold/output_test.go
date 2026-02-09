@@ -2,6 +2,7 @@ package scaffold
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -10,11 +11,35 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/template"
-	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
+
+// =============================================================================
+// Test-only helpers (moved from output.go — only used by tests)
+// =============================================================================
+
+// openAndReadRegularFile opens a file with TOCTOU-safe symlink verification and reads its content.
+// It performs: Lstat → Open → f.Stat → os.SameFile verification → Read.
+// Returns the file content and sanitized file mode, or an error if the file
+// is a symlink or was swapped between check and open.
+func openAndReadRegularFile(path string) ([]byte, fs.FileMode, error) {
+	f, mode, err := openRegularFile(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer f.Close()
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read: %w", err)
+	}
+
+	return content, mode, nil
+}
 
 // --- validatePathWithinDir ---
 
@@ -531,7 +556,7 @@ func TestUT_ProcessFile_SanitizesFileMode(t *testing.T) {
 
 func TestUT_ProcessFile_TemplateParseError(t *testing.T) {
 	mock := &mockRenderer{
-		parseStringErr: fmt.Errorf("parse error: invalid syntax"),
+		parseStringErr: errors.New("parse error: invalid syntax"),
 	}
 	writer := NewOutputWriter(mock, nil)
 
@@ -555,7 +580,7 @@ func TestUT_ProcessFile_TemplateParseError(t *testing.T) {
 
 func TestUT_ProcessFile_TemplateExecuteError(t *testing.T) {
 	mock := &mockRenderer{
-		parseStringTemplate: &mockTemplate{result: "", err: fmt.Errorf("execute failed")},
+		parseStringTemplate: &mockTemplate{result: "", err: errors.New("execute failed")},
 	}
 	writer := NewOutputWriter(mock, nil)
 

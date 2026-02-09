@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
-	"github.com/urfave/cli/v2"
 )
 
 const File = ".tagconfig.json"
@@ -39,7 +40,7 @@ func CheckConfig(cfg *Config) error {
 // Returns nil config if the file doesn't exist, or an error if parsing fails.
 func LoadConfigFile() (*Config, error) {
 	if _, err := os.Stat(File); err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr,nilnil // missing config file is not an error, returns nil config
 	}
 	data, err := os.ReadFile(File)
 	if err != nil {

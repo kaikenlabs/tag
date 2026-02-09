@@ -71,7 +71,7 @@ func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOption
 	// 3. Check cache (unless force update)
 	cacheKey := ref.CacheKey()
 	if !opts.ForceUpdate {
-		if path, found, err := r.cache.Get(cacheKey); err == nil && found {
+		if path, found, err := r.cache.Get(cacheKey); err == nil && found { //nolint:govet // shadow in if-init is idiomatic
 			// Apply subpath to cached path
 			return r.applySubPath(path, ref.SubPath)
 		}
@@ -191,23 +191,6 @@ func (r *Resolver) applySubPath(basePath, subPath string) (string, error) {
 	}
 
 	return fullPath, nil
-}
-
-// InvalidateCache removes a specific cache entry.
-func (r *Resolver) InvalidateCache(input string) error {
-	ref, err := Parse(input)
-	if err != nil {
-		return err
-	}
-	return r.cache.Invalidate(ref.CacheKey())
-}
-
-// CleanupCache removes expired cache entries.
-func (r *Resolver) CleanupCache() error {
-	if fsCache, ok := r.cache.(*FSCache); ok {
-		return fsCache.Cleanup()
-	}
-	return nil
 }
 
 // isZipFile checks if a path is a zip file.

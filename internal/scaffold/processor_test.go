@@ -1,13 +1,49 @@
 package scaffold
 
 import (
-	"fmt"
+	"errors"
+	"regexp"
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/template"
 )
+
+// =============================================================================
+// Test-only helpers (moved from processor.go — only used by tests)
+// =============================================================================
+
+// simpleVarRegex extracts simple variable names from {{ vars.name }} patterns.
+// This is used for ExtractPlaceholders - complex expressions are not fully parsed.
+var simpleVarRegex = regexp.MustCompile(`\{\{\s*vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
+
+// ExtractPlaceholders returns variable names found in simple {{ vars.name }} patterns.
+// Note: This does not extract variables from complex expressions like method calls.
+func ExtractPlaceholders(path string) []string {
+	matches := simpleVarRegex.FindAllStringSubmatch(path, -1)
+	vars := make([]string, 0, len(matches))
+	seen := make(map[string]bool)
+
+	for _, match := range matches {
+		if len(match) >= 2 && !seen[match[1]] {
+			vars = append(vars, match[1])
+			seen[match[1]] = true
+		}
+	}
+
+	return vars
+}
+
+// HasPlaceholders checks if a path contains any Jinja2-style placeholders.
+func HasPlaceholders(path string) bool {
+	return placeholderDetectRegex.MatchString(path)
+}
+
+// =============================================================================
+// Test types and helpers
+// =============================================================================
 
 // mockTemplateExecutor implements template.TemplateExecutor for testing.
 type mockTemplateExecutor struct {
@@ -474,7 +510,7 @@ func TestUT_PathProcessor_WithMockExecutor(t *testing.T) {
 
 func TestUT_PathProcessor_MockExecutorError(t *testing.T) {
 	mock := &mockTemplateExecutor{
-		executeToStringErr: fmt.Errorf("mock render error"),
+		executeToStringErr: errors.New("mock render error"),
 	}
 	processor := NewPathProcessor(mock)
 

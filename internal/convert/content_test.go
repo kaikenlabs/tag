@@ -3,10 +3,16 @@ package convert
 import (
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/fileutil"
 )
+
+// AnalyzeString is a convenience method for analyzing string content (test-only).
+func (a *ContentAnalyzer) AnalyzeString(path, content string) []Incompatibility {
+	return a.Analyze(path, []byte(content))
+}
 
 func TestUT_AnalyzeContent_FilterParentheses(t *testing.T) {
 	analyzer := NewContentAnalyzer()

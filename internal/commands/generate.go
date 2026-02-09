@@ -10,12 +10,13 @@ import (
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/template"
-	"github.com/urfave/cli/v2"
 )
 
 // newEngine is a function variable that creates a new engine.

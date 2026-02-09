@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -153,18 +154,14 @@ func enrichContextWithMetadata(ctx template.Context, metadata *template.Metadata
 
 // mergeParserMetadata combines CLI metadata with template-defined metadata.
 // CLI values take precedence over template-defined values.
-func mergeParserMetadata(cliMeta map[string]string, templateMeta map[string]string) map[string]string {
+func mergeParserMetadata(cliMeta, templateMeta map[string]string) map[string]string {
 	result := make(map[string]string)
 
 	// Add template-defined metadata first
-	for k, v := range templateMeta {
-		result[k] = v
-	}
+	maps.Copy(result, templateMeta)
 
 	// Override with CLI metadata
-	for k, v := range cliMeta {
-		result[k] = v
-	}
+	maps.Copy(result, cliMeta)
 
 	return result
 }

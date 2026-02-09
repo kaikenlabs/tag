@@ -82,16 +82,6 @@ func NewEngine(opts ...Option) (*Engine, error) {
 	return e, nil
 }
 
-// MustNewEngine creates a new template engine and panics on error.
-// Use this only when you're certain initialization will succeed.
-func MustNewEngine(opts ...Option) *Engine {
-	e, err := NewEngine(opts...)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create template engine: %v", err))
-	}
-	return e
-}
-
 // createEnvironment creates a Gonja environment with our custom configuration.
 func (e *Engine) createEnvironment() (*exec.Environment, error) {
 	// Create custom methods with our modifications (e.g., replace with optional count)
@@ -143,7 +133,7 @@ func (e *Engine) parseWithName(content, name string) (Template, error) {
 	// Slow path: parse and cache
 	// Memory loader requires keys to start with '/'
 	loaderKey := name
-	if len(loaderKey) == 0 || loaderKey[0] != '/' {
+	if loaderKey == "" || loaderKey[0] != '/' {
 		loaderKey = "/" + loaderKey
 	}
 
@@ -175,14 +165,15 @@ func (e *Engine) ParseFile(path string) (Template, error) {
 	var loader loaders.Loader
 	var err error
 
-	if e.loader != nil {
+	switch {
+	case e.loader != nil:
 		loader = e.loader
-	} else if e.baseDir != "" {
+	case e.baseDir != "":
 		loader, err = CreateFileSystemLoader(e.baseDir)
 		if err != nil {
 			return nil, NewParseError(path, 0, 0, err)
 		}
-	} else {
+	default:
 		// Use the default loader from gonja
 		loader = gonja.DefaultLoader
 	}

@@ -148,7 +148,7 @@ func parseLongFormVariable(name string, obj map[string]any) (VariableDef, error)
 // IsPrivate returns true if the variable is a computed/private variable.
 // Private variables start with an underscore and are not prompted.
 func (v VariableDef) IsPrivate(name string) bool {
-	return len(name) > 0 && name[0] == '_'
+	return name != "" && name[0] == '_'
 }
 
 // IsDerived returns true if the variable's default is a template expression
@@ -171,7 +171,7 @@ func (v VariableDef) IsDerived() bool {
 func containsTemplateExpression(s string) bool {
 	// Look for {{ vars. patterns
 	// Also handles whitespace variations like {{vars.
-	for i := 0; i < len(s)-2; i++ {
+	for i := range len(s) - 2 {
 		if s[i] == '{' && s[i+1] == '{' {
 			rest := s[i+2:]
 			// Skip whitespace
@@ -196,7 +196,7 @@ func (v VariableDef) GetPrompt(name string) string {
 	if v.Prompt != "" {
 		return v.Prompt
 	}
-	return fmt.Sprintf("Enter value for %s", name)
+	return "Enter value for " + name
 }
 
 // Options represents scaffold command options.

@@ -65,37 +65,3 @@ type VariableConversion struct {
 	IsChoice     bool   // Whether this is a choice variable
 	IsPrivate    bool   // Whether this starts with _
 }
-
-// HasErrors returns true if there are any error-level incompatibilities.
-func (r *Result) HasErrors() bool {
-	for _, inc := range r.Incompatibilities {
-		if inc.Severity == SeverityError {
-			return true
-		}
-	}
-	return false
-}
-
-// HasWarnings returns true if there are warnings or incompatibilities.
-func (r *Result) HasWarnings() bool {
-	if len(r.Warnings) > 0 {
-		return true
-	}
-	for _, inc := range r.Incompatibilities {
-		if inc.Severity == SeverityWarning {
-			return true
-		}
-	}
-	return false
-}
-
-// WarningCount returns the number of warning-level issues.
-func (r *Result) WarningCount() int {
-	count := len(r.Warnings)
-	for _, inc := range r.Incompatibilities {
-		if inc.Severity == SeverityWarning {
-			count++
-		}
-	}
-	return count
-}

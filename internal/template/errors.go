@@ -58,7 +58,7 @@ func NewParseError(template string, line, column int, err error) error {
 		Template: template,
 		Line:     line,
 		Column:   column,
-		Err:      fmt.Errorf("%w: %v", ErrParse, err),
+		Err:      fmt.Errorf("%w: %w", ErrParse, err),
 	}
 }
 
@@ -67,6 +67,6 @@ func NewExecuteError(template string, err error) error {
 	return &TemplateError{
 		Op:       "execute",
 		Template: template,
-		Err:      fmt.Errorf("%w: %v", ErrExecute, err),
+		Err:      fmt.Errorf("%w: %w", ErrExecute, err),
 	}
 }

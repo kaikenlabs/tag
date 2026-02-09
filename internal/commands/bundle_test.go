@@ -6,18 +6,19 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestUT_BundleAction_MissingName(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
 	})
@@ -43,7 +44,7 @@ func TestUT_BundleAction_ValidBundleCreation(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"mybundle"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"mybundle"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
 	})
@@ -73,7 +74,7 @@ func TestUT_BundleAction_CreatesDirectory(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"newbundle"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"newbundle"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
 	})

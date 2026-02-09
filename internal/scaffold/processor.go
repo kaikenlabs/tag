@@ -107,7 +107,7 @@ func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]an
 	}
 
 	result := segment
-	for i := 0; i < maxRenderIterations; i++ {
+	for range maxRenderIterations {
 		// If no more placeholders, we're done
 		if !placeholderDetectRegex.MatchString(result) {
 			break
@@ -174,30 +174,4 @@ func escapeTemplateSyntax(s string) string {
 	s = strings.ReplaceAll(s, "{#", sentinelOpenComment)
 	s = strings.ReplaceAll(s, "#}", sentinelCloseComment)
 	return s
-}
-
-// simpleVarRegex extracts simple variable names from {{ vars.name }} patterns.
-// This is used for ExtractPlaceholders - complex expressions are not fully parsed.
-var simpleVarRegex = regexp.MustCompile(`\{\{\s*vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
-
-// ExtractPlaceholders returns variable names found in simple {{ vars.name }} patterns.
-// Note: This does not extract variables from complex expressions like method calls.
-func ExtractPlaceholders(path string) []string {
-	matches := simpleVarRegex.FindAllStringSubmatch(path, -1)
-	vars := make([]string, 0, len(matches))
-	seen := make(map[string]bool)
-
-	for _, match := range matches {
-		if len(match) >= 2 && !seen[match[1]] {
-			vars = append(vars, match[1])
-			seen[match[1]] = true
-		}
-	}
-
-	return vars
-}
-
-// HasPlaceholders checks if a path contains any Jinja2-style placeholders.
-func HasPlaceholders(path string) bool {
-	return placeholderDetectRegex.MatchString(path)
 }

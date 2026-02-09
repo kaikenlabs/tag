@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/kaikenlabs/tag/internal/convert"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/pkg/app"
-	"github.com/urfave/cli/v2"
 )
 
 // ScaffoldCommand returns the scaffold command definition.
@@ -170,7 +171,7 @@ func scaffoldAction(c *cli.Context) error {
 
 	if err := s.Run(opts); err != nil {
 		// Check if this is a Cookiecutter template detection
-		var ccErr *scaffold.ErrCookiecutterDetected
+		var ccErr *scaffold.CookiecutterDetectedError
 		if errors.As(err, &ccErr) {
 			return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts)
 		}
@@ -181,7 +182,7 @@ func scaffoldAction(c *cli.Context) error {
 }
 
 // handleCookiecutterDetection handles the case when a Cookiecutter template is detected.
-func handleCookiecutterDetection(c *cli.Context, _ *scaffold.ErrCookiecutterDetected, templateRef, templateDir string, opts scaffold.Options) error {
+func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetectedError, templateRef, templateDir string, opts scaffold.Options) error {
 	// In non-interactive mode, fail with helpful error
 	if c.Bool("no-input") || !scaffold.IsTTY() {
 		return app.Errorf("This appears to be a Cookiecutter template.\n"+
@@ -240,9 +241,9 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.ErrCookiecutterDete
 	// Prompt for project output directory if not already specified
 	if opts.OutputDir == "" && opts.ProjectName == "" {
 		defaultProject := "./my-project"
-		projectDir, err := prompter.Input("Output directory for scaffolded project", defaultProject, false)
-		if err != nil {
-			return app.Errorf("prompt failed: %w", err)
+		projectDir, promptErr := prompter.Input("Output directory for scaffolded project", defaultProject, false)
+		if promptErr != nil {
+			return app.Errorf("prompt failed: %w", promptErr)
 		}
 		if projectDir == "" {
 			projectDir = defaultProject

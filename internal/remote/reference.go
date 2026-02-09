@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -561,18 +562,14 @@ func validateSubPath(subPath string) error {
 	}
 
 	// Reject any ".." component in the raw path (defense-in-depth: reject before normalization)
-	for _, part := range strings.Split(subPath, "/") {
-		if part == ".." {
-			return fmt.Errorf("subpath contains path traversal component: %s", subPath)
-		}
+	if slices.Contains(strings.Split(subPath, "/"), "..") {
+		return fmt.Errorf("subpath contains path traversal component: %s", subPath)
 	}
 
 	// Also check the cleaned path for ".." components
 	cleaned := filepath.Clean(subPath)
-	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
-		if part == ".." {
-			return fmt.Errorf("subpath contains path traversal component: %s", subPath)
-		}
+	if slices.Contains(strings.Split(cleaned, string(filepath.Separator)), "..") {
+		return fmt.Errorf("subpath contains path traversal component: %s", subPath)
 	}
 
 	return nil

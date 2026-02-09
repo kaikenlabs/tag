@@ -93,7 +93,7 @@ func TestIT_ConvertCookiecutter_FullTemplate(t *testing.T) {
 	// Verify warnings about hooks
 	hasHookWarning := false
 	for _, w := range result.Warnings {
-		if len(w) > 0 {
+		if w != "" {
 			hasHookWarning = true
 			break
 		}
@@ -249,7 +249,7 @@ func TestIT_ConvertCookiecutter_HooksConfig(t *testing.T) {
 	// Should have hook warnings (Python hooks not directly supported)
 	hasPythonHookWarning := false
 	for _, w := range result.Warnings {
-		if len(w) > 0 && (contains(w, "Python") || contains(w, "python")) {
+		if w != "" && (contains(w, "Python") || contains(w, "python")) {
 			hasPythonHookWarning = true
 			break
 		}
@@ -267,5 +267,5 @@ func TestIT_ConvertCookiecutter_HooksConfig(t *testing.T) {
 
 // Helper function
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && (s[:len(substr)] == substr || contains(s[1:], substr)))
+	return len(s) >= len(substr) && (s == substr || s != "" && (s[:len(substr)] == substr || contains(s[1:], substr)))
 }

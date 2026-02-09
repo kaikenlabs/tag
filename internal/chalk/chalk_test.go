@@ -6,6 +6,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Purple - colour purple (test-only helper)
+func Purple(msg string) string {
+	return colourTerminalOutput(msg, purple)
+}
+
+// Gray - colour gray (test-only helper)
+func Gray(msg string) string {
+	return colourTerminalOutput(msg, gray)
+}
+
+// White - colour white (test-only helper)
+func White(msg string) string {
+	return colourTerminalOutput(msg, white)
+}
+
 func TestUT_ColourFunctions_ContainMessage(t *testing.T) {
 	// All colour functions should include the original message
 	tests := []struct {

@@ -1,7 +1,6 @@
 package writer
 
 import (
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -13,7 +12,7 @@ type fileLog struct{}
 var _ fileReadWrite = (*fileLog)(nil)
 
 func (f *fileLog) WriteFile(name string, data []byte, perm os.FileMode) error {
-	slog.Info("logging to console", "name", name, "data", fmt.Sprintf("\n%s", string(data)))
+	slog.Info("logging to console", "name", name, "data", "\n"+string(data))
 	return nil
 }
 
@@ -27,6 +26,6 @@ func (f *fileLog) OpenFile(name string, flag int, perm fs.FileMode) (*os.File, e
 }
 
 func (f *fileLog) Write(file *os.File, b []byte) (n int, err error) {
-	slog.Info("logging to console", "file", file.Name(), "data", fmt.Sprintf("\n%s", string(b)))
+	slog.Info("logging to console", "file", file.Name(), "data", "\n"+string(b))
 	return len(b), nil
 }

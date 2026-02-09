@@ -15,11 +15,3 @@ type Template interface {
 
 // Option configures the template engine.
 type Option func(*Engine)
-
-// WithBaseDir sets the base directory for template loading.
-// This is used for resolving relative paths in extends and include directives.
-func WithBaseDir(dir string) Option {
-	return func(e *Engine) {
-		e.baseDir = dir
-	}
-}

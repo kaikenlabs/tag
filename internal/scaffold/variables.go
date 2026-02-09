@@ -31,6 +31,8 @@ func NewVariableCollector(prompter Prompter) *DefaultVariableCollector {
 // defaults -> --replay -> --values file -> prompts -> --meta flags
 //
 // Each layer overwrites the previous, with --meta having highest priority.
+//
+//nolint:gocognit,cyclop // orchestration function coordinates multiple input sources
 func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectOptions) (map[string]any, error) {
 	vars := make(map[string]any)
 	// Track which variables were explicitly provided (from replay or values file)
@@ -49,14 +51,15 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 	}
 
 	// Step 2: Load replay values (if --replay flag is set)
+	//nolint:nestif // replay variable resolution requires nested conditions
 	if opts.Replay {
 		if opts.TemplateRef == "" {
-			return nil, fmt.Errorf("--replay requires template reference to be set")
+			return nil, errors.New("--replay requires template reference to be set")
 		}
 		replayData, err := replay.Load(opts.TemplateRef)
 		if err != nil {
 			if errors.Is(err, replay.ErrReplayNotFound) {
-				return nil, fmt.Errorf("no saved replay data found for this template (use scaffold without --replay first)")
+				return nil, errors.New("no saved replay data found for this template (use scaffold without --replay first)")
 			}
 			if errors.Is(err, replay.ErrReplayCorrupt) {
 				return nil, fmt.Errorf("replay file is corrupt: %w (delete it and try again)", err)
@@ -268,7 +271,7 @@ func coerceValue(value string, varType VariableType) (any, error) {
 // This is used for replay values which are already typed from JSON.
 func coerceAnyValue(value any, varType VariableType) (any, error) {
 	if value == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil value is not an error
 	}
 
 	switch varType {

@@ -22,7 +22,7 @@ func (i *Inject) Validate() error {
 	if !hasClause {
 		return ErrNoMatchingClause
 	}
-	if len(i.Matcher) <= 0 {
+	if i.Matcher == "" {
 		return ErrNoMatchingExpression
 	}
 	return nil

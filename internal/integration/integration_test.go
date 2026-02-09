@@ -216,7 +216,7 @@ func copyDir(t *testing.T, src, dst string) {
 		}
 		defer srcFile.Close()
 
-		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil { //nolint:govet // shadow in if-init is idiomatic
 			return err
 		}
 		dstFile, err := os.Create(dstPath)

@@ -3,6 +3,7 @@ package replay
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +36,7 @@ func Save(templateSource, version string, values map[string]any, secrets map[str
 	}
 
 	// Ensure replay directory exists with secure permissions
-	if err := os.MkdirAll(replayDir, types.DirModePrivate); err != nil {
+	if err := os.MkdirAll(replayDir, types.DirModePrivate); err != nil { //nolint:govet // shadow in if-init is idiomatic
 		return NewReplayError(templateID, "save", fmt.Errorf("failed to create replay directory: %w", err))
 	}
 
@@ -80,9 +81,7 @@ func filterSecrets(values map[string]any, secrets map[string]bool) map[string]an
 	if len(secrets) == 0 {
 		// No secrets to filter, return a copy of values
 		result := make(map[string]any, len(values))
-		for k, v := range values {
-			result[k] = v
-		}
+		maps.Copy(result, values)
 		return result
 	}
 

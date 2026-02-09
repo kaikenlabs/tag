@@ -49,7 +49,7 @@ func validateDirectory(field, path string) error {
 	if os.IsNotExist(err) {
 		return &ValidationError{
 			Field:   field,
-			Message: fmt.Sprintf("path does not exist: %s", path),
+			Message: "path does not exist: " + path,
 		}
 	}
 	if err != nil {
@@ -61,7 +61,7 @@ func validateDirectory(field, path string) error {
 	if !info.IsDir() {
 		return &ValidationError{
 			Field:   field,
-			Message: fmt.Sprintf("path is not a directory: %s", path),
+			Message: "path is not a directory: " + path,
 		}
 	}
 	return nil
@@ -103,7 +103,7 @@ func validateHooks(hookType string, hooks [][]string) error {
 			if _, err := exec.LookPath(cmd); err != nil {
 				return &ValidationError{
 					Field:   field,
-					Message: fmt.Sprintf("hook command not found in PATH: %s", cmd),
+					Message: "hook command not found in PATH: " + cmd,
 				}
 			}
 		}
@@ -116,7 +116,7 @@ func validateHookExecutable(field, path string) error {
 	if os.IsNotExist(err) {
 		return &ValidationError{
 			Field:   field,
-			Message: fmt.Sprintf("hook executable not found: %s", path),
+			Message: "hook executable not found: " + path,
 		}
 	}
 	if err != nil {
@@ -128,7 +128,7 @@ func validateHookExecutable(field, path string) error {
 	if info.IsDir() {
 		return &ValidationError{
 			Field:   field,
-			Message: fmt.Sprintf("hook path is a directory, not an executable: %s", path),
+			Message: "hook path is a directory, not an executable: " + path,
 		}
 	}
 	// Check for execute permission (on POSIX systems)
@@ -136,7 +136,7 @@ func validateHookExecutable(field, path string) error {
 	if info.Mode()&0o111 == 0 {
 		return &ValidationError{
 			Field:   field,
-			Message: fmt.Sprintf("hook file is not executable: %s", path),
+			Message: "hook file is not executable: " + path,
 		}
 	}
 	return nil

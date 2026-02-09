@@ -3,9 +3,10 @@ package convert
 import (
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/scaffold"
 )
 
 func TestUT_ConvertCookiecutterConfig_StringDefaults(t *testing.T) {

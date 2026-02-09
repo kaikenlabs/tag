@@ -103,7 +103,7 @@ func TestUT_Engine_Cache_ConcurrentAccess(t *testing.T) {
 	errs := make([]error, numGoroutines)
 	results := make([]string, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(idx int) {
 			defer wg.Done()
 			result, err := engine.ExecuteToString(content, ctx)
@@ -114,7 +114,7 @@ func TestUT_Engine_Cache_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		assert.NoError(t, errs[i], "goroutine %d should not error", i)
 		assert.Equal(t, expected, results[i], "goroutine %d should produce correct result", i)
 	}
@@ -212,7 +212,7 @@ func BenchmarkParseString_CachedVsUncached(b *testing.B) {
 func BenchmarkExecuteToString_50UniqueTemplates(b *testing.B) {
 	engine := MustNewEngine()
 	templates := make([]string, 50)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		templates[i] = fmt.Sprintf("File %d: {{ vars.project_name }} by {{ vars.author }}", i)
 	}
 	ctx := Context{

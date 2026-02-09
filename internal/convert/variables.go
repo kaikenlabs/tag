@@ -8,12 +8,14 @@ import (
 	"github.com/kaikenlabs/tag/internal/scaffold"
 )
 
+const typeString = "string"
+
 // ConvertCookiecutterConfig parses cookiecutter.json and converts it to TAG format.
 // Returns the converted TemplateConfig, variable conversion details, and any warnings.
 func ConvertCookiecutterConfig(data []byte) (*scaffold.TemplateConfig, []VariableConversion, []string, error) {
 	var ccConfig map[string]any
 	if err := json.Unmarshal(data, &ccConfig); err != nil {
-		return nil, nil, nil, fmt.Errorf("%w: %v", ErrInvalidConfig, err)
+		return nil, nil, nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 	}
 
 	config := &scaffold.TemplateConfig{
@@ -41,7 +43,7 @@ func ConvertCookiecutterConfig(data []byte) (*scaffold.TemplateConfig, []Variabl
 	// Parse RawVars into typed Vars
 	config.Vars = make(map[string]scaffold.VariableDef)
 	for name, raw := range config.RawVars {
-		varDef, err := parseConvertedVariable(name, raw)
+		varDef, err := parseConvertedVariable(raw)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("variable '%s': %v", name, err))
 			continue
@@ -74,8 +76,8 @@ func convertVariable(name string, value any) (VariableConversion, any, string) {
 
 	switch v := value.(type) {
 	case string:
-		conv.OriginalType = "string"
-		conv.TagType = "string"
+		conv.OriginalType = typeString
+		conv.TagType = typeString
 		conv.Default = v
 		// Convert cookiecutter namespace to vars namespace in default values
 		// This handles derived variables like: "{{cookiecutter.name.lower()}}"
@@ -127,8 +129,13 @@ func convertVariable(name string, value any) (VariableConversion, any, string) {
 	case map[string]any:
 		// Nested object - not directly supported, convert to string with warning
 		conv.OriginalType = "object"
-		conv.TagType = "string"
-		jsonBytes, _ := json.Marshal(v)
+		conv.TagType = typeString
+		jsonBytes, err := json.Marshal(v)
+		if err != nil {
+			conv.Default = fmt.Sprintf("%v", v)
+			warning = fmt.Sprintf("variable '%s' is a nested object that could not be serialized: %v", name, err)
+			return conv, fmt.Sprintf("%v", v), warning
+		}
 		conv.Default = string(jsonBytes)
 		warning = fmt.Sprintf("variable '%s' is a nested object; converted to JSON string - manual review recommended", name)
 		return conv, string(jsonBytes), warning
@@ -136,7 +143,7 @@ func convertVariable(name string, value any) (VariableConversion, any, string) {
 	case nil:
 		// Null default
 		conv.OriginalType = "null"
-		conv.TagType = "string"
+		conv.TagType = typeString
 		conv.Default = ""
 		warning = fmt.Sprintf("variable '%s' has null default; converted to empty string", name)
 		return conv, "", warning
@@ -144,7 +151,7 @@ func convertVariable(name string, value any) (VariableConversion, any, string) {
 	default:
 		// Unknown type
 		conv.OriginalType = fmt.Sprintf("%T", value)
-		conv.TagType = "string"
+		conv.TagType = typeString
 		conv.Default = fmt.Sprintf("%v", value)
 		warning = fmt.Sprintf("variable '%s' has unknown type %T; converted to string", name, value)
 		return conv, fmt.Sprintf("%v", value), warning
@@ -152,7 +159,7 @@ func convertVariable(name string, value any) (VariableConversion, any, string) {
 }
 
 // parseConvertedVariable parses a converted variable value into VariableDef.
-func parseConvertedVariable(name string, raw any) (scaffold.VariableDef, error) {
+func parseConvertedVariable(raw any) (scaffold.VariableDef, error) {
 	switch v := raw.(type) {
 	case string:
 		return scaffold.VariableDef{

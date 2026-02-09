@@ -6,18 +6,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/types/flags"
-	"github.com/kaikenlabs/tag/pkg/app"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+
+	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
 )
 
 func TestUT_NewAction_MissingGeneratorName(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{}, map[string]any{
 		flags.PathFlag: tmpDir,
 	})
 
@@ -42,7 +43,7 @@ func TestUT_NewAction_ValidGeneratorCreation(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
 		flags.PathFlag: tmpDir,
 		"package":      "mypackage",
 	})
@@ -69,7 +70,7 @@ func TestUT_NewAction_CustomPackage(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
 		flags.PathFlag: tmpDir,
 		"package":      "custompackage",
 	})
@@ -90,7 +91,7 @@ func TestUT_NewAction_CreatesDirectory(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"newgenerator"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"newgenerator"}, map[string]any{
 		flags.PathFlag: tmpDir,
 	})
 
@@ -112,7 +113,7 @@ func TestUT_NewAction_TemplateContent(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
 		flags.PathFlag: tmpDir,
 		"package":      "testpkg",
 	})

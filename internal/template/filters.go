@@ -5,10 +5,11 @@ import (
 	"strings"
 
 	"github.com/gobuffalo/flect"
-	"github.com/kaikenlabs/tag/internal/formats"
 	"github.com/nikolalohinski/gonja/v2/exec"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/kaikenlabs/tag/internal/formats"
 )
 
 // titleCaser is a cached English title caser to avoid allocation per filter call.
@@ -326,7 +327,7 @@ func filterTruncate(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *ex
 		return exec.AsValue(fmt.Errorf("truncate: expected 1-2 arguments, got %d", len(p)))
 	}
 
-	length := int(p[0].Integer())
+	length := p[0].Integer()
 	if length < 0 {
 		return exec.AsValue(fmt.Errorf("truncate: length must be non-negative, got %d", length))
 	}

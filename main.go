@@ -16,7 +16,7 @@ import (
 
 const AppName = "tag"
 
-//nolint:gochecknoglobals
+//nolint:gochecknoglobals // version/commit/date are set by ldflags at build time
 var (
 	Version    string
 	CommitHash string

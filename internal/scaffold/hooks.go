@@ -3,6 +3,7 @@ package scaffold
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -74,7 +75,7 @@ func execWithTimeout(cmdDisplay string, cmdArgs []string, workDir string, env []
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultHookTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
+	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...) //nolint:gosec // G204: hook commands are user-approved via --accept-hooks or interactive prompt
 	cmd.Dir = workDir
 
 	// Set environment - ensure we always have a valid environment with PATH
@@ -99,11 +100,13 @@ func execWithTimeout(cmdDisplay string, cmdArgs []string, workDir string, env []
 		if ctx.Err() == context.DeadlineExceeded {
 			result.Err = fmt.Errorf("hook timed out after %v: %w", DefaultHookTimeout, err)
 			result.ExitCode = -1 // Special code for timeout
-		} else if exitErr, ok := err.(*exec.ExitError); ok {
-			// Extract exit code from ExitError
-			result.ExitCode = exitErr.ExitCode()
 		} else {
-			result.ExitCode = 1 // Default to 1 for non-exit errors
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				result.ExitCode = exitErr.ExitCode()
+			} else {
+				result.ExitCode = 1 // Default to 1 for non-exit errors
+			}
 		}
 	}
 

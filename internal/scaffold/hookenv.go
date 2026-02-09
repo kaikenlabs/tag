@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -20,12 +21,11 @@ func BuildHookEnv(vars map[string]any, templateDir, outputDir string) []string {
 	env := os.Environ()
 
 	// Add TAG-specific variables
-	env = append(env, fmt.Sprintf("TAG_TEMPLATE_DIR=%s", templateDir))
-	env = append(env, fmt.Sprintf("TAG_OUTPUT_DIR=%s", outputDir))
+	env = append(env, "TAG_TEMPLATE_DIR="+templateDir, "TAG_OUTPUT_DIR="+outputDir)
 
 	// Add project_name as a special variable
 	if projectName, ok := vars["project_name"]; ok {
-		env = append(env, fmt.Sprintf("TAG_PROJECT_NAME=%s", stringifyValue(projectName)))
+		env = append(env, "TAG_PROJECT_NAME="+stringifyValue(projectName))
 	}
 
 	// Add all user variables with TAG_VAR_ prefix (sanitized)
@@ -86,13 +86,13 @@ func stringifyValue(value any) string {
 	case float64:
 		// Check if it's an integer
 		if v == float64(int64(v)) {
-			return fmt.Sprintf("%d", int64(v))
+			return strconv.FormatInt(int64(v), 10)
 		}
 		return fmt.Sprintf("%g", v)
 	case int:
-		return fmt.Sprintf("%d", v)
+		return strconv.Itoa(v)
 	case int64:
-		return fmt.Sprintf("%d", v)
+		return strconv.FormatInt(v, 10)
 	case []any, map[string]any:
 		// JSON encode complex types
 		data, err := json.Marshal(v)

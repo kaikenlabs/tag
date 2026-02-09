@@ -6,13 +6,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestUT_GenerateAction_MissingArguments(t *testing.T) {
@@ -62,7 +63,7 @@ func TestUT_GenerateAction_GeneratorNotFound(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"nonexistent", "myName"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"nonexistent", "myName"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 	})
@@ -87,7 +88,7 @@ Hello {{ .Name }}`
 
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 	})
@@ -125,7 +126,7 @@ Hello {{ .Name }} with {{ .Args }}`
 
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"hello", "world", "extra-args"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"hello", "world", "extra-args"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 	})
@@ -163,7 +164,7 @@ Hello {{ .Name }}`
 
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 		flags.MetaFlag:       []string{"key1=value1", "key2=value2"},
@@ -201,7 +202,7 @@ Hello {{ .Name }}`
 
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 	})
@@ -236,7 +237,7 @@ Hello {{ .Name }}`
 
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 	})
@@ -257,7 +258,7 @@ func TestUT_GenerateBundle_BundleNotFound(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"nonexistent", "myName"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"nonexistent", "myName"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
 		"bundle":             true,
@@ -276,7 +277,7 @@ func TestUT_GenerateBundle_InvalidJSON(t *testing.T) {
 	// Create invalid JSON bundle
 	createBundle(t, tmpDir, "mybundle", "not valid json")
 
-	ctx := createTestCLIContext(t, []string{"mybundle", "myName"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"mybundle", "myName"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
 		"bundle":             true,
@@ -305,7 +306,7 @@ Hello {{ .Name }}`
 
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
@@ -348,7 +349,7 @@ Hello {{ .Name }}`
 
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]interface{}{
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",

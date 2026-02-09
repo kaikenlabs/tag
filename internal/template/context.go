@@ -6,18 +6,6 @@ import (
 	"github.com/kaikenlabs/tag/internal/formats"
 )
 
-// NewContext creates a new template context with the standard namespaces.
-// The context includes:
-//   - "name": the primary name value
-//   - "vars": user-defined variables (TAG namespace)
-//   - "n": pre-computed name variants
-func NewContext(name string, vars map[string]any) Context {
-	return NewContextBuilder().
-		WithName(name).
-		WithVars(vars).
-		Build()
-}
-
 // computeNameOptions creates name variant options from a name string.
 func computeNameOptions(name string) map[string]any {
 	return map[string]any{

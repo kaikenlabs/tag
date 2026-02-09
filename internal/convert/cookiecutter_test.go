@@ -2,13 +2,161 @@ package convert
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/fileutil"
+	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/types"
 )
+
+// ConvertInPlace converts a Cookiecutter template in-place by writing
+// tag.template.json to the same directory as cookiecutter.json (test-only).
+// It also converts {{ cookiecutter.* }} references to {{ vars.* }} in all
+// text files, hook files, and directory/file names.
+func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) error {
+	// Verify it's a Cookiecutter template
+	cookiecutterPath := filepath.Join(templateDir, types.CookiecutterConfigFile)
+	if _, err := os.Stat(cookiecutterPath); os.IsNotExist(err) {
+		return ErrNoCookiecutterConfig
+	}
+
+	// Read and convert cookiecutter.json
+	configData, err := os.ReadFile(cookiecutterPath)
+	if err != nil {
+		return fmt.Errorf("failed to read cookiecutter.json: %w", err)
+	}
+
+	tagConfig, _, _, err := ConvertCookiecutterConfig(configData)
+	if err != nil {
+		return err
+	}
+
+	// Process hooks (detect only, don't copy - they're already in place)
+	hooksProcessor := NewHooksProcessor(templateDir, templateDir, false)
+	hookFindings, err := hooksProcessor.DetectHooks()
+	if err != nil {
+		return fmt.Errorf("failed to detect hooks: %w", err)
+	}
+
+	// Add shell hooks to config
+	preHooks, postHooks := SuggestTagHooksConfig(hookFindings)
+	if len(preHooks) > 0 || len(postHooks) > 0 {
+		tagConfig.Hooks = &scaffold.HooksConfig{
+			PreScaffold:  preHooks,
+			PostScaffold: postHooks,
+		}
+	}
+
+	// Convert file contents and paths in-place
+	if err := c.convertFilesInPlace(templateDir); err != nil { //nolint:govet // shadow in if-init is idiomatic
+		return err
+	}
+
+	// Write tag.template.json
+	tagJSON, err := GenerateTagTemplateJSON(tagConfig, "", "Converted from Cookiecutter template")
+	if err != nil {
+		return fmt.Errorf("failed to generate tag.template.json: %w", err)
+	}
+
+	tagConfigPath := filepath.Join(templateDir, types.TemplateConfigFile)
+	if err := os.WriteFile(tagConfigPath, tagJSON, 0o600); err != nil {
+		return fmt.Errorf("failed to write tag.template.json: %w", err)
+	}
+
+	return nil
+}
+
+// convertFilesInPlace walks the template directory and converts cookiecutter.*
+// references to vars.* in text file contents and renames paths (test-only).
+func (c *Converter) convertFilesInPlace(templateDir string) error {
+	// First pass: convert file contents
+	err := filepath.WalkDir(templateDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			baseName := filepath.Base(path)
+			if baseName == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		relPath, err := filepath.Rel(templateDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == types.CookiecutterConfigFile {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !fileutil.IsTextContent(content) {
+			return nil
+		}
+
+		converted, changed := ConvertContent(string(content))
+		if changed {
+			info, infoErr := d.Info()
+			if infoErr != nil {
+				return infoErr
+			}
+			return os.WriteFile(path, []byte(converted), info.Mode())
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to convert file contents: %w", err)
+	}
+
+	// Second pass: rename paths containing cookiecutter.* (bottom-up via collected list)
+	var pathsToRename []string
+	err = filepath.WalkDir(templateDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, relErr := filepath.Rel(templateDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		if relPath == "." || relPath == types.CookiecutterConfigFile {
+			return nil
+		}
+		baseName := filepath.Base(path)
+		if HasCookiecutterPlaceholders(baseName) {
+			pathsToRename = append(pathsToRename, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to scan paths: %w", err)
+	}
+
+	// Rename from deepest to shallowest to avoid breaking parent paths
+	for i := len(pathsToRename) - 1; i >= 0; i-- {
+		oldPath := pathsToRename[i]
+		dir := filepath.Dir(oldPath)
+		baseName := filepath.Base(oldPath)
+		newBase, _ := ConvertPath(baseName)
+		newPath := filepath.Join(dir, newBase)
+		if oldPath != newPath {
+			if err := os.Rename(oldPath, newPath); err != nil {
+				return fmt.Errorf("failed to rename %s: %w", oldPath, err)
+			}
+		}
+	}
+
+	return nil
+}
 
 func TestUT_Converter_DryRun(t *testing.T) {
 	// Create a minimal cookiecutter template
@@ -44,7 +192,7 @@ func TestUT_Converter_DryRun(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.DryRun)
 	assert.Equal(t, 2, result.VariablesConverted)
-	assert.Equal(t, 1, result.DirsRenamed) // {{ cookiecutter.project_name }}
+	assert.Equal(t, 1, result.DirsRenamed) // cookiecutter project_name placeholder
 
 	// Verify nothing was written
 	_, err = os.Stat(destDir)

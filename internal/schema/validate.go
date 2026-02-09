@@ -19,9 +19,9 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	if len(e.Errors) == 1 {
-		return fmt.Sprintf("validation error: %s", e.Errors[0])
+		return "validation error: " + e.Errors[0]
 	}
-	return fmt.Sprintf("validation errors:\n  - %s", strings.Join(e.Errors, "\n  - "))
+	return "validation errors:\n  - " + strings.Join(e.Errors, "\n  - ")
 }
 
 // NewValidator creates a new schema validator using the embedded schema.
@@ -33,16 +33,6 @@ func NewValidator() (*Validator, error) {
 	}
 
 	return &Validator{schema: schema}, nil
-}
-
-// MustNewValidator creates a new validator and panics on error.
-// Use this only when you're certain the embedded schema is valid.
-func MustNewValidator() *Validator {
-	v, err := NewValidator()
-	if err != nil {
-		panic(fmt.Sprintf("failed to create schema validator: %v", err))
-	}
-	return v
 }
 
 // Validate validates JSON data against the tag.template.json schema.
@@ -65,11 +55,6 @@ func (v *Validator) Validate(data []byte) error {
 	return nil
 }
 
-// ValidateString validates a JSON string against the schema.
-func (v *Validator) ValidateString(jsonStr string) error {
-	return v.Validate([]byte(jsonStr))
-}
-
 // formatValidationError formats a single validation error for display.
 func formatValidationError(err gojsonschema.ResultError) string {
 	field := err.Field()
@@ -77,10 +62,4 @@ func formatValidationError(err gojsonschema.ResultError) string {
 		field = "root"
 	}
 	return fmt.Sprintf("%s: %s", field, err.Description())
-}
-
-// IsValidationError checks if an error is a ValidationError.
-func IsValidationError(err error) bool {
-	_, ok := err.(*ValidationError)
-	return ok
 }

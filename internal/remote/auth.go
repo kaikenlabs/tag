@@ -52,7 +52,7 @@ func (p *EnvAuthProvider) GitAuth(ref *Reference) (transport.AuthMethod, error) 
 	token, ok := p.TokenFor(ref.Provider)
 	if !ok || token == "" {
 		// No token available, try without auth (public repo)
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil token means no auth configured, which is a valid state
 	}
 
 	// Bitbucket supports multiple token types:
@@ -103,31 +103,5 @@ func (p *EnvAuthProvider) sshAuth() (transport.AuthMethod, error) {
 
 	// Fall back to default SSH key paths
 	// go-git will try ~/.ssh/id_rsa, ~/.ssh/id_dsa, etc.
-	return nil, nil
-}
-
-// MockAuthProvider is a test double for AuthProvider.
-type MockAuthProvider struct {
-	Tokens map[Provider]string
-}
-
-// TokenFor returns tokens from the mock's Tokens map.
-func (m *MockAuthProvider) TokenFor(provider Provider) (string, bool) {
-	if m.Tokens == nil {
-		return "", false
-	}
-	token, ok := m.Tokens[provider]
-	return token, ok
-}
-
-// GitAuth returns auth for testing.
-func (m *MockAuthProvider) GitAuth(ref *Reference) (transport.AuthMethod, error) {
-	token, ok := m.TokenFor(ref.Provider)
-	if !ok || token == "" {
-		return nil, nil
-	}
-	return &http.BasicAuth{
-		Username: "x-access-token",
-		Password: token,
-	}, nil
+	return nil, nil //nolint:nilnil // nil auth means fall back to default SSH key discovery
 }

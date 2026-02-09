@@ -1,13 +1,14 @@
 package engine
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 	"testing"
 
-	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/template"
 )
 
 // mockExecutor implements template.TemplateExecutor for testing NewParserWithExecutor.
@@ -89,7 +90,7 @@ func TestUT_LoadTemplateFiles(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, len(got))
 			for _, tmp := range got {
-				assert.True(t, len(tmp) > 0)
+				assert.True(t, tmp != "")
 			}
 		})
 	}
@@ -461,7 +462,7 @@ func TestUT_NewParserWithExecutor_ParsesTemplate(t *testing.T) {
 func TestUT_NewParserWithExecutor_MetadataError(t *testing.T) {
 	// Verify that metadata rendering errors propagate correctly.
 	mock := &mockExecutor{
-		renderMetadataErr: fmt.Errorf("mock metadata error"),
+		renderMetadataErr: errors.New("mock metadata error"),
 	}
 
 	tmplContent := "---\nto: output.go\n---\nbody\n"
@@ -480,7 +481,7 @@ func TestUT_NewParserWithExecutor_BodyRenderError(t *testing.T) {
 			Action: template.ActionCreate,
 			Extra:  map[string]string{},
 		},
-		parseStringErr: fmt.Errorf("mock parse error"),
+		parseStringErr: errors.New("mock parse error"),
 	}
 
 	tmplContent := "---\nto: output.go\n---\nbody\n"

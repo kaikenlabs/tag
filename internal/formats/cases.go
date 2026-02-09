@@ -44,7 +44,7 @@ func CaseCamel(str string) string {
 
 // parseAgainstMatchers run matchers against a string + transform
 func parseAgainstMatchers(str, sep string) string {
-	if matchSymbol.Match([]byte(str)) {
+	if matchSymbol.MatchString(str) {
 		return matchSymbol.ReplaceAllString(str, sep)
 	}
 	expression := fmt.Sprintf("${1}%s${2}", sep)
