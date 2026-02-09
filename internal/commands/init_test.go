@@ -74,7 +74,7 @@ func TestUT_InitAction_CreatesConfigFile(t *testing.T) {
 	require.FileExists(t, configPath)
 
 	// Verify config file can be loaded
-	cfg, err := config.LoadConfigFile()
+	cfg, err := config.LoadConfigFile(".")
 	require.NoError(t, err)
 	assert.Equal(t, ".tag.templates", cfg.Env.Path)
 	assert.Equal(t, "_shared", cfg.Env.SharedPath)

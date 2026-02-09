@@ -12,11 +12,10 @@ import (
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
-
-const BundleExtension = ".json"
 
 func BundleCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
@@ -49,7 +48,7 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	slog.Info(chalk.Green("creating new bundle"), "path", cfg.Env.Path)
-	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, BundleExtension))
+	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, types.BundleExtension))
 
 	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 
@@ -92,7 +93,7 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 	if c.Bool("bundle") {
 		return generateBundle(c, cfg, generatorOrBundleName, targetName, args)
 	}
-	return generateTemplate(c, cfg, generatorOrBundleName, targetName, args, false)
+	return generateTemplate(c, cfg, generatorOrBundleName, targetName, args)
 }
 
 func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
@@ -102,7 +103,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 		}
 	}
 
-	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), generatorName, generatorName+BundleExtension)
+	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), generatorName, generatorName+types.BundleExtension)
 
 	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
@@ -157,8 +158,8 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	return nil
 }
 
-func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args string, inBundle bool) error {
-	if !inBundle && !c.Bool("no-hooks") {
+func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
+	if !c.Bool("no-hooks") {
 		if err := runHooks(cfg.Hooks.Pre, scaffold.HookPhasePreGen); err != nil {
 			return err
 		}
@@ -176,9 +177,7 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 	}
 	sharedPath := filepath.Join(cfg.Env.Path, c.Path(flags.SharedPathFlag))
 
-	if !inBundle {
-		slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
-	}
+	slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
 
 	gen, err := newEngine(c.Bool(flags.DryRunFlag), dirPath, sharedPath)
 	if err != nil {
@@ -190,7 +189,7 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		return app.Errorf("error when generating template: %w", err)
 	}
 
-	if !inBundle && !c.Bool("no-hooks") {
+	if !c.Bool("no-hooks") {
 		return runHooks(cfg.Hooks.Post, scaffold.HookPhasePostGen)
 	}
 	return nil

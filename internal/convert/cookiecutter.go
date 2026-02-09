@@ -10,7 +10,6 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/remote"
-	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -113,7 +112,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	// Add shell hooks to config
 	preHooks, postHooks := SuggestTagHooksConfig(hookFindings)
 	if len(preHooks) > 0 || len(postHooks) > 0 {
-		tagConfig.Hooks = &scaffold.HooksConfig{
+		tagConfig.Hooks = &types.HooksConfig{
 			PreScaffold:  preHooks,
 			PostScaffold: postHooks,
 		}

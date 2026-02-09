@@ -161,6 +161,7 @@ func scaffoldAction(c *cli.Context) error {
 		AcceptHooks:          c.Bool("accept-hooks"),
 		IsRemote:             isRemote,
 		AllowRecursiveRender: c.Bool("allow-recursive-render"),
+		IsTTY:                scaffold.IsTTY(),
 	}
 
 	// Create and run scaffold
@@ -182,6 +183,7 @@ func scaffoldAction(c *cli.Context) error {
 }
 
 // handleCookiecutterDetection handles the case when a Cookiecutter template is detected.
+// Output convention: fmt for user-facing messages, slog for diagnostic messages.
 func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetectedError, templateRef, templateDir string, opts scaffold.Options) error {
 	// In non-interactive mode, fail with helpful error
 	if c.Bool("no-input") || !scaffold.IsTTY() {
@@ -192,63 +194,20 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 			templateRef)
 	}
 
-	// Prompt for conversion
 	prompter := scaffold.NewInteractivePrompter()
-	confirmed, err := prompter.Confirm(
-		"This appears to be a Cookiecutter template. Convert to TAG format?",
-		true, // default yes
-	)
+
+	destination, err := promptForConversion(prompter, templateRef)
 	if err != nil {
-		return app.Errorf("prompt failed: %w", err)
-	}
-	if !confirmed {
-		return app.Errorf("Conversion declined. Use 'tag convert cookiecutter %s' to convert manually.", templateRef)
+		return err
 	}
 
-	// Generate default output directory name (in current directory)
-	defaultDestination := "./" + suggestConvertedTemplateName(templateRef)
-
-	// Prompt for output directory
-	destination, err := prompter.Input("Output directory for converted template", defaultDestination, false)
+	result, err := runCookiecutterConversion(c, templateDir, destination)
 	if err != nil {
-		return app.Errorf("prompt failed: %w", err)
-	}
-	if destination == "" {
-		destination = defaultDestination
+		return err
 	}
 
-	// Run full conversion to new directory
-	converter, err := convert.NewConverter()
-	if err != nil {
-		return app.Errorf("failed to create converter: %w", err)
-	}
-	result, err := converter.Convert(c.Context, convert.Options{
-		Source:      templateDir,
-		Destination: destination,
-		Force:       c.Bool("force"),
-	})
-	if err != nil {
-		return app.Errorf("conversion failed: %w", err)
-	}
-
-	fmt.Printf("Converted template to: %s\n", result.Destination)
-	fmt.Printf("  Variables: %d, Files: %d\n", result.VariablesConverted, result.FilesProcessed)
-	if len(result.Warnings) > 0 {
-		fmt.Printf("  Warnings: %d (review after scaffolding)\n", len(result.Warnings))
-	}
-	fmt.Println()
-
-	// Prompt for project output directory if not already specified
-	if opts.OutputDir == "" && opts.ProjectName == "" {
-		defaultProject := "./my-project"
-		projectDir, promptErr := prompter.Input("Output directory for scaffolded project", defaultProject, false)
-		if promptErr != nil {
-			return app.Errorf("prompt failed: %w", promptErr)
-		}
-		if projectDir == "" {
-			projectDir = defaultProject
-		}
-		opts.OutputDir = projectDir
+	if err := promptForProjectDir(prompter, &opts); err != nil {
+		return err
 	}
 
 	// Update opts to use the converted template directory
@@ -262,6 +221,73 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 	if err := s.Run(opts); err != nil {
 		return app.Errorf("scaffolding failed: %w", err)
 	}
+	return nil
+}
+
+// promptForConversion asks the user to confirm Cookiecutter conversion and select a destination.
+func promptForConversion(prompter scaffold.Prompter, templateRef string) (string, error) {
+	confirmed, err := prompter.Confirm(
+		"This appears to be a Cookiecutter template. Convert to TAG format?",
+		true, // default yes
+	)
+	if err != nil {
+		return "", app.Errorf("prompt failed: %w", err)
+	}
+	if !confirmed {
+		return "", app.Errorf("Conversion declined. Use 'tag convert cookiecutter %s' to convert manually.", templateRef)
+	}
+
+	defaultDestination := "./" + suggestConvertedTemplateName(templateRef)
+	destination, err := prompter.Input("Output directory for converted template", defaultDestination, false)
+	if err != nil {
+		return "", app.Errorf("prompt failed: %w", err)
+	}
+	if destination == "" {
+		destination = defaultDestination
+	}
+	return destination, nil
+}
+
+// runCookiecutterConversion performs the Cookiecutter-to-TAG conversion and prints the result.
+func runCookiecutterConversion(c *cli.Context, templateDir, destination string) (*convert.Result, error) {
+	converter, err := convert.NewConverter()
+	if err != nil {
+		return nil, app.Errorf("failed to create converter: %w", err)
+	}
+	result, err := converter.Convert(c.Context, convert.Options{
+		Source:      templateDir,
+		Destination: destination,
+		Force:       c.Bool("force"),
+	})
+	if err != nil {
+		return nil, app.Errorf("conversion failed: %w", err)
+	}
+
+	fmt.Printf("Converted template to: %s\n", result.Destination)
+	fmt.Printf("  Variables: %d, Files: %d\n", result.VariablesConverted, result.FilesProcessed)
+	if len(result.Warnings) > 0 {
+		fmt.Printf("  Warnings: %d (review after scaffolding)\n", len(result.Warnings))
+	}
+	fmt.Println()
+
+	return result, nil
+}
+
+// promptForProjectDir prompts the user for a project output directory if not already specified.
+func promptForProjectDir(prompter scaffold.Prompter, opts *scaffold.Options) error {
+	if opts.OutputDir != "" || opts.ProjectName != "" {
+		return nil
+	}
+
+	defaultProject := "./my-project"
+	projectDir, err := prompter.Input("Output directory for scaffolded project", defaultProject, false)
+	if err != nil {
+		return app.Errorf("prompt failed: %w", err)
+	}
+	if projectDir == "" {
+		projectDir = defaultProject
+	}
+	opts.OutputDir = projectDir
 	return nil
 }
 

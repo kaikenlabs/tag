@@ -30,7 +30,7 @@ func main() {
 
 	setLogger()
 
-	cfg, err := config.LoadConfigFile()
+	cfg, err := config.LoadConfigFile(".")
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)

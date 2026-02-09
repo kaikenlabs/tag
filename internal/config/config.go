@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/urfave/cli/v2"
 
@@ -36,13 +37,14 @@ func CheckConfig(cfg *Config) error {
 	return nil
 }
 
-// LoadConfigFile loads the configuration from the config file.
+// LoadConfigFile loads the configuration from the config file in the given directory.
 // Returns nil config if the file doesn't exist, or an error if parsing fails.
-func LoadConfigFile() (*Config, error) {
-	if _, err := os.Stat(File); err != nil {
+func LoadConfigFile(dir string) (*Config, error) {
+	path := filepath.Join(dir, File)
+	if _, err := os.Stat(path); err != nil {
 		return nil, nil //nolint:nilerr,nilnil // missing config file is not an error, returns nil config
 	}
-	data, err := os.ReadFile(File)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, app.Errorf("cannot load config file: %w", err)
 	}

@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
-	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -47,7 +46,7 @@ func (c *Converter) ConvertInPlace(ctx context.Context, templateDir string) erro
 	// Add shell hooks to config
 	preHooks, postHooks := SuggestTagHooksConfig(hookFindings)
 	if len(preHooks) > 0 || len(postHooks) > 0 {
-		tagConfig.Hooks = &scaffold.HooksConfig{
+		tagConfig.Hooks = &types.HooksConfig{
 			PreScaffold:  preHooks,
 			PostScaffold: postHooks,
 		}
