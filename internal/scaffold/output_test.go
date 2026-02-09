@@ -274,6 +274,46 @@ func TestUT_Write_SkipsGeneratorsDir(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestUT_Write_SkipsCacheMetaFile(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create _meta.json at root (should be skipped)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templateDir, types.CacheMetaFile),
+		[]byte(`{"source":"gh:user/repo"}`),
+		0o644,
+	))
+	// Create _meta.json in subdirectory (should be kept)
+	subDir := filepath.Join(templateDir, "subdir")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(subDir, types.CacheMetaFile),
+		[]byte(`{"nested":true}`),
+		0o644,
+	))
+	// Create normal file
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	// Root _meta.json should NOT exist in output
+	_, err = os.Stat(filepath.Join(outputDir, types.CacheMetaFile))
+	assert.True(t, os.IsNotExist(err))
+
+	// Subdirectory _meta.json SHOULD exist in output
+	_, err = os.Stat(filepath.Join(outputDir, "subdir", types.CacheMetaFile))
+	assert.NoError(t, err)
+
+	// Normal file should exist
+	_, err = os.Stat(filepath.Join(outputDir, "keep.txt"))
+	assert.NoError(t, err)
+}
+
 func TestUT_Write_PathPlaceholders(t *testing.T) {
 	writer := mustNewOutputWriter(t)
 

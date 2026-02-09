@@ -28,8 +28,9 @@ var (
 
 // resolveInterpreter checks if argv[0] is a script file and prepends the appropriate
 // interpreter if needed. Bare commands (go, npm, echo) are returned unchanged.
-// Files with shebangs are returned unchanged (the OS handles execution).
-// Files without shebangs are matched by extension to find an interpreter.
+// Files with shebangs AND the executable bit are returned unchanged (the OS handles execution).
+// Files without shebangs (or with shebangs but not executable) are matched by extension
+// to find an interpreter.
 func resolveInterpreter(argv []string, workDir string) []string {
 	if len(argv) == 0 {
 		return argv
@@ -47,13 +48,15 @@ func resolveInterpreter(argv []string, workDir string) []string {
 		filePath = filepath.Join(workDir, filePath)
 	}
 
-	// Check for shebang — if present, OS handles execution
+	// Check for shebang — if present and file is executable, OS handles execution.
+	// If file has shebang but is NOT executable (common for converted Cookiecutter hooks),
+	// fall through to extension-based interpreter lookup.
 	shebang, err := readShebang(filePath)
 	if err != nil {
 		// File doesn't exist or can't be read — return unchanged, let exec fail naturally
 		return argv
 	}
-	if shebang != "" {
+	if shebang != "" && isExecutable(filePath) {
 		return argv
 	}
 
@@ -75,6 +78,15 @@ func resolveInterpreter(argv []string, workDir string) []string {
 // A file reference contains path separators (/ or \) or starts with a dot.
 func isFileReference(cmd string) bool {
 	return strings.ContainsAny(cmd, "/\\") || strings.HasPrefix(cmd, ".")
+}
+
+// isExecutable checks if a file has any execute permission bit set (owner, group, or other).
+func isExecutable(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode().Perm()&0o111 != 0
 }
 
 // readShebang reads the first line of a file and returns the shebang line if present.

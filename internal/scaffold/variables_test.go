@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kaikenlabs/tag/internal/replay"
+	"github.com/kaikenlabs/tag/internal/template"
 )
 
 // MockPrompter implements Prompter for testing.
@@ -774,4 +775,122 @@ func TestUT_VariableCollector_ReplayIgnoresRemovedVars(t *testing.T) {
 	assert.Equal(t, "current_value", vars["current_var"])
 	// removed_var should still be in vars (unknown variables are kept)
 	assert.Equal(t, "removed_value", vars["removed_var"])
+}
+
+func TestUT_ResolveDerivedVars_Basic(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name":   {Type: VarTypeString, Default: "My Service"},
+			"__project_slug": {Type: VarTypeString, Default: "{{ vars.project_name | lower }}"},
+		},
+	}
+
+	vars := map[string]any{
+		"project_name":   "My Service",
+		"__project_slug": "{{ vars.project_name | lower }}",
+	}
+
+	err = ResolveDerivedVars(engine, config, vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, "my service", vars["__project_slug"])
+	// Non-derived variable should be unchanged
+	assert.Equal(t, "My Service", vars["project_name"])
+}
+
+func TestUT_ResolveDerivedVars_WithFilters(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"display_name":  {Type: VarTypeString, Default: "My Cool Project"},
+			"_package_name": {Type: VarTypeString, Default: "{{ vars.display_name | snake }}"},
+		},
+	}
+
+	vars := map[string]any{
+		"display_name":  "My Cool Project",
+		"_package_name": "{{ vars.display_name | snake }}",
+	}
+
+	err = ResolveDerivedVars(engine, config, vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, "my_cool_project", vars["_package_name"])
+}
+
+func TestUT_ResolveDerivedVars_ChainedDerived(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name":   {Type: VarTypeString, Default: "My Project"},
+			"__project_slug": {Type: VarTypeString, Default: "{{ vars.project_name | lower }}"},
+			// References another derived var (sorted after __project_slug)
+			"__repo_name": {Type: VarTypeString, Default: "{{ vars.__project_slug }}"},
+		},
+	}
+
+	vars := map[string]any{
+		"project_name":   "My Project",
+		"__project_slug": "{{ vars.project_name | lower }}",
+		"__repo_name":    "{{ vars.__project_slug }}",
+	}
+
+	err = ResolveDerivedVars(engine, config, vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, "my project", vars["__project_slug"])
+	assert.Equal(t, "my project", vars["__repo_name"])
+}
+
+func TestUT_ResolveDerivedVars_SkipsNonDerived(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "test"},
+			"author":       {Type: VarTypeString, Default: "Test Author"},
+		},
+	}
+
+	vars := map[string]any{
+		"project_name": "test",
+		"author":       "Test Author",
+	}
+
+	err = ResolveDerivedVars(engine, config, vars)
+	require.NoError(t, err)
+
+	// Both should be unchanged — neither is derived
+	assert.Equal(t, "test", vars["project_name"])
+	assert.Equal(t, "Test Author", vars["author"])
+}
+
+func TestUT_ResolveDerivedVars_MethodCallSyntax(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"display_name": {Type: VarTypeString, Default: "My Package"},
+			"_slug":        {Type: VarTypeString, Default: "{{ vars.display_name.lower().replace(' ', '_') }}"},
+		},
+	}
+
+	vars := map[string]any{
+		"display_name": "My Package",
+		"_slug":        "{{ vars.display_name.lower().replace(' ', '_') }}",
+	}
+
+	err = ResolveDerivedVars(engine, config, vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, "my_package", vars["_slug"])
 }

@@ -454,7 +454,25 @@ func TestIT_Scaffold_DefaultOutputDir(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should create directory named after project_name in current dir
-	assert.DirExists(t, filepath.Join(tempDir, "auto_output_dir"))
+	outputDir := filepath.Join(tempDir, "auto_output_dir")
+	assert.DirExists(t, outputDir)
+
+	// Project wrapper should be unwrapped: files go directly in output dir,
+	// not nested in auto_output_dir/auto_output_dir/
+	assert.NoDirExists(t, filepath.Join(outputDir, "auto_output_dir"),
+		"project wrapper should be unwrapped — no double nesting")
+	assert.FileExists(t, filepath.Join(outputDir, "cmd", "main.go"),
+		"files should be directly in output dir")
+	assert.FileExists(t, filepath.Join(outputDir, "README.md"),
+		"README.md from project dir should be in output")
+
+	// Verify file content was rendered through the template engine
+	mainContent, err := os.ReadFile(filepath.Join(outputDir, "cmd", "main.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(mainContent), "Project: auto_output_dir",
+		"template expressions in file content should be rendered")
+	assert.NotContains(t, string(mainContent), "{{ vars.",
+		"no unrendered template expressions should remain")
 }
 
 func TestIT_Scaffold_PathTraversalPrevention(t *testing.T) {
@@ -535,4 +553,189 @@ func TestUT_ValidateSafeOutputDir(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUT_FindProjectWrapper(t *testing.T) {
+	t.Run("detects single template-expression directory", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte("{}"), 0o644))
+
+		result := findProjectWrapper(dir)
+		assert.Equal(t, "{{ vars.project_name }}", result)
+	})
+
+	t.Run("returns empty for no template directories", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte("{}"), 0o644))
+
+		result := findProjectWrapper(dir)
+		assert.Empty(t, result)
+	})
+
+	t.Run("returns empty for multiple template directories", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.other_dir }}"), 0o755))
+
+		result := findProjectWrapper(dir)
+		assert.Empty(t, result)
+	})
+
+	t.Run("ignores non-directory template entries", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "{{ vars.name }}.txt"), []byte("content"), 0o644))
+
+		result := findProjectWrapper(dir)
+		assert.Empty(t, result)
+	})
+
+	t.Run("works alongside regular directories and files", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(""), 0o644))
+
+		result := findProjectWrapper(dir)
+		assert.Equal(t, "{{ vars.project_name }}", result)
+	})
+}
+
+func TestIT_Scaffold_ExplicitOutputDir_KeepsNesting(t *testing.T) {
+	templateDir := createTestTemplate(t)
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir, // Explicit output dir
+		Meta: map[string]string{
+			"project_name": "my_project",
+			"author":       "Test",
+		},
+		NoInput: true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// With explicit output dir, the template's {{ vars.project_name }} directory
+	// should be preserved as a subdirectory (no unwrapping)
+	assert.DirExists(t, filepath.Join(outputDir, "my_project"))
+	assert.FileExists(t, filepath.Join(outputDir, "my_project", "cmd", "main.go"))
+}
+
+func TestIT_Scaffold_DerivedVariablesResolved(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create tag.template.json with a derived variable (Cookiecutter style)
+	config := map[string]any{
+		"name": "derived-test",
+		"vars": map[string]any{
+			"project_name":   "default-project",
+			"__project_slug": "{{ vars.project_name | lower }}",
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
+
+	// Create template files that reference the derived variable
+	goModTmpl := "module example.com/{{ vars.__project_slug }}\n\ngo 1.25\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goModTmpl), 0o644))
+
+	readmeTmpl := "# {{ vars.project_name }}\n\nSlug: {{ vars.__project_slug }}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte(readmeTmpl), 0o644))
+
+	outputDir := filepath.Join(t.TempDir(), "output")
+	opts := Options{
+		TemplateDir: dir,
+		OutputDir:   outputDir,
+		Meta: map[string]string{
+			"project_name": "My-Service",
+		},
+		NoInput: true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Verify the derived variable was resolved in go.mod
+	goModContent, err := os.ReadFile(filepath.Join(outputDir, "go.mod"))
+	require.NoError(t, err)
+	assert.Contains(t, string(goModContent), "module example.com/my-service",
+		"derived variable should be resolved to computed value")
+	assert.NotContains(t, string(goModContent), "{{ vars.",
+		"no unrendered template expressions should remain in go.mod")
+
+	// Verify both direct and derived variables are resolved in README
+	readmeContent, err := os.ReadFile(filepath.Join(outputDir, "README.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(readmeContent), "# My-Service",
+		"direct variable should be rendered")
+	assert.Contains(t, string(readmeContent), "Slug: my-service",
+		"derived variable should be rendered as computed value")
+}
+
+func TestIT_Scaffold_DerivedVarsInWrapperDir(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create tag.template.json with a derived variable used as wrapper directory name
+	config := map[string]any{
+		"name": "wrapper-derived-test",
+		"vars": map[string]any{
+			"project_name":   "default-project",
+			"__project_slug": "{{ vars.project_name | lower }}",
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
+
+	// Create a Cookiecutter-style wrapper directory using the derived variable
+	wrapperDir := filepath.Join(dir, "{{ vars.__project_slug }}")
+	require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+
+	// Template files inside the wrapper reference the derived variable
+	goModTmpl := "module example.com/{{ vars.__project_slug }}\n\ngo 1.25\n"
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "go.mod"), []byte(goModTmpl), 0o644))
+
+	// Change to temp directory for test (no explicit output dir)
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	tempDir := t.TempDir()
+	require.NoError(t, os.Chdir(tempDir))
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	opts := Options{
+		TemplateDir: dir,
+		// No OutputDir — should use project_name
+		Meta: map[string]string{
+			"project_name": "My-Service",
+		},
+		NoInput: true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	outputDir := filepath.Join(tempDir, "My-Service")
+	assert.DirExists(t, outputDir)
+
+	// Verify the derived variable was resolved in file content
+	goModContent, err := os.ReadFile(filepath.Join(outputDir, "go.mod"))
+	require.NoError(t, err)
+	assert.Contains(t, string(goModContent), "module example.com/my-service",
+		"derived variable in wrapper template should be resolved")
+	assert.NotContains(t, string(goModContent), "{{ vars.",
+		"no unrendered template expressions should remain")
 }

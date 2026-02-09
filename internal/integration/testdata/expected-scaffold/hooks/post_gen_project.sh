@@ -1,2 +1,2 @@
 #!/bin/bash
-echo "Project {{ vars.project_name|lower|replace(' ', '_') }} generated successfully!"
+echo "Project my_project generated successfully!"

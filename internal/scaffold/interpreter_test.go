@@ -89,6 +89,43 @@ func TestUT_ResolveInterpreter_FileWithShebang(t *testing.T) {
 	assert.Equal(t, []string{path}, result, "file with shebang should be unchanged")
 }
 
+func TestUT_ResolveInterpreter_ShebangNotExecutable_FallsThrough(t *testing.T) {
+	// Script has shebang but no exec bit (0o644) — should fall through to extension lookup
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "script.py")
+	require.NoError(t, os.WriteFile(path, []byte("#!/usr/bin/env python3\nprint('hi')\n"), 0o644))
+
+	argv := []string{path}
+	result := resolveInterpreter(argv, tmpDir)
+	require.Len(t, result, 2, "should prepend interpreter since file is not executable")
+	assert.Contains(t, result[0], "python")
+	assert.Equal(t, path, result[1])
+}
+
+func TestUT_ResolveInterpreter_ShellShebangNotExecutable_FallsThrough(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "run.sh")
+	require.NoError(t, os.WriteFile(path, []byte("#!/bin/bash\necho hello\n"), 0o644))
+
+	argv := []string{path}
+	result := resolveInterpreter(argv, tmpDir)
+	assert.Equal(t, []string{"sh", path}, result, "should prepend sh since file is not executable")
+}
+
+func TestUT_IsExecutable(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	execFile := filepath.Join(tmpDir, "exec.sh")
+	require.NoError(t, os.WriteFile(execFile, []byte("#!/bin/sh"), 0o755))
+	assert.True(t, isExecutable(execFile))
+
+	noExecFile := filepath.Join(tmpDir, "noexec.sh")
+	require.NoError(t, os.WriteFile(noExecFile, []byte("#!/bin/sh"), 0o644))
+	assert.False(t, isExecutable(noExecFile))
+
+	assert.False(t, isExecutable(filepath.Join(tmpDir, "nonexistent")))
+}
+
 func TestUT_ResolveInterpreter_PythonNoShebang(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "setup.py")

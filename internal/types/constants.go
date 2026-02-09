@@ -22,6 +22,12 @@ const (
 
 	// BundleExtension is the file extension for bundle definition files.
 	BundleExtension = ".json"
+
+	// CacheMetaFile is the remote cache metadata file written by the resolver.
+	CacheMetaFile = "_meta.json"
+
+	// TemplateReadme is the template documentation file displayed after scaffolding.
+	TemplateReadme = "README.md"
 )
 
 // InjectClause represents where to inject content relative to a marker.

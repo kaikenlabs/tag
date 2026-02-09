@@ -595,7 +595,7 @@ func TestUT_ConfirmHooks_AcceptHooksFlag_SkipsPrompt(t *testing.T) {
 	}
 	prompter := &MockPrompterForHooks{}
 
-	allowed, err := ConfirmHooks(hooks, true, false, prompter)
+	allowed, err := ConfirmHooks(hooks, true, false, prompter, "")
 
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -608,7 +608,7 @@ func TestUT_ConfirmHooks_NoInputFlag_SkipsHooks(t *testing.T) {
 	}
 	prompter := &MockPrompterForHooks{}
 
-	allowed, err := ConfirmHooks(hooks, false, true, prompter)
+	allowed, err := ConfirmHooks(hooks, false, true, prompter, "")
 
 	require.NoError(t, err)
 	assert.False(t, allowed)
@@ -622,7 +622,7 @@ func TestUT_ConfirmHooks_InteractiveConfirmed(t *testing.T) {
 	}
 	prompter := &MockPrompterForHooks{ConfirmResult: true}
 
-	allowed, err := ConfirmHooks(hooks, false, false, prompter)
+	allowed, err := ConfirmHooks(hooks, false, false, prompter, "")
 
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -635,7 +635,7 @@ func TestUT_ConfirmHooks_InteractiveDenied(t *testing.T) {
 	}
 	prompter := &MockPrompterForHooks{ConfirmResult: false}
 
-	allowed, err := ConfirmHooks(hooks, false, false, prompter)
+	allowed, err := ConfirmHooks(hooks, false, false, prompter, "")
 
 	require.NoError(t, err)
 	assert.False(t, allowed)
@@ -645,7 +645,7 @@ func TestUT_ConfirmHooks_InteractiveDenied(t *testing.T) {
 func TestUT_ConfirmHooks_NilHooks_ReturnsFalse(t *testing.T) {
 	prompter := &MockPrompterForHooks{}
 
-	allowed, err := ConfirmHooks(nil, false, false, prompter)
+	allowed, err := ConfirmHooks(nil, false, false, prompter, "")
 
 	require.NoError(t, err)
 	assert.False(t, allowed)
@@ -656,7 +656,7 @@ func TestUT_ConfirmHooks_EmptyHooks_ReturnsFalse(t *testing.T) {
 	hooks := &HooksConfig{}
 	prompter := &MockPrompterForHooks{}
 
-	allowed, err := ConfirmHooks(hooks, false, false, prompter)
+	allowed, err := ConfirmHooks(hooks, false, false, prompter, "")
 
 	require.NoError(t, err)
 	assert.False(t, allowed)
@@ -670,7 +670,7 @@ func TestUT_ConfirmHooks_AcceptHooksOverridesInteractive(t *testing.T) {
 	prompter := &MockPrompterForHooks{}
 
 	// AcceptHooks=true should run even in interactive mode (no prompt)
-	allowed, err := ConfirmHooks(hooks, true, false, prompter)
+	allowed, err := ConfirmHooks(hooks, true, false, prompter, "")
 
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -685,7 +685,7 @@ func TestUT_ConfirmHooks_PromptError(t *testing.T) {
 		ConfirmErr: assert.AnError,
 	}
 
-	_, err := ConfirmHooks(hooks, false, false, prompter)
+	_, err := ConfirmHooks(hooks, false, false, prompter, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to confirm hooks")
@@ -1116,6 +1116,118 @@ func TestIT_Scaffold_NoHooksConfigured(t *testing.T) {
 	// Verify output was created successfully
 	assert.DirExists(t, outputDir)
 	assert.FileExists(t, filepath.Join(outputDir, "test.txt"))
+}
+
+// --- Unit Tests for describeHookCommand ---
+
+func TestUT_DescribeHookCommand_BareCommand(t *testing.T) {
+	// Bare commands like "go mod tidy" should return no annotation
+	result := describeHookCommand("go mod tidy", t.TempDir())
+	assert.Equal(t, "", result)
+}
+
+func TestUT_DescribeHookCommand_PythonScript(t *testing.T) {
+	// .py file without shebang should show python interpreter
+	tmpDir := t.TempDir()
+	hooksDir := filepath.Join(tmpDir, "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "setup.py"), []byte("print('hello')"), 0o755))
+
+	result := describeHookCommand("hooks/setup.py", tmpDir)
+	// Should be either "(python3)" or "(python)" depending on system
+	assert.Contains(t, result, "python")
+	assert.NotContains(t, result, "NOT FOUND")
+}
+
+func TestUT_DescribeHookCommand_ShellScript(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// .sh file without shebang should show "sh" interpreter
+	tmpDir := t.TempDir()
+	hooksDir := filepath.Join(tmpDir, "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "setup.sh"), []byte("echo hello"), 0o755))
+
+	result := describeHookCommand("hooks/setup.sh", tmpDir)
+	assert.Equal(t, "(sh)", result)
+}
+
+func TestUT_DescribeHookCommand_ScriptWithShebang(t *testing.T) {
+	// File with shebang should show "(has shebang)"
+	tmpDir := t.TempDir()
+	hooksDir := filepath.Join(tmpDir, "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "run.sh"), []byte("#!/bin/bash\necho hello"), 0o755))
+
+	result := describeHookCommand("hooks/run.sh", tmpDir)
+	assert.Equal(t, "(has shebang)", result)
+}
+
+func TestUT_DescribeHookCommand_ShebangNotExecutable_FallsThrough(t *testing.T) {
+	// Script has shebang but no exec bit — should fall through to extension-based annotation
+	tmpDir := t.TempDir()
+	hooksDir := filepath.Join(tmpDir, "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "setup.py"), []byte("#!/usr/bin/env python3\nprint('hi')"), 0o644))
+
+	result := describeHookCommand("hooks/setup.py", tmpDir)
+	// Should show python interpreter, NOT "(has shebang)", since file isn't executable
+	assert.Contains(t, result, "python")
+	assert.NotContains(t, result, "shebang")
+	assert.NotContains(t, result, "NOT FOUND")
+}
+
+func TestUT_DescribeHookCommand_UnknownExtension(t *testing.T) {
+	// .xyz file should return no annotation
+	tmpDir := t.TempDir()
+	hooksDir := filepath.Join(tmpDir, "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "script.xyz"), []byte("content"), 0o755))
+
+	result := describeHookCommand("hooks/script.xyz", tmpDir)
+	assert.Equal(t, "", result)
+}
+
+func TestUT_DescribeHookCommand_NonexistentFile(t *testing.T) {
+	// Missing file should return no annotation (fail gracefully)
+	result := describeHookCommand("hooks/missing.py", t.TempDir())
+	assert.Equal(t, "", result)
+}
+
+func TestUT_ResolveHookCmd(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      string
+		baseDir  string
+		expected string
+	}{
+		{"file reference made absolute", "hooks/post_gen.py", "/tmpl", "/tmpl/hooks/post_gen.py"},
+		{"already absolute unchanged", "/usr/bin/python3 hooks/setup.py", "/tmpl", "/usr/bin/python3 hooks/setup.py"},
+		{"bare command unchanged", "echo hello", "/tmpl", "echo hello"},
+		{"command with args", "hooks/run.sh --verbose", "/tmpl", "/tmpl/hooks/run.sh --verbose"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveHookCmd(tt.cmd, tt.baseDir)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUT_ResolveHookPaths(t *testing.T) {
+	hooks := &HooksConfig{
+		PreScaffold:  []string{"hooks/pre.sh"},
+		PostScaffold: []string{"hooks/post.py", "echo done"},
+	}
+
+	resolved := resolveHookPaths(hooks, "/templates/mytemplate")
+
+	assert.Equal(t, "/templates/mytemplate/hooks/pre.sh", resolved.PreScaffold[0])
+	assert.Equal(t, "/templates/mytemplate/hooks/post.py", resolved.PostScaffold[0])
+	assert.Equal(t, "echo done", resolved.PostScaffold[1]) // bare command unchanged
 }
 
 // --- Helper functions ---
