@@ -15,6 +15,12 @@ type PathProcessor interface {
 	ProcessPath(path string, vars map[string]any) (string, error)
 }
 
+// SSTIConfigurable is implemented by path processors that support
+// derived-variable tracking for SSTI protection.
+type SSTIConfigurable interface {
+	SetDerivedVarNames(names map[string]bool)
+}
+
 // DefaultPathProcessor implements PathProcessor using the Gonja template engine.
 type DefaultPathProcessor struct {
 	engine               template.TemplateRenderer

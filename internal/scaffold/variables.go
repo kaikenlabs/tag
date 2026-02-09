@@ -14,7 +14,7 @@ import (
 
 // VariableCollector gathers variable values from all sources.
 type VariableCollector interface {
-	Collect(config *TemplateConfig, opts CollectOptions) (map[string]any, error)
+	Collect(config *TemplateConfig, opts Options) (map[string]any, error)
 }
 
 // DefaultVariableCollector implements VariableCollector with the standard priority chain.
@@ -33,7 +33,7 @@ func NewVariableCollector(prompter Prompter) *DefaultVariableCollector {
 // Each layer overwrites the previous, with --meta having highest priority.
 //
 //nolint:gocognit,cyclop // orchestration function coordinates multiple input sources
-func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectOptions) (map[string]any, error) {
+func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options) (map[string]any, error) {
 	vars := make(map[string]any)
 	// Track which variables were explicitly provided (from replay or values file)
 	// These should not be re-prompted even in interactive mode
@@ -100,7 +100,7 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts CollectO
 	// Step 4: Interactive prompts for variables (if TTY)
 	// Prompt for all non-private, non-derived variables, even if they have defaults.
 	// Skip only if the value was explicitly provided via replay or values file.
-	if opts.IsTTY && !opts.NoPrompt {
+	if opts.IsTTY && !opts.NoInput {
 		for _, name := range varNames {
 			def := config.Vars[name]
 

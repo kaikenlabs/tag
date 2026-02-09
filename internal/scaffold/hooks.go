@@ -247,15 +247,7 @@ func (r *ArgvHookRunner) RunArgv(phase HookPhase, commands [][]string, workDir s
 // Returns true if hooks should run, false if they should be skipped.
 // Returns an error only if prompting fails.
 func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompter) (bool, error) {
-	if hooks == nil {
-		return false, nil
-	}
-
-	allHooks := make([]string, 0)
-	allHooks = append(allHooks, hooks.PreScaffold...)
-	allHooks = append(allHooks, hooks.PostScaffold...)
-
-	if len(allHooks) == 0 {
+	if len(collectAllHooks(hooks)) == 0 {
 		return false, nil
 	}
 
@@ -271,6 +263,33 @@ func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompt
 	}
 
 	// Interactive: display hooks and prompt for confirmation
+	displayHookList(hooks)
+
+	confirmed, err := prompter.Confirm("Do you want to execute these hooks?", false)
+	if err != nil {
+		return false, fmt.Errorf("failed to confirm hooks: %w", err)
+	}
+
+	if !confirmed {
+		fmt.Println("Hooks skipped by user choice.")
+	}
+
+	return confirmed, nil
+}
+
+// collectAllHooks returns all hooks (pre + post) from the config.
+func collectAllHooks(hooks *HooksConfig) []string {
+	if hooks == nil {
+		return nil
+	}
+	all := make([]string, 0, len(hooks.PreScaffold)+len(hooks.PostScaffold))
+	all = append(all, hooks.PreScaffold...)
+	all = append(all, hooks.PostScaffold...)
+	return all
+}
+
+// displayHookList prints the list of configured hooks to stdout.
+func displayHookList(hooks *HooksConfig) {
 	fmt.Println("This template defines the following hooks:")
 	if len(hooks.PreScaffold) > 0 {
 		fmt.Println("  Pre-scaffold:")
@@ -284,17 +303,6 @@ func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompt
 			fmt.Printf("    - %s\n", cmd)
 		}
 	}
-
-	confirmed, err := prompter.Confirm("Do you want to execute these hooks?", false)
-	if err != nil {
-		return false, fmt.Errorf("failed to confirm hooks: %w", err)
-	}
-
-	if !confirmed {
-		fmt.Println("Hooks skipped by user choice.")
-	}
-
-	return confirmed, nil
 }
 
 // PrintHookResults prints the output of hook execution results to stdout.

@@ -18,16 +18,13 @@ const MaxConfigFileSize = 10 * 1024 * 1024
 
 // Scaffold orchestrates the scaffolding process.
 type Scaffold struct {
-	Validator   *schema.Validator
-	Collector   VariableCollector
-	Processor   PathProcessor
-	Writer      OutputWriter
-	Engine      template.TemplateRenderer
-	Prompter    Prompter
-	HookRunner  HookRunner // Executes pre/post scaffold hooks
-	DryRun      bool
-	Verbose     bool
-	ProjectName string // Override for project_name variable
+	validator   *schema.Validator
+	collector   VariableCollector
+	processor   PathProcessor
+	writer      OutputWriter
+	engine      template.TemplateRenderer
+	prompter    Prompter
+	hookRunner HookRunner // Executes pre/post scaffold hooks
 }
 
 // NewScaffold creates a new scaffold instance with default dependencies.
@@ -54,14 +51,13 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 	writer := NewOutputWriter(engine, processor)
 
 	return &Scaffold{
-		Validator:   validator,
-		Collector:   collector,
-		Processor:   processor,
-		Writer:      writer,
-		Engine:      engine,
-		Prompter:    prompter,
-		HookRunner:  NewHookRunner(),
-		ProjectName: opts.ProjectName,
+		validator:   validator,
+		collector:   collector,
+		processor:   processor,
+		writer:      writer,
+		engine:      engine,
+		prompter:    prompter,
+		hookRunner: NewHookRunner(),
 	}, nil
 }
 
@@ -81,26 +77,25 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	// Step 2b: Set derived variable names on the processor for SSTI protection.
-	if processor, ok := s.Processor.(*DefaultPathProcessor); ok {
+	if configurable, ok := s.processor.(SSTIConfigurable); ok {
 		derivedNames := make(map[string]bool)
 		for name, def := range config.Vars {
 			if def.IsDerived() || def.IsPrivate(name) {
 				derivedNames[name] = true
 			}
 		}
-		processor.SetDerivedVarNames(derivedNames)
+		configurable.SetDerivedVarNames(derivedNames)
 	}
 
 	// Step 3: Collect variables
-	collectOpts := opts.CollectOpts()
 	if opts.ProjectName != "" {
-		if collectOpts.Meta == nil {
-			collectOpts.Meta = make(map[string]string)
+		if opts.Meta == nil {
+			opts.Meta = make(map[string]string)
 		}
-		collectOpts.Meta["project_name"] = opts.ProjectName
+		opts.Meta["project_name"] = opts.ProjectName
 	}
 
-	vars, err := s.Collector.Collect(config, collectOpts)
+	vars, err := s.collector.Collect(config, opts)
 	if err != nil {
 		return fmt.Errorf("failed to collect variables: %w", err)
 	}
@@ -130,14 +125,14 @@ func (s *Scaffold) Run(opts Options) error {
 	// Step 6: Build hook environment and check confirmation
 	hookEnv := BuildHookEnv(vars, templateDirAbs, outputDir)
 
-	hooksAllowed, err := ConfirmHooks(config.Hooks, opts.AcceptHooks, opts.NoInput, s.Prompter)
+	hooksAllowed, err := ConfirmHooks(config.Hooks, opts.AcceptHooks, opts.NoInput, s.prompter)
 	if err != nil {
 		return fmt.Errorf("hook confirmation failed: %w", err)
 	}
 
 	// Step 7: Run pre-scaffold hooks
 	if hooksAllowed {
-		if err := RunPreScaffoldHooks(s.HookRunner, config.Hooks, templateDirAbs, hookEnv); err != nil {
+		if err := RunPreScaffoldHooks(s.hookRunner, config.Hooks, templateDirAbs, hookEnv); err != nil {
 			return fmt.Errorf("pre-scaffold hook failed: %w", err)
 		}
 	}
@@ -147,13 +142,19 @@ func (s *Scaffold) Run(opts Options) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	if err := s.Writer.Write(opts.TemplateDir, outputDir, vars); err != nil {
-		_ = os.RemoveAll(outputDir)
+	// Clean up output directory on failure
+	success := false
+	defer func() {
+		if !success {
+			_ = os.RemoveAll(outputDir)
+		}
+	}()
+
+	if err := s.writer.Write(opts.TemplateDir, outputDir, vars); err != nil {
 		return fmt.Errorf("failed to process template: %w", err)
 	}
 
 	if err := CopyGenerators(opts.TemplateDir, outputDir); err != nil {
-		_ = os.RemoveAll(outputDir)
 		return fmt.Errorf("failed to copy generators: %w", err)
 	}
 
@@ -163,13 +164,14 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	if hooksAllowed {
-		RunPostScaffoldHooks(s.HookRunner, config.Hooks, outputDir, hookEnv)
+		RunPostScaffoldHooks(s.hookRunner, config.Hooks, outputDir, hookEnv)
 	}
 
 	// Step 10: Save replay data and display summary
 	saveReplayData(opts, config, vars)
 	s.displaySummary(outputDir, vars)
 
+	success = true
 	return nil
 }
 
@@ -261,7 +263,7 @@ func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, e
 	}
 
 	// Validate against schema
-	if err := s.Validator.Validate(data); err != nil { //nolint:govet // shadow in if-init is idiomatic
+	if err := s.validator.Validate(data); err != nil { //nolint:govet // shadow in if-init is idiomatic
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 

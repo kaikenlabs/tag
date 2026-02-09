@@ -3,6 +3,8 @@ package scaffold
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // TemplateConfig represents the structure of tag.template.json.
@@ -12,14 +14,11 @@ type TemplateConfig struct {
 	Version     string                 `json:"version,omitempty"`
 	Vars        map[string]VariableDef `json:"-"` // Custom unmarshaling needed
 	RawVars     map[string]any         `json:"vars"`
-	Hooks       *HooksConfig           `json:"hooks,omitempty"`
+	Hooks *types.HooksConfig `json:"hooks,omitempty"`
 }
 
-// HooksConfig defines pre and post scaffold hooks.
-type HooksConfig struct {
-	PreScaffold  []string `json:"pre_scaffold,omitempty"`
-	PostScaffold []string `json:"post_scaffold,omitempty"`
-}
+// HooksConfig is an alias for types.HooksConfig.
+type HooksConfig = types.HooksConfig
 
 // VariableType represents the type of a template variable.
 type VariableType string
@@ -214,28 +213,6 @@ type Options struct {
 	AcceptHooks          bool              // Accept hooks without prompting (--accept-hooks flag)
 	IsRemote             bool              // Whether the template source is remote
 	AllowRecursiveRender bool              // Allow recursive template rendering in variable values (--allow-recursive-render flag)
+	IsTTY                bool              // Whether stdin is a TTY (set automatically if not provided)
 }
 
-// CollectOptions contains options for variable collection.
-// Most fields overlap with Options; use Options.CollectOpts() to convert.
-type CollectOptions struct {
-	ValuesFile  string            // Path to values JSON file
-	Meta        map[string]string // CLI meta overrides
-	NoPrompt    bool              // Skip interactive prompts
-	IsTTY       bool              // Whether stdin is a TTY
-	Replay      bool              // Load and use saved replay values
-	TemplateRef string            // Original template reference (for replay ID lookup)
-}
-
-// CollectOpts builds a CollectOptions from the scaffold Options,
-// reducing manual field-by-field copying at the call site.
-func (o Options) CollectOpts() CollectOptions {
-	return CollectOptions{
-		ValuesFile:  o.ValuesFile,
-		Meta:        o.Meta,
-		NoPrompt:    o.NoInput,
-		IsTTY:       IsTTY(),
-		Replay:      o.Replay,
-		TemplateRef: o.TemplateRef,
-	}
-}
