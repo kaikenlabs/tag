@@ -81,6 +81,11 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 			return nil
 		}
 
+		// Skip _meta.json at root (remote cache artifact)
+		if d.Name() == types.CacheMetaFile && filepath.Dir(relPath) == "." {
+			return nil
+		}
+
 		// Process path placeholders
 		processedPath, err := w.pathProcessor.ProcessPath(relPath, vars)
 		if err != nil {

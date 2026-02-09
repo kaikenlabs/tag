@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
+
 	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/schema"
 	"github.com/kaikenlabs/tag/internal/template"
@@ -63,7 +65,7 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 
 // Run executes the scaffolding process.
 //
-//nolint:cyclop // orchestration function coordinates multiple phases
+//nolint:cyclop,gocognit,funlen // orchestration function coordinates multiple phases
 func (s *Scaffold) Run(opts Options) error {
 	// Step 1: Validate template directory exists
 	if _, err := os.Stat(opts.TemplateDir); os.IsNotExist(err) {
@@ -87,7 +89,24 @@ func (s *Scaffold) Run(opts Options) error {
 		configurable.SetDerivedVarNames(derivedNames)
 	}
 
-	// Step 3: Collect variables
+	// Step 3: Make template directory absolute for hooks
+	templateDirAbs := opts.TemplateDir
+	if !filepath.IsAbs(templateDirAbs) {
+		var cwd string
+		cwd, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+		templateDirAbs = filepath.Join(cwd, templateDirAbs)
+	}
+
+	// Step 4: Check hook confirmation (before variable collection so user sees hooks first)
+	hooksAllowed, err := ConfirmHooks(config.Hooks, opts.AcceptHooks, opts.NoInput, s.prompter, templateDirAbs)
+	if err != nil {
+		return fmt.Errorf("hook confirmation failed: %w", err)
+	}
+
+	// Step 5: Collect variables
 	if opts.ProjectName != "" {
 		if opts.Meta == nil {
 			opts.Meta = make(map[string]string)
@@ -100,44 +119,48 @@ func (s *Scaffold) Run(opts Options) error {
 		return fmt.Errorf("failed to collect variables: %w", err)
 	}
 
-	// Step 4: Resolve output directory
+	// Step 5b: Resolve derived variables.
+	// Derived variables have template expression defaults (e.g., "{{ vars.name | lower }}").
+	// These must be evaluated before template rendering so their computed values are used.
+	if err := ResolveDerivedVars(s.engine, config, vars); err != nil { //nolint:govet // shadow in if-init is idiomatic
+		return fmt.Errorf("failed to resolve derived variables: %w", err)
+	}
+
+	// Step 6: Resolve output directory
 	outputDir, err := resolveOutputDir(opts.OutputDir, vars)
 	if err != nil {
 		return err
 	}
 
-	// Step 5: Prepare output directory (safety checks, force handling)
-	if err := prepareOutputDir(outputDir, opts.Force); err != nil { //nolint:govet // shadow in if-init is idiomatic
+	// Step 6b: Detect project wrapper to avoid double nesting.
+	// Cookiecutter-style templates wrap project files in a directory named after
+	// the project (e.g., "{{ vars.project_name }}"). When no explicit --output-dir
+	// is set, the output dir is derived from project_name, which would create
+	// project_name/project_name nesting. Unwrap by using the wrapper as the
+	// effective template root for Write().
+	effectiveTemplateDir := opts.TemplateDir
+	if opts.OutputDir == "" {
+		if wrapperDir := findProjectWrapper(opts.TemplateDir); wrapperDir != "" {
+			effectiveTemplateDir = filepath.Join(opts.TemplateDir, wrapperDir)
+		}
+	}
+
+	// Step 7: Prepare output directory (safety checks, force handling)
+	if err := prepareOutputDir(outputDir, opts.Force); err != nil {
 		return err
 	}
 
-	// Make template directory absolute for hooks
-	templateDirAbs := opts.TemplateDir
-	if !filepath.IsAbs(templateDirAbs) {
-		var cwd string
-		cwd, err = os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
-		}
-		templateDirAbs = filepath.Join(cwd, templateDirAbs)
-	}
-
-	// Step 6: Build hook environment and check confirmation
+	// Step 8: Build hook environment
 	hookEnv := BuildHookEnv(vars, templateDirAbs, outputDir)
 
-	hooksAllowed, err := ConfirmHooks(config.Hooks, opts.AcceptHooks, opts.NoInput, s.prompter)
-	if err != nil {
-		return fmt.Errorf("hook confirmation failed: %w", err)
-	}
-
-	// Step 7: Run pre-scaffold hooks
+	// Step 9: Run pre-scaffold hooks
 	if hooksAllowed {
 		if err := RunPreScaffoldHooks(s.hookRunner, config.Hooks, templateDirAbs, hookEnv); err != nil {
 			return fmt.Errorf("pre-scaffold hook failed: %w", err)
 		}
 	}
 
-	// Step 8: Create output directory and write files
+	// Step 10: Create output directory and write files
 	if err := os.MkdirAll(outputDir, types.DirMode); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
@@ -150,7 +173,7 @@ func (s *Scaffold) Run(opts Options) error {
 		}
 	}()
 
-	if err := s.writer.Write(opts.TemplateDir, outputDir, vars); err != nil {
+	if err := s.writer.Write(effectiveTemplateDir, outputDir, vars); err != nil {
 		return fmt.Errorf("failed to process template: %w", err)
 	}
 
@@ -158,18 +181,26 @@ func (s *Scaffold) Run(opts Options) error {
 		return fmt.Errorf("failed to copy generators: %w", err)
 	}
 
-	// Step 9: Generate config and run post-scaffold hooks
+	// Step 11: Generate config and run post-scaffold hooks
 	if err := GenerateTagConfig(outputDir); err != nil {
 		return fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
 	if hooksAllowed {
-		RunPostScaffoldHooks(s.hookRunner, config.Hooks, outputDir, hookEnv)
+		// When a project wrapper was unwrapped, hook scripts live in the
+		// original template root (not the output dir). Resolve file-based
+		// hook commands to absolute paths so they are found correctly while
+		// still executing with workDir=outputDir.
+		postHooks := config.Hooks
+		if effectiveTemplateDir != opts.TemplateDir && config.Hooks != nil {
+			postHooks = resolveHookPaths(config.Hooks, templateDirAbs)
+		}
+		RunPostScaffoldHooks(s.hookRunner, postHooks, outputDir, hookEnv)
 	}
 
-	// Step 10: Save replay data and display summary
+	// Step 12: Save replay data and display summary
 	saveReplayData(opts, config, vars)
-	s.displaySummary(outputDir, vars)
+	s.displaySummary(outputDir, templateDirAbs, vars)
 
 	success = true
 	return nil
@@ -277,7 +308,7 @@ func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, e
 }
 
 // displaySummary prints a summary of the scaffolding operation.
-func (s *Scaffold) displaySummary(outputDir string, vars map[string]any) {
+func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string]any) {
 	fmt.Println()
 	fmt.Println("Scaffolding complete!")
 	fmt.Printf("  Output: %s\n", outputDir)
@@ -291,6 +322,18 @@ func (s *Scaffold) displaySummary(outputDir string, vars map[string]any) {
 	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s\n", outputDir)
 	fmt.Println()
+
+	// Display template README if present
+	readmePath := filepath.Join(templateDir, types.TemplateReadme)
+	if content, err := os.ReadFile(readmePath); err == nil && len(content) > 0 {
+		rendered, err := glamour.Render(string(content), "auto")
+		if err != nil {
+			// Fallback: print raw markdown
+			fmt.Println(string(content))
+		} else {
+			fmt.Print(rendered)
+		}
+	}
 }
 
 // Result contains the result of a scaffolding operation.
@@ -360,4 +403,34 @@ func validateSafeOutputDir(outputDir string) error {
 	}
 
 	return nil
+}
+
+// findProjectWrapper scans the template root for a project wrapper directory.
+// Cookiecutter-style templates wrap all project files in a single directory whose
+// name is a template expression (e.g., "{{ vars.project_name }}"). When detected,
+// the wrapper directory name is returned so callers can use it as the effective
+// template root, avoiding double nesting (e.g., my-service/my-service/).
+// Returns empty string if no single wrapper directory is found.
+func findProjectWrapper(templateRoot string) string {
+	entries, err := os.ReadDir(templateRoot)
+	if err != nil {
+		return ""
+	}
+
+	var wrapper string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.Contains(name, "{{") && strings.Contains(name, "}}") {
+			if wrapper != "" {
+				// Multiple template-expression directories — don't unwrap
+				return ""
+			}
+			wrapper = name
+		}
+	}
+
+	return wrapper
 }

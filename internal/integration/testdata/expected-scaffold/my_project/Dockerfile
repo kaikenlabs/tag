@@ -7,5 +7,5 @@ RUN pip install -e .
 
 EXPOSE 8080.0
 
-CMD ["{{ vars.project_name|lower|replace(' ', '_') }}"]
+CMD ["my_project"]
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kaikenlabs/tag/internal/replay"
+	"github.com/kaikenlabs/tag/internal/template"
 )
 
 // VariableCollector gathers variable values from all sources.
@@ -149,11 +150,45 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options)
 		return nil, err
 	}
 
-	// Step 7: Process computed/private variables
-	// These are variables starting with underscore that may reference other vars
-	// For now, we skip them - they'll be processed during template rendering
+	// Step 7: Derived variables are resolved after Collect() returns,
+	// via ResolveDerivedVars() which renders their template expression defaults
+	// through the template engine.
 
 	return vars, nil
+}
+
+// ResolveDerivedVars evaluates derived variable defaults through the template engine.
+// Derived variables have template expressions as defaults (e.g., "{{ vars.name | lower }}").
+// After collection, these hold the raw expression string; this function renders each
+// expression to compute the actual value.
+//
+// Variables are processed in sorted order so that derived variables referencing
+// other derived variables see already-resolved values.
+func ResolveDerivedVars(engine template.TemplateRenderer, config *TemplateConfig, vars map[string]any) error {
+	varNames := getSortedVarNames(config.Vars)
+	for _, name := range varNames {
+		def := config.Vars[name]
+		if !def.IsDerived() {
+			continue
+		}
+
+		defaultStr, ok := def.Default.(string)
+		if !ok {
+			continue
+		}
+
+		// Build context with current vars (including previously resolved derived vars)
+		ctx := template.NewContextBuilder().WithVars(vars).Build()
+
+		rendered, err := engine.ExecuteToString(defaultStr, ctx)
+		if err != nil {
+			return fmt.Errorf("failed to evaluate derived variable %q: %w", name, err)
+		}
+
+		vars[name] = rendered
+	}
+
+	return nil
 }
 
 // promptForVariable prompts the user for a variable value based on its type.

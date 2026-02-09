@@ -231,6 +231,8 @@ func (r *ArgvHookRunner) RunArgv(phase HookPhase, commands [][]string, workDir s
 		execArgv[0] = cmdPath
 		copy(execArgv[1:], argv[1:])
 
+		execArgv = resolveInterpreter(execArgv, workDir)
+
 		cmdDisplay := strings.Join(argv, " ")
 		result := execWithTimeout(cmdDisplay, execArgv, workDir, env)
 		results = append(results, result)
@@ -243,10 +245,61 @@ func (r *ArgvHookRunner) RunArgv(phase HookPhase, commands [][]string, workDir s
 	return results, nil
 }
 
+// describeHookCommand returns an annotation string describing the interpreter for a hook command.
+// For file-based commands, it checks for shebangs and extension-based interpreters.
+// Returns "" for bare commands or when no annotation is applicable.
+func describeHookCommand(cmd, templateDir string) string {
+	argv, err := shlex.Split(cmd)
+	if err != nil || len(argv) == 0 {
+		return ""
+	}
+
+	if !isFileReference(argv[0]) {
+		return ""
+	}
+
+	// Resolve relative path against templateDir
+	filePath := argv[0]
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(templateDir, filePath)
+	}
+
+	// Check for shebang — only honor if file is also executable
+	shebang, err := readShebang(filePath)
+	if err != nil {
+		// File doesn't exist or can't be read
+		return ""
+	}
+	if shebang != "" && isExecutable(filePath) {
+		return "(has shebang)"
+	}
+
+	// No shebang — try extension-based interpreter lookup
+	ext := strings.ToLower(filepath.Ext(argv[0]))
+
+	if ext == ".py" {
+		interp := findPythonInterpreter()
+		if _, err := exec.LookPath(interp); err != nil {
+			return fmt.Sprintf("(%s - NOT FOUND)", interp)
+		}
+		return fmt.Sprintf("(%s)", interp)
+	}
+
+	if interpreter, ok := extensionInterpreters[ext]; ok {
+		if _, err := exec.LookPath(interpreter); err != nil {
+			return fmt.Sprintf("(%s - NOT FOUND)", interpreter)
+		}
+		return fmt.Sprintf("(%s)", interpreter)
+	}
+
+	return ""
+}
+
 // ConfirmHooks checks whether hooks should be executed based on flags and user confirmation.
 // Returns true if hooks should run, false if they should be skipped.
 // Returns an error only if prompting fails.
-func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompter) (bool, error) {
+// templateDir is used to resolve file-based hook commands for interpreter annotation.
+func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompter, templateDir string) (bool, error) {
 	if len(collectAllHooks(hooks)) == 0 {
 		return false, nil
 	}
@@ -263,7 +316,7 @@ func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompt
 	}
 
 	// Interactive: display hooks and prompt for confirmation
-	displayHookList(hooks)
+	displayHookList(hooks, templateDir)
 
 	confirmed, err := prompter.Confirm("Do you want to execute these hooks?", false)
 	if err != nil {
@@ -289,19 +342,43 @@ func collectAllHooks(hooks *HooksConfig) []string {
 }
 
 // displayHookList prints the list of configured hooks to stdout.
-func displayHookList(hooks *HooksConfig) {
+// templateDir is used to resolve file-based commands for interpreter annotation.
+func displayHookList(hooks *HooksConfig, templateDir string) {
+	hasNotFound := false
+
 	fmt.Println("This template defines the following hooks:")
 	if len(hooks.PreScaffold) > 0 {
 		fmt.Println("  Pre-scaffold:")
 		for _, cmd := range hooks.PreScaffold {
-			fmt.Printf("    - %s\n", cmd)
+			annotation := describeHookCommand(cmd, templateDir)
+			if annotation != "" {
+				fmt.Printf("    - %s  %s\n", cmd, annotation)
+			} else {
+				fmt.Printf("    - %s\n", cmd)
+			}
+			if strings.Contains(annotation, "NOT FOUND") {
+				hasNotFound = true
+			}
 		}
 	}
 	if len(hooks.PostScaffold) > 0 {
 		fmt.Println("  Post-scaffold:")
 		for _, cmd := range hooks.PostScaffold {
-			fmt.Printf("    - %s\n", cmd)
+			annotation := describeHookCommand(cmd, templateDir)
+			if annotation != "" {
+				fmt.Printf("    - %s  %s\n", cmd, annotation)
+			} else {
+				fmt.Printf("    - %s\n", cmd)
+			}
+			if strings.Contains(annotation, "NOT FOUND") {
+				hasNotFound = true
+			}
 		}
+	}
+
+	if hasNotFound {
+		fmt.Println()
+		fmt.Println("WARNING: some hook interpreters were not found on your system.")
 	}
 }
 
@@ -352,6 +429,64 @@ func RunPostScaffoldHooks(runner HookRunner, hooks *HooksConfig, outputDir strin
 		fmt.Printf("Warning: post-scaffold hook failed: %v\n", err)
 		fmt.Printf("Note: Scaffold completed successfully, but some post-scaffold tasks may not have run.\n")
 	}
+}
+
+// resolveHookPaths returns a copy of HooksConfig with file-based hook commands
+// resolved to absolute paths under baseDir. This is used when a project wrapper
+// is unwrapped: hook scripts live in the original template root, not the output
+// directory, so their paths must be made absolute before post-scaffold execution.
+func resolveHookPaths(hooks *HooksConfig, baseDir string) *HooksConfig {
+	resolve := func(commands []string) []string {
+		resolved := make([]string, len(commands))
+		for i, cmd := range commands {
+			resolved[i] = resolveHookCmd(cmd, baseDir)
+		}
+		return resolved
+	}
+
+	return &HooksConfig{
+		PreScaffold:  resolve(hooks.PreScaffold),
+		PostScaffold: resolve(hooks.PostScaffold),
+	}
+}
+
+// resolveHookCmd resolves a single hook command's file path to an absolute path
+// if it references a file (contains "/" or "\") and is not already absolute.
+func resolveHookCmd(cmd, baseDir string) string {
+	// Parse command to get argv[0]
+	argv, err := shlex.Split(cmd)
+	if err != nil || len(argv) == 0 {
+		return cmd
+	}
+
+	cmdPath := argv[0]
+	// Only resolve file references (contains path separator) that aren't already absolute
+	if !strings.ContainsAny(cmdPath, "/\\") || filepath.IsAbs(cmdPath) {
+		return cmd
+	}
+
+	// Replace argv[0] with absolute path and reconstruct the command.
+	// We reconstruct from argv rather than slicing the original string
+	// because shlex.Split strips quotes, so byte offsets won't match
+	// for quoted paths (e.g., '"hooks/my script.py" --flag').
+	argv[0] = filepath.Join(baseDir, cmdPath)
+	return shellJoin(argv)
+}
+
+// shellJoin reconstructs a command string from an argv slice, quoting
+// arguments that contain spaces or shell-special characters so that
+// shlex.Split will re-parse them correctly.
+func shellJoin(argv []string) string {
+	parts := make([]string, len(argv))
+	for i, arg := range argv {
+		if arg == "" || strings.ContainsAny(arg, " \t\"'\\") {
+			// Use single-quote escaping (POSIX): wrap in '' and escape embedded '.
+			parts[i] = "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
+		} else {
+			parts[i] = arg
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // RunArgvHooks executes pre-split argv hook commands and prints their output.

@@ -72,8 +72,7 @@ func (p *HooksProcessor) DetectHooks() ([]HookFinding, error) {
 		switch {
 		case strings.HasSuffix(name, ".py"):
 			finding.Kind = string(HookKindPython)
-			finding.Message = "Python hook detected; TAG does not execute Python hooks. " +
-				"Manual conversion to shell script or Go may be required."
+			finding.Message = "Python hook detected; will be executed using python3 (or python) at runtime."
 		case strings.HasSuffix(name, ".sh"):
 			finding.Kind = string(HookKindShell)
 			finding.Message = "Shell hook detected; can be referenced in tag.template.json hooks section."
@@ -161,16 +160,22 @@ func SuggestTagHooksConfig(findings []HookFinding) (preHooks, postHooks []string
 	for _, f := range findings {
 		name := filepath.Base(f.Path)
 
-		// Only suggest shell hooks for TAG config
-		if f.Kind != string(HookKindShell) {
+		var hookCmd string
+		switch f.Kind {
+		case string(HookKindShell):
+			hookCmd = "sh hooks/" + name
+		case string(HookKindPython):
+			// Python interpreter is resolved automatically at runtime
+			hookCmd = "hooks/" + name
+		default:
 			continue
 		}
 
 		if strings.HasPrefix(name, "pre_") {
-			preHooks = append(preHooks, "sh hooks/"+name)
+			preHooks = append(preHooks, hookCmd)
 		} else if strings.HasPrefix(name, "post_") {
-			postHooks = append(postHooks, "sh hooks/"+name)
+			postHooks = append(postHooks, hookCmd)
 		}
 	}
-	return
+	return preHooks, postHooks
 }

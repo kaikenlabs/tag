@@ -29,7 +29,7 @@ func TestUT_DetectHooks_PythonHooks(t *testing.T) {
 	for _, f := range findings {
 		assert.Equal(t, string(HookKindPython), f.Kind)
 		assert.Contains(t, f.Message, "Python hook")
-		assert.Contains(t, f.Message, "not execute Python hooks")
+		assert.Contains(t, f.Message, "python3")
 	}
 }
 
@@ -176,21 +176,35 @@ func TestUT_SuggestTagHooksConfig(t *testing.T) {
 	findings := []HookFinding{
 		{Path: "hooks/pre_gen_project.sh", Kind: string(HookKindShell)},
 		{Path: "hooks/post_gen_project.sh", Kind: string(HookKindShell)},
-		{Path: "hooks/pre_gen_project.py", Kind: string(HookKindPython)}, // Should be ignored
+		{Path: "hooks/pre_gen_project.py", Kind: string(HookKindPython)},
+	}
+
+	preHooks, postHooks := SuggestTagHooksConfig(findings)
+
+	assert.Len(t, preHooks, 2)
+	assert.Len(t, postHooks, 1)
+	assert.Equal(t, "sh hooks/pre_gen_project.sh", preHooks[0])
+	assert.Equal(t, "hooks/pre_gen_project.py", preHooks[1])
+	assert.Equal(t, "sh hooks/post_gen_project.sh", postHooks[0])
+}
+
+func TestUT_SuggestTagHooksConfig_PythonOnly(t *testing.T) {
+	findings := []HookFinding{
+		{Path: "hooks/pre_gen_project.py", Kind: string(HookKindPython)},
+		{Path: "hooks/post_gen_project.py", Kind: string(HookKindPython)},
 	}
 
 	preHooks, postHooks := SuggestTagHooksConfig(findings)
 
 	assert.Len(t, preHooks, 1)
 	assert.Len(t, postHooks, 1)
-	assert.Equal(t, "sh hooks/pre_gen_project.sh", preHooks[0])
-	assert.Equal(t, "sh hooks/post_gen_project.sh", postHooks[0])
+	assert.Equal(t, "hooks/pre_gen_project.py", preHooks[0])
+	assert.Equal(t, "hooks/post_gen_project.py", postHooks[0])
 }
 
-func TestUT_SuggestTagHooksConfig_NoShellHooks(t *testing.T) {
+func TestUT_SuggestTagHooksConfig_BatchIgnored(t *testing.T) {
 	findings := []HookFinding{
-		{Path: "hooks/pre_gen_project.py", Kind: string(HookKindPython)},
-		{Path: "hooks/post_gen_project.py", Kind: string(HookKindPython)},
+		{Path: "hooks/pre_gen_project.bat", Kind: string(HookKindBatch)},
 	}
 
 	preHooks, postHooks := SuggestTagHooksConfig(findings)

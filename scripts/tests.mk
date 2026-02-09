@@ -11,7 +11,6 @@ test-unit: ## Run unit tests
 	@${GOBIN}/gotest -coverprofile $(COVER_OUTPUT_RAW) --short -cover  -failfast ./...
 
 test-integration: build test-integration-pipeline ## Run all integration tests
-	ENV=DEV ./tag -p example/_templates generate fakr --meta foo=bar,bin=baz,enum_list=a-long-list
 
 test-integration-pipeline: ## Run Cookiecutter→TAG pipeline integration tests
 	@go test -v ./internal/integration/...
