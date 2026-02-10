@@ -91,21 +91,31 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── init.go             - Initialize tag directory structure
     │       ├── new.go              - Create new generator template
     │       ├── bundle.go           - Create new bundle
-    │       ├── generate.go         - Code generation command
+    │       ├── generate.go         - Code generation command + execution
+    │       ├── generate_list.go    - Generator/bundle discovery and display
+    │       ├── generate_resolve.go - Generator/bundle path resolution
     │       ├── scaffold.go         - Project scaffolding command
-    │       └── convert.go          - Cookiecutter conversion command
+    │       ├── convert.go          - Cookiecutter conversion command
+    │       ├── library.go          - Template library commands
+    │       ├── run.go              - Run command (template-bundled generators)
+    │       ├── flags.go            - Shared CLI flag definitions
+    │       └── validate.go         - Input validation helpers
     │
     ├── internal/scaffold/      Scaffold orchestration
-    │       ├── scaffold.go         - Main scaffolding logic
+    │       ├── scaffold.go         - Main scaffolding logic (phased via runContext)
     │       ├── variables.go        - Variable collection and prompting
     │       ├── types.go            - TemplateConfig, VariableDef, Options
     │       ├── processor.go        - Path placeholder processing (Gonja)
-    │       ├── hooks.go            - Pre/post scaffold hook execution
-    │       ├── hookenv.go          - Hook environment variable building
     │       ├── prompt.go           - Interactive prompting utilities
     │       ├── output.go           - Output directory handling
     │       ├── cookiecutter_detect.go - Cookiecutter template detection
     │       └── errors.go           - Custom error types
+    │
+    ├── internal/hooks/         Hook execution (extracted from scaffold)
+    │       ├── hooks.go            - Runner interface, confirmation, execution
+    │       ├── hookenv.go          - Hook environment variable building
+    │       ├── interpreter.go      - Script interpreter resolution (shebang, extension)
+    │       └── errors.go           - HookError type and sentinels
     │
     ├── internal/convert/       Cookiecutter conversion
     │       ├── cookiecutter.go     - Converter orchestration
@@ -143,6 +153,15 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── types.go            - Generator bundle types
     │       └── interfaces.go       - Generator interface definitions
     │
+    ├── internal/library/       Template library management
+    │       ├── library.go          - Library operations (install, list, resolve)
+    │       ├── registry.go         - Registry file management
+    │       ├── types.go            - Library entry types
+    │       └── errors.go           - Custom error types
+    │
+    ├── internal/parse/         Shared parsing utilities
+    │       └── meta.go             - Meta-flag key=value parser (used by commands + scaffold)
+    │
     ├── internal/config/        Configuration management
     │       ├── config.go           - Config file loading
     │       └── validate.go         - Config validation
@@ -155,6 +174,7 @@ main.go                         CLI entry point (urfave/cli/v2)
     ├── internal/chalk/         Terminal color/styling
     ├── internal/types/         Type definitions and flag constants
     ├── internal/writer/        File writing and code injection
+    ├── internal/xdg/           XDG base directory support
     │
     ├── pkg/app/                Error handling (CommandError, Errorf)
     └── pkg/prettylog/          Custom slog handler with colored output
