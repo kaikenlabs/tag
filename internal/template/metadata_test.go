@@ -392,6 +392,18 @@ func TestUT_ParseMetadata_DuplicateKeys(t *testing.T) {
 	assert.Equal(t, "second/path.go", got.To) // Last value wins
 }
 
+func TestUT_ParseMetadata_CommentsSkipped(t *testing.T) {
+	rendered := "to: output/file.go\n# inject: true\n# after: // marker\nnotes: hello"
+
+	got, err := ParseMetadata(rendered)
+
+	require.NoError(t, err)
+	assert.Equal(t, "output/file.go", got.To)
+	assert.Equal(t, ActionCreate, got.Action)
+	assert.Equal(t, "hello", got.Notes)
+	assert.Empty(t, got.InjectClause)
+}
+
 func TestUT_RenderAndParseMetadata(t *testing.T) {
 	engine, err := NewEngine()
 	require.NoError(t, err)

@@ -120,6 +120,11 @@ func resolveLibraryTagDir(libName string) (string, error) {
 
 var newGeneratorTemplate = `---
 to: %s/{{ name | snake }}.go
+# inject: true
+# before: "// marker"
+# after: "// marker"
+# append: true
+# notes: "generator notes"
 ---
 package %s
 
