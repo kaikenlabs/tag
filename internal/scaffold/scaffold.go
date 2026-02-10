@@ -3,6 +3,7 @@ package scaffold
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,7 @@ type Scaffold struct {
 	engine     template.TemplateRenderer
 	prompter   Prompter
 	hookRunner HookRunner // Executes pre/post scaffold hooks
+	output     io.Writer  // Destination for user-facing messages (default: os.Stdout)
 }
 
 // NewScaffold creates a new scaffold instance with default dependencies.
@@ -60,6 +62,7 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 		engine:     engine,
 		prompter:   prompter,
 		hookRunner: NewHookRunner(),
+		output:     os.Stdout,
 	}, nil
 }
 
@@ -330,13 +333,14 @@ func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, e
 
 // displaySummary prints a summary of the scaffolding operation.
 func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string]any, opts Options) {
-	fmt.Println()
-	fmt.Println("Scaffolding complete!")
-	fmt.Printf("  Output: %s\n", outputDir)
+	w := s.output
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Scaffolding complete!")
+	fmt.Fprintf(w, "  Output: %s\n", outputDir)
 
 	// Show key variables
 	if projectName, ok := vars["project_name"].(string); ok {
-		fmt.Printf("  Project: %s\n", projectName)
+		fmt.Fprintf(w, "  Project: %s\n", projectName)
 	}
 
 	// Show template origin
@@ -345,23 +349,23 @@ func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string
 		if opts.TemplateVersion != "" {
 			version = " (" + opts.TemplateVersion + ")"
 		}
-		fmt.Printf("  Template: %s%s\n", opts.TemplateRef, version)
+		fmt.Fprintf(w, "  Template: %s%s\n", opts.TemplateRef, version)
 	}
 
-	fmt.Println()
-	fmt.Println("Next steps:")
-	fmt.Printf("  cd %s\n", outputDir)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Next steps:")
+	fmt.Fprintf(w, "  cd %s\n", outputDir)
 
 	// Check if the template has generators
 	hasGenerators := hasSubdir(templateDir, types.TemplatesDir) || hasSubdir(templateDir, types.GeneratorsDir)
 
 	if hasGenerators && opts.TemplateName != "" {
-		fmt.Println("  tag generate list    # see available generators")
+		fmt.Fprintln(w, "  tag generate list    # see available generators")
 	} else if hasGenerators && opts.TemplateName == "" {
-		fmt.Println()
-		fmt.Printf("  Add to library for generators: tag lib add %s\n", opts.TemplateRef)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "  Add to library for generators: tag lib add %s\n", opts.TemplateRef)
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	// Display template README if present
 	readmePath := filepath.Join(templateDir, types.TemplateReadme)
@@ -369,9 +373,9 @@ func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string
 		rendered, err := glamour.Render(string(content), "auto")
 		if err != nil {
 			// Fallback: print raw markdown
-			fmt.Println(string(content))
+			fmt.Fprintln(w, string(content))
 		} else {
-			fmt.Print(rendered)
+			fmt.Fprint(w, rendered)
 		}
 	}
 }

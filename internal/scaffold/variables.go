@@ -386,16 +386,3 @@ func getSortedVarNames(vars map[string]VariableDef) []string {
 	slices.Sort(names)
 	return names
 }
-
-// ParseMetaFlags parses a slice of "key=value" strings into a map.
-func ParseMetaFlags(flags []string) (map[string]string, error) {
-	result := make(map[string]string)
-	for _, flag := range flags {
-		parts := strings.SplitN(flag, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid meta flag format: %q (expected key=value)", flag)
-		}
-		result[parts[0]] = parts[1]
-	}
-	return result, nil
-}

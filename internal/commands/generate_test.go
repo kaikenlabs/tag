@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -719,9 +721,11 @@ func TestUT_GenerateList_NoGenerators(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg)
+	var buf bytes.Buffer
+	err := generateList(cfg, &buf)
 
 	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "No generators found.")
 }
 
 func TestUT_GenerateList_LocalGenerators(t *testing.T) {
@@ -735,9 +739,15 @@ func TestUT_GenerateList_LocalGenerators(t *testing.T) {
 
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg)
+	var buf bytes.Buffer
+	err := generateList(cfg, &buf)
 
 	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "component")
+	assert.Contains(t, output, "page")
+	assert.NotContains(t, output, "_shared")
+	assert.Contains(t, output, "PROJECT GENERATORS")
 }
 
 func TestUT_GenerateList_GeneratorWithDescription(t *testing.T) {
@@ -751,7 +761,7 @@ func TestUT_GenerateList_GeneratorWithDescription(t *testing.T) {
 
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg)
+	err := generateList(cfg, io.Discard)
 
 	require.NoError(t, err)
 }
@@ -767,13 +777,13 @@ func TestUT_GenerateList_WithBundles(t *testing.T) {
 
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg)
+	err := generateList(cfg, io.Discard)
 
 	require.NoError(t, err)
 }
 
 func TestUT_GenerateList_NoConfig(t *testing.T) {
-	err := generateList(nil)
+	err := generateList(nil, io.Discard)
 
 	require.Error(t, err)
 }

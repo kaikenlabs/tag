@@ -4,14 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/kaikenlabs/tag/internal/types"
-	"github.com/kaikenlabs/tag/internal/types/flags"
-	"github.com/kaikenlabs/tag/pkg/app"
 
 	"github.com/urfave/cli/v2"
 
@@ -21,6 +18,9 @@ import (
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
+	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
 )
 
 // newEngine is a function variable that creates a new engine.
@@ -86,7 +86,7 @@ func generateListCommand(cfg *config.Config) *cli.Command {
 		Aliases: []string{"ls"},
 		Usage:   "List available generators and bundles",
 		Action: func(c *cli.Context) error {
-			return generateList(cfg)
+			return generateList(cfg, os.Stdout)
 		},
 	}
 }
@@ -98,7 +98,7 @@ type generatorInfo struct {
 	Source      string // "template" or "local"
 }
 
-func generateList(cfg *config.Config) error {
+func generateList(cfg *config.Config, w io.Writer) error {
 	if err := config.CheckConfig(cfg); err != nil {
 		return err
 	}
@@ -131,11 +131,11 @@ func generateList(cfg *config.Config) error {
 
 	// Check if there's anything to show
 	if len(templateGens) == 0 && len(localGens) == 0 && len(templateBundles) == 0 && len(localBundles) == 0 {
-		fmt.Println("No generators found.")
+		fmt.Fprintln(w, "No generators found.")
 		if templateName == "" {
-			fmt.Println()
-			fmt.Println("This project was not scaffolded from a library template.")
-			fmt.Println("Create generators in .tag.templates/ or scaffold from a template with generators.")
+			fmt.Fprintln(w)
+			fmt.Fprintln(w, "This project was not scaffolded from a library template.")
+			fmt.Fprintln(w, "Create generators in .tag.templates/ or scaffold from a template with generators.")
 		}
 		return nil
 	}
@@ -146,51 +146,51 @@ func generateList(cfg *config.Config) error {
 		if templateVersion != "" {
 			version = "@" + templateVersion
 		}
-		fmt.Printf("Generators for this project (template: %s%s)\n\n", templateSource, version)
+		fmt.Fprintf(w, "Generators for this project (template: %s%s)\n\n", templateSource, version)
 	} else {
-		fmt.Println("Available generators:")
-		fmt.Println()
+		fmt.Fprintln(w, "Available generators:")
+		fmt.Fprintln(w)
 	}
 
 	// Print template generators
 	if len(templateGens) > 0 {
-		fmt.Printf("  %s (%s)\n", chalk.Green("TEMPLATE GENERATORS"), templateName)
+		fmt.Fprintf(w, "  %s (%s)\n", chalk.Green("TEMPLATE GENERATORS"), templateName)
 		for _, g := range templateGens {
-			printGeneratorLine(g)
+			printGeneratorLine(w, g)
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
 	// Print local generators
 	if len(localGens) > 0 {
-		fmt.Printf("  %s\n", chalk.Green("PROJECT GENERATORS"))
+		fmt.Fprintf(w, "  %s\n", chalk.Green("PROJECT GENERATORS"))
 		for _, g := range localGens {
-			printGeneratorLine(g)
+			printGeneratorLine(w, g)
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
 	// Print bundles
 	if len(templateBundles) > 0 || len(localBundles) > 0 {
-		fmt.Printf("  %s\n", chalk.Green("BUNDLES"))
+		fmt.Fprintf(w, "  %s\n", chalk.Green("BUNDLES"))
 		for _, b := range templateBundles {
-			printGeneratorLine(b)
+			printGeneratorLine(w, b)
 		}
 		for _, b := range localBundles {
-			printGeneratorLine(b)
+			printGeneratorLine(w, b)
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
-	fmt.Println("Run: tag generate <name> <target> [args]")
+	fmt.Fprintln(w, "Run: tag generate <name> <target> [args]")
 	return nil
 }
 
-func printGeneratorLine(g generatorInfo) {
+func printGeneratorLine(w io.Writer, g generatorInfo) {
 	if g.Description != "" {
-		fmt.Printf("  %-20s %s\n", g.Name, g.Description)
+		fmt.Fprintf(w, "  %-20s %s\n", g.Name, g.Description)
 	} else {
-		fmt.Printf("  %s\n", g.Name)
+		fmt.Fprintf(w, "  %s\n", g.Name)
 	}
 }
 
