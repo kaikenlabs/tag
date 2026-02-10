@@ -36,6 +36,13 @@ func GenerateCommand(cfg *config.Config) *cli.Command {
 		Action: func(c *cli.Context) error {
 			return generateAction(c, cfg)
 		},
+		BashComplete: func(c *cli.Context) {
+			// Only complete the first argument (generator/bundle name)
+			if c.NArg() > 0 {
+				return
+			}
+			completeGeneratorNames(cfg)
+		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "bundle",

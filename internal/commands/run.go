@@ -33,8 +33,9 @@ EXAMPLES:
 
   # With variable overrides
   tag run go-api my-service -m author="Jane Doe"`,
-		Flags:  commonScaffoldFlags(),
-		Action: runAction,
+		Flags:        commonScaffoldFlags(),
+		Action:       runAction,
+		BashComplete: completeLibraryTemplateNames,
 	}
 }
 

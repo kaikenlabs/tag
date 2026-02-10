@@ -203,6 +203,21 @@ Following Cookiecutter's behavior, derived variables (those whose defaults refer
 
 Only `display_name` is prompted; `package_name` is computed as `my_package`.
 
+## Shell Completion
+
+TAG supports shell completion for commands, flags, generator names, and library templates.
+
+```bash
+# Bash (add to ~/.bashrc)
+source <(tag completion bash)
+
+# Zsh (add to ~/.zshrc)
+source <(tag completion zsh)
+
+# Fish
+tag completion fish | source
+```
+
 ## Commands
 
 | Command | Description |
@@ -213,6 +228,7 @@ Only `display_name` is prompted; `package_name` is computed as `my_package`.
 | `tag init` | Initialize TAG in a project |
 | `tag new <name>` | Create a new generator |
 | `tag new-bundle <name>` | Create a new bundle |
+| `tag completion <shell>` | Output shell completion script |
 
 ## Global Flags
 

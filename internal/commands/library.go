@@ -188,10 +188,11 @@ func libListCommand() *cli.Command {
 
 func libRemoveCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "rm",
-		Aliases:   []string{"remove"},
-		Usage:     "Remove a template from the library",
-		ArgsUsage: "<name>",
+		Name:         "rm",
+		Aliases:      []string{"remove"},
+		Usage:        "Remove a template from the library",
+		ArgsUsage:    "<name>",
+		BashComplete: completeLibraryTemplateNames,
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 1 {
 				return app.Errorf("template name is required\n\nUsage: tag lib rm <name>")
@@ -215,9 +216,10 @@ func libRemoveCommand() *cli.Command {
 
 func libUpdateCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "update",
-		Usage:     "Update a template (or all templates) from the original source",
-		ArgsUsage: "[name]",
+		Name:         "update",
+		Usage:        "Update a template (or all templates) from the original source",
+		ArgsUsage:    "[name]",
+		BashComplete: completeLibraryTemplateNames,
 		Action: func(c *cli.Context) error {
 			lib, err := newLibrary()
 			if err != nil {
@@ -263,9 +265,10 @@ func updateAllTemplates(c *cli.Context, lib *library.Library) error {
 
 func libInspectCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "inspect",
-		Usage:     "Show detailed information about a template",
-		ArgsUsage: "<name>",
+		Name:         "inspect",
+		Usage:        "Show detailed information about a template",
+		ArgsUsage:    "<name>",
+		BashComplete: completeLibraryTemplateNames,
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 1 {
 				return app.Errorf("template name is required\n\nUsage: tag lib inspect <name>")
@@ -390,9 +393,10 @@ func asAppError(err error) error {
 
 func libEditCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "edit",
-		Usage:     "Print the template path (for editing with your preferred tools)",
-		ArgsUsage: "<name>",
+		Name:         "edit",
+		Usage:        "Print the template path (for editing with your preferred tools)",
+		ArgsUsage:    "<name>",
+		BashComplete: completeLibraryTemplateNames,
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 1 {
 				return app.Errorf("template name is required\n\nUsage: tag lib edit <name>")

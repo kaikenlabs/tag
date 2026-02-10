@@ -37,8 +37,9 @@ func main() {
 	}
 
 	tag := &cli.App{
-		Version: Version,
-		Name:    AppName,
+		Version:              Version,
+		Name:                 AppName,
+		EnableBashCompletion: true,
 		Commands: []*cli.Command{
 			commands.InitCommand(),
 			commands.NewCommand(cfg),
@@ -78,6 +79,8 @@ func main() {
 			},
 		},
 	}
+	tag.Commands = append(tag.Commands, commands.CompletionCommand(tag))
+
 	if err := tag.Run(os.Args); err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
