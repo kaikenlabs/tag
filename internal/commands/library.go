@@ -4,11 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 
+	"github.com/manifoldco/promptui"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/term"
 
+	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -323,22 +328,22 @@ func printInspect(entry *library.Entry, templateDir string) {
 		return
 	}
 
-	config, err := scaffold.ParseTemplateConfig(data)
+	tmplConfig, err := scaffold.ParseTemplateConfig(data)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not parse %s: %v\n", types.TemplateConfigFile, err)
 		return
 	}
 
-	if len(config.Vars) > 0 {
+	if len(tmplConfig.Vars) > 0 {
 		fmt.Println()
 		fmt.Println("Variables:")
-		names := make([]string, 0, len(config.Vars))
-		for name := range config.Vars {
+		names := make([]string, 0, len(tmplConfig.Vars))
+		for name := range tmplConfig.Vars {
 			names = append(names, name)
 		}
 		slices.Sort(names)
 		for _, name := range names {
-			v := config.Vars[name]
+			v := tmplConfig.Vars[name]
 			switch {
 			case v.Type == scaffold.VarTypeChoice:
 				fmt.Printf("  %-20s (choice: %s)\n", name, joinOptions(v.Options))
@@ -352,20 +357,20 @@ func printInspect(entry *library.Entry, templateDir string) {
 		}
 	}
 
-	if config.Hooks != nil {
-		hasHooks := len(config.Hooks.PreScaffold) > 0 || len(config.Hooks.PostScaffold) > 0
+	if tmplConfig.Hooks != nil {
+		hasHooks := len(tmplConfig.Hooks.PreScaffold) > 0 || len(tmplConfig.Hooks.PostScaffold) > 0
 		if hasHooks {
 			fmt.Println()
 			fmt.Println("Hooks:")
-			if len(config.Hooks.PreScaffold) > 0 {
+			if len(tmplConfig.Hooks.PreScaffold) > 0 {
 				fmt.Println("  pre_scaffold:")
-				for _, cmd := range config.Hooks.PreScaffold {
+				for _, cmd := range tmplConfig.Hooks.PreScaffold {
 					fmt.Printf("    - %s\n", cmd)
 				}
 			}
-			if len(config.Hooks.PostScaffold) > 0 {
+			if len(tmplConfig.Hooks.PostScaffold) > 0 {
 				fmt.Println("  post_scaffold:")
-				for _, cmd := range config.Hooks.PostScaffold {
+				for _, cmd := range tmplConfig.Hooks.PostScaffold {
 					fmt.Printf("    - %s\n", cmd)
 				}
 			}
@@ -394,9 +399,15 @@ func asAppError(err error) error {
 func libEditCommand() *cli.Command {
 	return &cli.Command{
 		Name:         "edit",
-		Usage:        "Print the template path (for editing with your preferred tools)",
+		Usage:        "Open a template in your editor",
 		ArgsUsage:    "<name>",
 		BashComplete: completeLibraryTemplateNames,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "editor",
+				Usage: "Editor command to use (e.g. 'code', 'vim')",
+			},
+		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 1 {
 				return app.Errorf("template name is required\n\nUsage: tag lib edit <name>")
@@ -408,13 +419,127 @@ func libEditCommand() *cli.Command {
 			}
 
 			name := c.Args().Get(0)
-			path, err := lib.TemplatePath(name)
+			templatePath, err := lib.TemplatePath(name)
 			if err != nil {
 				return asAppError(err)
 			}
 
-			fmt.Println(path)
+			editor, err := resolveEditor(c.String("editor"))
+			if err != nil {
+				return err
+			}
+
+			args := splitEditorArgs(editor)
+			args = append(args, templatePath)
+
+			cmd := exec.CommandContext(c.Context, args[0], args[1:]...) //nolint:gosec // editor command is user-configured
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+
+			if err := cmd.Run(); err != nil {
+				return app.Errorf("editor exited with error: %w", err)
+			}
 			return nil
 		},
 	}
+}
+
+// editorSource describes where the editor was resolved from, for testability.
+type editorSource struct {
+	loadConfig func() (*config.GlobalConfig, error)
+	saveConfig func(*config.GlobalConfig) error
+	getenv     func(string) string
+	isTTY      func() bool
+	prompt     func() (string, error)
+}
+
+// defaultEditorSource returns the production editor source.
+func defaultEditorSource() *editorSource {
+	return &editorSource{
+		loadConfig: config.LoadGlobalConfig,
+		saveConfig: config.SaveGlobalConfig,
+		getenv:     os.Getenv,
+		isTTY:      func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
+		prompt:     promptEditorInput,
+	}
+}
+
+// resolveEditor determines which editor to use.
+// Resolution order: flag → global config → $VISUAL → $EDITOR → interactive prompt → error.
+func resolveEditor(flagValue string) (string, error) {
+	return defaultEditorSource().resolve(flagValue)
+}
+
+func (s *editorSource) resolve(flagValue string) (string, error) {
+	// 1. --editor flag
+	if flagValue != "" {
+		return flagValue, nil
+	}
+
+	// 2. Global TAG config
+	cfg, err := s.loadConfig()
+	if err == nil && cfg.Editor != "" {
+		return cfg.Editor, nil
+	}
+
+	// 3. $VISUAL
+	if v := s.getenv("VISUAL"); v != "" {
+		return v, nil
+	}
+
+	// 4. $EDITOR
+	if v := s.getenv("EDITOR"); v != "" {
+		return v, nil
+	}
+
+	// 5. Interactive prompt (TTY only)
+	if !s.isTTY() {
+		return "", app.Errorf("no editor configured\n\nSet one with:\n  tag lib edit --editor <cmd> <name>\n  export EDITOR=<cmd>\n  export VISUAL=<cmd>")
+	}
+
+	editor, err := s.prompt()
+	if err != nil {
+		return "", err
+	}
+	if editor == "" {
+		return "", app.Errorf("no editor configured\n\nSet one with:\n  tag lib edit --editor <cmd> <name>\n  export EDITOR=<cmd>\n  export VISUAL=<cmd>")
+	}
+
+	// Save for future use
+	s.saveEditorPreference(editor)
+
+	return editor, nil
+}
+
+func (s *editorSource) saveEditorPreference(editor string) {
+	saveCfg := &config.GlobalConfig{Editor: editor}
+	if existing, loadErr := s.loadConfig(); loadErr == nil {
+		existing.Editor = editor
+		saveCfg = existing
+	}
+	if saveErr := s.saveConfig(saveCfg); saveErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not save editor preference: %v\n", saveErr)
+	}
+}
+
+// promptEditorInput asks the user to type their preferred editor command.
+func promptEditorInput() (string, error) {
+	prompt := promptui.Prompt{
+		Label: "Enter your preferred editor command (e.g. code, vim, nano)",
+	}
+	result, err := prompt.Run()
+	if err != nil {
+		if errors.Is(err, promptui.ErrInterrupt) {
+			return "", app.Errorf("cancelled")
+		}
+		return "", app.Errorf("prompt failed: %w", err)
+	}
+	return strings.TrimSpace(result), nil
+}
+
+// splitEditorArgs splits an editor command string into command and arguments.
+// For example, "code --wait" becomes ["code", "--wait"].
+func splitEditorArgs(editor string) []string {
+	return strings.Fields(editor)
 }
