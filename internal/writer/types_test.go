@@ -4,13 +4,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 func TestInject_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
 		matcher string
-		clause  InjectClause
+		clause  types.InjectClause
 		want    error
 	}{
 		{
@@ -28,7 +30,7 @@ func TestInject_Validate(t *testing.T) {
 		{
 			name:    "should return false if matcher is missing",
 			matcher: "",
-			clause:  InjectAfter,
+			clause:  types.InjectAfter,
 			want:    ErrNoMatchingExpression,
 		},
 	}

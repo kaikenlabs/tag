@@ -72,6 +72,12 @@ func (s *Scaffold) Run(opts Options) error {
 		return fmt.Errorf("%w: %s", ErrTemplateNotFound, opts.TemplateDir)
 	}
 
+	// Resolve working directory once (reused for template dir and output dir resolution)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
 	// Step 2: Load and validate tag.template.json
 	config, err := s.loadAndValidateConfig(opts.TemplateDir)
 	if err != nil {
@@ -97,11 +103,6 @@ func (s *Scaffold) Run(opts Options) error {
 	// Step 3: Make template directory absolute for hooks
 	templateDirAbs := opts.TemplateDir
 	if !filepath.IsAbs(templateDirAbs) {
-		var cwd string
-		cwd, err = os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
-		}
 		templateDirAbs = filepath.Join(cwd, templateDirAbs)
 	}
 
@@ -132,7 +133,7 @@ func (s *Scaffold) Run(opts Options) error {
 	}
 
 	// Step 6: Resolve output directory
-	outputDir, err := resolveOutputDir(opts.OutputDir, vars)
+	outputDir, err := resolveOutputDir(opts.OutputDir, vars, cwd)
 	if err != nil {
 		return err
 	}
@@ -218,7 +219,8 @@ func (s *Scaffold) Run(opts Options) error {
 }
 
 // resolveOutputDir determines and returns the absolute output directory path.
-func resolveOutputDir(outputDir string, vars map[string]any) (string, error) {
+// The cwd parameter is the caller's cached working directory, avoiding duplicate os.Getwd() calls.
+func resolveOutputDir(outputDir string, vars map[string]any, cwd string) (string, error) {
 	if outputDir == "" {
 		if projectName, ok := vars["project_name"].(string); ok && projectName != "" {
 			outputDir = projectName
@@ -228,10 +230,6 @@ func resolveOutputDir(outputDir string, vars map[string]any) (string, error) {
 	}
 
 	if !filepath.IsAbs(outputDir) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("failed to get working directory: %w", err)
-		}
 		outputDir = filepath.Join(cwd, outputDir)
 	}
 

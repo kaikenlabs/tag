@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/kaikenlabs/tag/internal/fileutil"
 )
 
 // ValidateNameSafe checks that a CLI-provided name is safe to use as a path segment.
@@ -28,9 +26,4 @@ func ValidateNameSafe(name string) error {
 	}
 
 	return nil
-}
-
-// ValidatePathContainment checks that the resolved path stays within the base directory.
-func ValidatePathContainment(basePath, fullPath string) error {
-	return fileutil.ValidatePathContainment(basePath, fullPath)
 }

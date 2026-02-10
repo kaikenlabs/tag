@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -80,39 +79,6 @@ func TestUT_ValidateNameSafe_RejectsTrailingSlash(t *testing.T) {
 	err := ValidateNameSafe("name/")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "path separator")
-}
-
-func TestUT_ValidatePathContainment_ValidPaths(t *testing.T) {
-	base := "/base/path"
-	tests := []string{
-		filepath.Join(base, "child"),
-		filepath.Join(base, "child", "grandchild"),
-		base, // path equals base is allowed
-	}
-
-	for _, path := range tests {
-		t.Run(path, func(t *testing.T) {
-			err := ValidatePathContainment(base, path)
-			assert.NoError(t, err)
-		})
-	}
-}
-
-func TestUT_ValidatePathContainment_RejectsEscape(t *testing.T) {
-	base := "/base/path"
-	tests := []string{
-		"/other/path",
-		"/base/other",
-		filepath.Join(base, "..", "escape"),
-	}
-
-	for _, path := range tests {
-		t.Run(path, func(t *testing.T) {
-			err := ValidatePathContainment(base, path)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "escapes base directory")
-		})
-	}
 }
 
 func TestUT_GenerateAction_PathTraversal(t *testing.T) {

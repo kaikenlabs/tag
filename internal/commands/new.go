@@ -10,6 +10,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -50,7 +51,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	slog.Info(chalk.Green("creating new generator"), "path", cfg.Env.Path)
 	dirPath := filepath.Join(cfg.Env.Path, generator, generator+".go")
 
-	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
+	if err := fileutil.ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {

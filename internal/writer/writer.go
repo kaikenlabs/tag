@@ -17,35 +17,19 @@ const (
 
 // NewFileWriter creates a new writer with a cached working directory,
 // returning the FileWriter interface for dependency injection.
-func NewFileWriter(dryRun bool) (FileWriter, error) {
-	w, err := New(dryRun)
-	if err != nil {
-		return nil, err
-	}
-	return &w, nil
-}
-
-// New creates a new writer with a cached working directory.
 // The working directory is resolved once at construction time and reused
 // for path containment validation on every write operation.
-//
-// Deprecated: Use NewFileWriter instead, which returns the FileWriter interface.
-func New(dryRun bool) (Write, error) {
+func NewFileWriter(dryRun bool) (FileWriter, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return Write{}, fmt.Errorf("cannot determine working directory: %w", err)
+		return nil, fmt.Errorf("cannot determine working directory: %w", err)
 	}
-	return Write{
+	w := Write{
 		mx:  sync.Mutex{},
 		fs:  setFileWriter(dryRun),
 		cwd: cwd,
-	}, nil
-}
-
-// validatePathWithinDir ensures that path stays within the base directory.
-// This prevents path traversal attacks where template output paths could escape the working directory.
-func validatePathWithinDir(path, baseDir string) error {
-	return fileutil.ValidatePathContainment(baseDir, path)
+	}
+	return &w, nil
 }
 
 // WriteFile thin wrapper to decouple dependency of write file.
@@ -55,7 +39,7 @@ func (w *Write) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	if err := validatePathWithinDir(name, w.cwd); err != nil {
+	if err := fileutil.ValidatePathContainment(w.cwd, name); err != nil {
 		return fmt.Errorf("path safety check failed: %w", err)
 	}
 
@@ -69,7 +53,7 @@ func (w *Write) AppendFile(name string, data []byte) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	if err := validatePathWithinDir(name, w.cwd); err != nil {
+	if err := fileutil.ValidatePathContainment(w.cwd, name); err != nil {
 		return fmt.Errorf("path safety check failed: %w", err)
 	}
 
@@ -100,7 +84,7 @@ func (w *Write) InjectIntoFile(name string, data []byte, inject Inject) error {
 	w.mx.Lock()
 	defer w.mx.Unlock()
 
-	if err := validatePathWithinDir(name, w.cwd); err != nil {
+	if err := fileutil.ValidatePathContainment(w.cwd, name); err != nil {
 		return fmt.Errorf("path safety check failed: %w", err)
 	}
 

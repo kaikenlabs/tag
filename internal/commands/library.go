@@ -62,7 +62,10 @@ func newLibrary() (*library.Library, error) {
 }
 
 // newLocalLibrary creates a library without a resolver (for ls, inspect, edit, rm).
-func newLocalLibrary() (*library.Library, error) {
+// It is a package-level variable to allow test substitution.
+var newLocalLibrary = defaultNewLocalLibrary
+
+func defaultNewLocalLibrary() (*library.Library, error) {
 	dataDir, err := xdg.DataHome()
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine data directory: %w", err)

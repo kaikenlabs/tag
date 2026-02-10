@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -263,7 +263,7 @@ func (c *DefaultVariableCollector) validateRequired(config *TemplateConfig, vars
 	}
 
 	if len(missing) > 0 {
-		sort.Strings(missing)
+		slices.Sort(missing)
 		return fmt.Errorf("%w: %s", ErrRequiredVariableMissing, strings.Join(missing, ", "))
 	}
 
@@ -383,7 +383,7 @@ func getSortedVarNames(vars map[string]VariableDef) []string {
 	for name := range vars {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 
