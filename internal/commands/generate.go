@@ -2,22 +2,18 @@ package commands
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
-
-	"github.com/kaikenlabs/tag/internal/types"
-	"github.com/kaikenlabs/tag/internal/types/flags"
-	"github.com/kaikenlabs/tag/pkg/app"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
-	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
 )
 
 // newEngine is a function variable that creates a new engine.
@@ -30,16 +26,22 @@ var newBundleEngine = engine.NewGeneratorWithEngine
 
 func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
-		Name: "generate",
-		Usage: fmt.Sprintf("runs a %s with the specified %s passing the arguments %s. Use %s if you want to generate a bundle",
-			chalk.Green("bundle or generator"),
-			chalk.Green("name"),
-			chalk.Green("args"),
-			chalk.Yellow("'-b or --bundle'")),
+		Name:  "generate",
+		Usage: "Run a generator or bundle",
+		Subcommands: []*cli.Command{
+			generateListCommand(cfg),
+		},
 		Args:      true,
 		ArgsUsage: "<bundle-or-generator> <name> <args>",
 		Action: func(c *cli.Context) error {
 			return generateAction(c, cfg)
+		},
+		BashComplete: func(c *cli.Context) {
+			// Only complete the first argument (generator/bundle name)
+			if c.NArg() > 0 {
+				return
+			}
+			completeGeneratorNames(cfg)
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
@@ -98,18 +100,17 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 
 func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
 	if !c.Bool("no-hooks") {
-		if err := runHooks(cfg.Hooks.Pre, scaffold.HookPhasePreGen); err != nil {
+		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen); err != nil {
 			return err
 		}
 	}
 
-	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), generatorName, generatorName+types.BundleExtension)
-
-	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
-		return app.Errorf("path safety check failed: %w", err)
+	bundlePath, err := resolveBundlePath(cfg, generatorName, c.Path(flags.BundlePathFlag))
+	if err != nil {
+		return err
 	}
 
-	data, err := os.ReadFile(dirPath)
+	data, err := os.ReadFile(bundlePath)
 	if err != nil {
 		return app.Errorf("cannot open bundle file: %w", err)
 	}
@@ -128,54 +129,48 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	}
 
 	dryRun := c.Bool(flags.DryRunFlag)
-	sharedPath := filepath.Join(cfg.Env.Path, c.Path(flags.SharedPathFlag))
 
 	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
 	for _, generator := range bundle.Generators {
-		genDirPath := filepath.Join(cfg.Env.Path, generator.Name)
-
-		if err := ValidatePathContainment(cfg.Env.Path, genDirPath); err != nil {
-			return app.Errorf("path safety check failed: %w", err)
-		}
-		if _, err := os.ReadDir(genDirPath); err != nil {
-			return app.Errorf("generator %s not found in: %s", generator.Name, cfg.Env.Path)
+		// Resolve each generator independently (supports mixed-source bundles)
+		genDirPath, sharedPath, resolveErr := resolveGeneratorPaths(cfg, generator.Name)
+		if resolveErr != nil {
+			return resolveErr
 		}
 
-		gen, err := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath)
-		if err != nil {
-			return app.Errorf("error creating engine: %w", err)
+		gen, genErr := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath)
+		if genErr != nil {
+			return app.Errorf("error creating engine: %w", genErr)
 		}
 
-		err = gen.Generate(engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)})
-		if err != nil {
+		genData := engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)}
+		if cfg.Variables != nil {
+			genData.ScaffoldVars = cfg.Variables
+		}
+
+		if err := gen.Generate(genData); err != nil {
 			return app.Errorf("error when generating template: %w", err)
 		}
 	}
 
 	if !c.Bool("no-hooks") {
-		return runHooks(cfg.Hooks.Post, scaffold.HookPhasePostGen)
+		return runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen)
 	}
 	return nil
 }
 
 func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
 	if !c.Bool("no-hooks") {
-		if err := runHooks(cfg.Hooks.Pre, scaffold.HookPhasePreGen); err != nil {
+		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen); err != nil {
 			return err
 		}
 	}
 
-	dirPath := filepath.Join(cfg.Env.Path, generatorName)
-
-	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
-		return app.Errorf("path safety check failed: %w", err)
-	}
-
-	_, err := os.ReadDir(dirPath)
+	// Resolve generator paths using library-first, local-fallback resolution
+	dirPath, sharedPath, err := resolveGeneratorPaths(cfg, generatorName)
 	if err != nil {
-		return app.Errorf("generator %s not found in: %s", generatorName, cfg.Env.Path)
+		return err
 	}
-	sharedPath := filepath.Join(cfg.Env.Path, c.Path(flags.SharedPathFlag))
 
 	slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
 
@@ -184,19 +179,24 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		return app.Errorf("error creating engine: %w", err)
 	}
 
-	err = gen.Generate(engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)})
+	data := engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)}
+	if cfg.Variables != nil {
+		data.ScaffoldVars = cfg.Variables
+	}
+
+	err = gen.Generate(data)
 	if err != nil {
 		return app.Errorf("error when generating template: %w", err)
 	}
 
 	if !c.Bool("no-hooks") {
-		return runHooks(cfg.Hooks.Post, scaffold.HookPhasePostGen)
+		return runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen)
 	}
 	return nil
 }
 
-func runHooks(hooks [][]string, phase scaffold.HookPhase) error {
-	if len(hooks) == 0 {
+func runHooks(hookCmds [][]string, phase hooks.HookPhase) error {
+	if len(hookCmds) == 0 {
 		return nil
 	}
 
@@ -205,9 +205,9 @@ func runHooks(hooks [][]string, phase scaffold.HookPhase) error {
 		return app.Errorf("failed to get working directory: %w", err)
 	}
 
-	results, err := scaffold.RunArgvHooks(phase, hooks, dir, nil)
+	results, err := hooks.RunArgvHooks(phase, hookCmds, dir, nil)
 
-	scaffold.PrintHookResults(results)
+	hooks.PrintHookResults(results)
 
 	if err != nil {
 		return app.Errorf("hook failed: %w", err)

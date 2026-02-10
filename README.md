@@ -149,7 +149,7 @@ Templates are configured via `tag.template.json`:
 
 ## Generator Templates
 
-For incremental code generation, create templates in `.tag.templates/`:
+For incremental code generation, create templates in `.tag/`:
 
 ```
 ---
@@ -203,6 +203,21 @@ Following Cookiecutter's behavior, derived variables (those whose defaults refer
 
 Only `display_name` is prompted; `package_name` is computed as `my_package`.
 
+## Shell Completion
+
+TAG supports shell completion for commands, flags, generator names, and library templates.
+
+```bash
+# Bash (add to ~/.bashrc)
+source <(tag completion bash)
+
+# Zsh (add to ~/.zshrc)
+source <(tag completion zsh)
+
+# Fish
+tag completion fish | source
+```
+
 ## Commands
 
 | Command | Description |
@@ -211,15 +226,16 @@ Only `display_name` is prompted; `package_name` is computed as `my_package`.
 | `tag generate <generator> <name>` | Run a generator |
 | `tag convert cookiecutter <source>` | Convert Cookiecutter template |
 | `tag init` | Initialize TAG in a project |
-| `tag new <name>` | Create a new generator |
-| `tag new-bundle <name>` | Create a new bundle |
+| `tag new <name> [--lib]` | Create a new generator |
+| `tag new-bundle <name> [--lib]` | Create a new bundle |
+| `tag completion <shell>` | Output shell completion script |
 
 ## Global Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--dry-run` | `-d` | false | Preview without writing |
-| `--path` | `-tp` | `.tag.templates` | Templates directory |
+| `--path` | `-tp` | `.tag` | Templates directory |
 | `--shared` | `-sp` | `_shared` | Shared templates directory |
 
 ## Development

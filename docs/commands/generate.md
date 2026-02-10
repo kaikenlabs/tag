@@ -6,16 +6,29 @@ Run a generator or bundle to add code to an existing project.
 
 ```bash
 tag generate <generator|bundle> <name> [args] [flags]
+tag generate list
 ```
 
 ## Description
 
 The `generate` command runs a generator (or bundle of generators) to add files to your existing project. Unlike `scaffold` which creates new projects, `generate` is for incremental code generation within an existing codebase.
 
-Generators are defined in the `.tag.templates/` directory and can:
+### Generator Resolution
+
+Generators are resolved using a **library-first, local-fallback** strategy:
+
+1. **Library template**: If the project was scaffolded from a library template (recorded in `.tagconfig.json`), generators from that template's `.tag/` directory are checked first.
+2. **Local project**: Generators in the project's `.tag/` directory (configured via `TAG_PATH`) are used as a fallback.
+3. **Local wins on collision**: If both sources have a generator with the same name, the local version takes precedence.
+
+Generators can:
 - Create new files
 - Append to existing files
 - Inject content before/after markers in files
+
+### Scaffold Variables
+
+When a project was scaffolded from a template, the scaffold-time variables (e.g., `project_name`, `use_docker`) are automatically available in generator templates via the `vars.*` namespace. Generator `--meta` values override scaffold variables on name collision.
 
 ## Arguments
 
@@ -31,14 +44,46 @@ Generators are defined in the `.tag.templates/` directory and can:
 |------|-------|-------------|
 | `--bundle` | `-b` | Run a bundle instead of a single generator |
 | `--meta <key=value>` | `-m` | Pass metadata to templates (repeatable) |
+| `--no-hooks` | | Skip execution of pre and post hooks |
 | `--dry-run` | `-d` | Preview output without writing files |
 
 ## Global Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--path` | `-tp` | `.tag.templates` | Templates directory path |
+| `--path` | `-tp` | `.tag` | Templates directory path |
 | `--shared` | `-sp` | `_shared` | Shared templates directory name |
+
+## Subcommands
+
+### `tag generate list`
+
+List all available generators and bundles for the current project.
+
+```bash
+tag generate list
+tag generate ls    # alias
+```
+
+Output shows generators grouped by source (template library vs local project) and bundles. Each generator's description is read from its `tag.template.json` file (if present).
+
+Example output:
+```
+Generators for this project (template: gh:acme/nextjs-starter@v1.2.0)
+
+  TEMPLATE GENERATORS (nextjs-starter)
+  component            Create a React component
+  page                 Create a new page/route
+  api                  Create an API endpoint
+
+  PROJECT GENERATORS
+  custom-hook          Custom React hook generator
+
+  BUNDLES
+  feature              Component + page + test (template)
+
+Run: tag generate <name> <target> [args]
+```
 
 ## Examples
 
@@ -83,7 +128,7 @@ tag generate handler User --dry-run
 
 ```bash
 # Custom templates directory
-tag generate handler User --path custom.tag.templates
+tag generate handler User --path custom.tag
 ```
 
 ## Template Data
@@ -93,7 +138,7 @@ Generators receive the following context variables:
 | Variable | Type | Description |
 |----------|------|-------------|
 | `name` | `string` | The name argument passed to the command |
-| `vars` | `map[string]any` | Key-value pairs from `--meta` flags |
+| `vars` | `map[string]any` | Key-value pairs from scaffold variables + `--meta` flags (meta overrides scaffold) |
 | `n.pascal_case` | `string` | Name in PascalCase |
 | `n.camel_case` | `string` | Name in camelCase |
 | `n.snake_case` | `string` | Name in snake_case |
@@ -123,7 +168,7 @@ func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
 | Feature | Generator | Bundle |
 |---------|-----------|--------|
 | Creates | One or more related files | Multiple generators' output |
-| Location | `.tag.templates/<name>/` | `_bundles/<name>/<name>.bundle.json` |
+| Location | `.tag/<name>/` | `_bundles/<name>/<name>.bundle.json` |
 | Use case | Single concern (handler, model) | Full feature (CRUD, module) |
 
 ### Bundle File Format
@@ -140,12 +185,26 @@ func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
 
 ## Configuration
 
-Generator behavior can be configured via `.tagconfig.json` in your project root:
+Generator behavior is configured via `.tagconfig.json` in your project root. This file is created automatically by `tag init` or `tag scaffold`/`tag run`.
+
+### Scaffolded Project
+
+When a project is scaffolded from a library template, `.tagconfig.json` includes template origin and scaffold-time variables:
 
 ```json
 {
+  "template": {
+    "source": "gh:acme/nextjs-starter",
+    "name": "nextjs-starter",
+    "version": "1.2.0"
+  },
+  "variables": {
+    "project_name": "my-app",
+    "use_docker": true,
+    "router": "chi"
+  },
   "env": {
-    "TAG_PATH": ".tag.templates",
+    "TAG_PATH": ".tag",
     "TAG_SHARED_PATH": "_shared",
     "TAG_BUNDLE_PATH": "_bundles"
   },
@@ -155,6 +214,26 @@ Generator behavior can be configured via `.tagconfig.json` in your project root:
       ["gofmt", "-w", "."],
       ["goimports", "-w", "."]
     ]
+  }
+}
+```
+
+The `template` section tells `tag generate` where to find generators in the library. The `variables` section makes scaffold-time values available to generators via `{{ vars.project_name }}`.
+
+### Locally Initialized Project
+
+When created via `tag init`, the config contains only `env` and `hooks` (no template origin):
+
+```json
+{
+  "env": {
+    "TAG_PATH": ".tag",
+    "TAG_SHARED_PATH": "_shared",
+    "TAG_BUNDLE_PATH": "_bundles"
+  },
+  "hooks": {
+    "pre": [],
+    "post": []
   }
 }
 ```
@@ -209,7 +288,10 @@ before: "// END MARKER"
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "generator not found" | Generator directory doesn't exist | Check `.tag.templates/` directory |
+| "generator not found in template ... or local path" | Generator not found in library template or local `.tag/` | Ensure the template is in the library (`tag lib add <ref>`) and the generator name is correct |
+| "generator not found in .tag" | Generator not found locally (no library template configured) | Create the generator in `.tag/` |
+| "template not found in library" | `.tagconfig.json` references a template that isn't installed | Run `tag lib add <ref>` to install the template |
+| "template version mismatch" | Library template version differs from scaffold-time version | Consider re-scaffolding or running `tag lib update <name>` |
 | "cannot open bundle file" | Bundle file not found | Verify bundle exists in `_bundles/` |
 | "hook failed" | Pre/post hook returned error | Check hook command and permissions |
 

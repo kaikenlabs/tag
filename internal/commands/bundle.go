@@ -12,6 +12,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -27,17 +28,17 @@ func BundleCommand(cfg *config.Config) *cli.Command {
 		Action: func(c *cli.Context) error {
 			return bundleAction(c, cfg)
 		},
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    flags.LibFlag,
+				Usage:   "Create bundle in the library template referenced by .tagconfig.json",
+				Aliases: []string{"l"},
+			},
+		},
 	}
 }
 
 func bundleAction(c *cli.Context, cfg *config.Config) error {
-	if err := config.CheckConfig(cfg); err != nil {
-		return err
-	}
-	if err := cfg.Validate(); err != nil {
-		return app.Errorf("configuration error: %w", err)
-	}
-
 	if c.Args().Len() == 0 {
 		return app.Errorf("please provide the bundle name")
 	}
@@ -47,10 +48,34 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 		return app.Errorf("invalid bundle name: %w", err)
 	}
 
-	slog.Info(chalk.Green("creating new bundle"), "path", cfg.Env.Path)
-	dirPath := filepath.Join(cfg.Env.Path, c.Path(flags.BundlePathFlag), bundleName, fmt.Sprintf("%s%s", bundleName, types.BundleExtension))
+	if err := config.CheckConfig(cfg); err != nil {
+		return err
+	}
 
-	if err := ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
+	var basePath, bundleSubPath string
+	if c.Bool(flags.LibFlag) {
+		if !cfg.HasTemplateOrigin() {
+			return app.Errorf("no library template configured in %s", config.File)
+		}
+		tagDir, err := resolveLibraryTagDir(cfg.Template.Name)
+		if err != nil {
+			return err
+		}
+		basePath = tagDir
+		bundleSubPath = types.BundlesDir
+		slog.Info(chalk.Green("creating new bundle in library template"), "template", cfg.Template.Name)
+	} else {
+		if err := cfg.Validate(); err != nil {
+			return app.Errorf("configuration error: %w", err)
+		}
+		basePath = cfg.Env.Path
+		bundleSubPath = c.Path(flags.BundlePathFlag)
+		slog.Info(chalk.Green("creating new bundle"), "path", basePath)
+	}
+
+	dirPath := filepath.Join(basePath, bundleSubPath, bundleName, fmt.Sprintf("%s%s", bundleName, types.BundleExtension))
+
+	if err := fileutil.ValidatePathContainment(basePath, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {

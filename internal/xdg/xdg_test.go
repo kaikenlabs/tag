@@ -36,3 +36,31 @@ func TestUT_DataHome_RelativePathRejected(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "absolute path")
 }
+
+func TestUT_ConfigHome_Default(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	got, err := ConfigHome()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, ".config", "tag"), got)
+}
+
+func TestUT_ConfigHome_CustomXDG(t *testing.T) {
+	custom := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", custom)
+
+	got, err := ConfigHome()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(custom, "tag"), got)
+}
+
+func TestUT_ConfigHome_RelativePathRejected(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "relative/path")
+
+	_, err := ConfigHome()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "absolute path")
+}

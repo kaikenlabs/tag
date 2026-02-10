@@ -3,17 +3,11 @@ package engine
 import (
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
+	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/writer"
-)
-
-const (
-	metaKeyValueDelimiter = "="
-	doubleQuote           = '"'
-	singleQuote           = '\''
 )
 
 // NewGenerator creates a Generator with the standard pipeline.
@@ -77,9 +71,10 @@ func NewCore(parser TemplateParser, fwr writer.FileWriter) Core {
 func (c *Core) Generate(data Data) error {
 	// Build input data for the parser
 	input := InputData{
-		Name: data.Name,
-		Args: data.Args,
-		Meta: generateMeta(data.MetaArgs),
+		Name:         data.Name,
+		Args:         data.Args,
+		Meta:         parseMeta(data.MetaArgs),
+		ScaffoldVars: data.ScaffoldVars,
 	}
 
 	// Parse all templates
@@ -125,64 +120,8 @@ func (c *Core) Generate(data Data) error {
 	return nil
 }
 
-func generateMeta(meta []string) (result map[string]string) {
-	result = make(map[string]string)
-
-	if len(meta) == 0 {
-		return result
-	}
-
-	for _, part := range meta {
-		key, value, ok := parseKeyValue(part)
-		if !ok {
-			// Log warning for malformed entry but continue with valid entries
-			slog.Warn("skipping malformed --meta entry", "entry", part)
-			continue
-		}
-		result[key] = value
-	}
-
-	return
-}
-
-func processValue(value string) string {
-	value = strings.TrimSpace(value)
-	if len(value) < 2 {
-		return value
-	}
-
-	first, last := value[0], value[len(value)-1]
-	// Strip matching boundary quotes (single or double)
-	if (first == doubleQuote && last == doubleQuote) ||
-		(first == singleQuote && last == singleQuote) {
-		return value[1 : len(value)-1]
-	}
-
-	// Strip leading unmatched quote
-	if first == doubleQuote || first == singleQuote {
-		return value[1:]
-	}
-
-	return value
-}
-
-func parseKeyValue(part string) (string, string, bool) {
-	part = strings.TrimSpace(part)
-	if part == "" {
-		return "", "", false
-	}
-
-	kv := strings.SplitN(part, metaKeyValueDelimiter, 2)
-	if len(kv) != 2 {
-		return "", "", false
-	}
-
-	key := strings.TrimSpace(kv[0])
-	value := processValue(kv[1])
-
-	if key == "" || (value == "" && kv[1] == "") {
-		return "", "", false
-	}
-
-	return key, value, true
+// parseMeta is a lenient parser: malformed entries are skipped with a warning.
+func parseMeta(meta []string) map[string]string {
+	result, _ := parse.ParseKeyValues(meta, false)
+	return result
 }

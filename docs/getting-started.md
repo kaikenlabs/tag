@@ -54,9 +54,19 @@ tag init
 # Create a new generator
 tag new handler
 
-# Edit your generator templates in .tag.templates/handler/
+# Edit your generator templates in .tag/handler/
 # Then run:
 tag generate handler UserAuth
+```
+
+If your project was scaffolded from a library template (recorded in `.tagconfig.json`), you can add generators and bundles directly to that template with `--lib`:
+
+```bash
+# Create a generator in the source library template
+tag new --lib handler
+
+# Create a bundle in the source library template
+tag new-bundle --lib crud
 ```
 
 ## Core Concepts

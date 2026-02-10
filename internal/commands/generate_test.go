@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,8 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
-	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -71,7 +74,7 @@ func TestUT_GenerateAction_GeneratorNotFound(t *testing.T) {
 	err := generateAction(ctx, cfg)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "generator nonexistent not found")
+	assert.Contains(t, err.Error(), "generator \"nonexistent\" not found")
 }
 
 func TestUT_GenerateAction_ValidGenerator(t *testing.T) {
@@ -376,12 +379,12 @@ Hello {{ .Name }}`
 }
 
 func TestUT_RunHooks_EmptyHooks(t *testing.T) {
-	err := runHooks([][]string{}, scaffold.HookPhasePreGen)
+	err := runHooks([][]string{}, hooks.HookPhasePreGen)
 	require.NoError(t, err)
 }
 
 func TestUT_RunHooks_NilHooks(t *testing.T) {
-	err := runHooks(nil, scaffold.HookPhasePreGen)
+	err := runHooks(nil, hooks.HookPhasePreGen)
 	require.NoError(t, err)
 }
 
@@ -401,7 +404,7 @@ func TestUT_RunHooks_ValidHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative path with ./ prefix to indicate it's a local file
-	err = runHooks([][]string{{"./test-hook.sh"}}, scaffold.HookPhasePreGen)
+	err = runHooks([][]string{{"./test-hook.sh"}}, hooks.HookPhasePreGen)
 	require.NoError(t, err)
 }
 
@@ -420,7 +423,7 @@ func TestUT_RunHooks_FailingHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative path with ./ prefix to indicate it's a local file
-	err = runHooks([][]string{{"./failing-hook.sh"}}, scaffold.HookPhasePreGen)
+	err = runHooks([][]string{{"./failing-hook.sh"}}, hooks.HookPhasePreGen)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hook failed")
 }
@@ -446,7 +449,7 @@ func TestUT_RunHooks_StopsOnFailure(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative paths with ./ prefix to indicate they are local files
-	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}}, scaffold.HookPhasePreGen)
+	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}}, hooks.HookPhasePreGen)
 	require.Error(t, err)
 
 	// Verify second hook didn't run
@@ -463,13 +466,13 @@ func TestUT_RunHooks_NonexistentCommand(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-	err = runHooks([][]string{{"nonexistent-command-xyz"}}, scaffold.HookPhasePreGen)
+	err = runHooks([][]string{{"nonexistent-command-xyz"}}, hooks.HookPhasePreGen)
 	require.Error(t, err)
 }
 
 func TestUT_RunHooks_PathCommand(t *testing.T) {
 	// Test that PATH commands work (e.g., "echo" should be found in PATH)
-	err := runHooks([][]string{{"echo", "hello"}}, scaffold.HookPhasePreGen)
+	err := runHooks([][]string{{"echo", "hello"}}, hooks.HookPhasePreGen)
 	require.NoError(t, err)
 }
 
@@ -488,6 +491,355 @@ func TestUT_RunHooks_RelativePathCommand(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Relative path should resolve from working directory
-	err = runHooks([][]string{{"./myscript.sh"}}, scaffold.HookPhasePreGen)
+	err = runHooks([][]string{{"./myscript.sh"}}, hooks.HookPhasePreGen)
 	require.NoError(t, err)
+}
+
+// --- resolveGeneratorPaths tests ---
+
+func TestUT_ResolveGeneratorPaths_LocalFallback(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a local generator
+	genDir := filepath.Join(tmpDir, "myGen")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+
+	cfg := &config.Config{
+		Env: config.Env{Path: tmpDir},
+	}
+
+	gotGen, gotShared, err := resolveGeneratorPaths(cfg, "myGen")
+
+	require.NoError(t, err)
+	assert.Equal(t, genDir, gotGen)
+	assert.Equal(t, filepath.Join(tmpDir, "_shared"), gotShared)
+}
+
+func TestUT_ResolveGeneratorPaths_NotFound_NoTemplate(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	cfg := &config.Config{
+		Env: config.Env{Path: tmpDir},
+	}
+
+	_, _, err := resolveGeneratorPaths(cfg, "nonexistent")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `generator "nonexistent" not found`)
+}
+
+func TestUT_ResolveGeneratorPaths_NotFound_WithTemplate(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	cfg := &config.Config{
+		Template: &config.TemplateOrigin{
+			Source: "gh:acme/my-template",
+			Name:   "my-template",
+		},
+		Env: config.Env{Path: tmpDir},
+	}
+
+	_, _, err := resolveGeneratorPaths(cfg, "nonexistent")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `generator "nonexistent" not found in template "my-template"`)
+	assert.Contains(t, err.Error(), "tag lib add gh:acme/my-template")
+}
+
+func TestUT_ResolveGeneratorPaths_EmptyPath(t *testing.T) {
+	cfg := &config.Config{
+		Env: config.Env{Path: ""},
+	}
+
+	_, _, err := resolveGeneratorPaths(cfg, "myGen")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `generator "myGen" not found`)
+}
+
+func TestUT_GenerateTemplate_PassesScaffoldVars(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"project_name": "my-project",
+		"use_docker":   true,
+	}
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	var capturedData engine.Data
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				capturedData = data
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "world", capturedData.Name)
+	assert.Equal(t, "my-project", capturedData.ScaffoldVars["project_name"])
+	assert.Equal(t, true, capturedData.ScaffoldVars["use_docker"])
+}
+
+func TestUT_GenerateTemplate_NilVariablesNoScaffoldVars(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	cfg := createTestConfig(t, tmpDir)
+	// cfg.Variables is nil (no scaffold vars)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	var capturedData engine.Data
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				capturedData = data
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Nil(t, capturedData.ScaffoldVars)
+}
+
+// --- resolveBundlePath tests ---
+
+func TestUT_ResolveBundlePath_LocalFallback(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a local bundle
+	createBundle(t, tmpDir, "mybundle", `{"name":"mybundle","generators":[]}`)
+
+	cfg := &config.Config{
+		Env: config.Env{Path: tmpDir},
+	}
+
+	got, err := resolveBundlePath(cfg, "mybundle", "_bundles")
+
+	require.NoError(t, err)
+	expected := filepath.Join(tmpDir, "_bundles", "mybundle", "mybundle.json")
+	assert.Equal(t, expected, got)
+}
+
+func TestUT_ResolveBundlePath_NotFound(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	cfg := &config.Config{
+		Env: config.Env{Path: tmpDir},
+	}
+
+	_, err := resolveBundlePath(cfg, "nonexistent", "_bundles")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `bundle "nonexistent" not found`)
+}
+
+func TestUT_GenerateBundle_PassesScaffoldVars(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"project_name": "my-project",
+	}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	var capturedData engine.Data
+	originalBundleEngine := newBundleEngine
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				capturedData = data
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "my-project", capturedData.ScaffoldVars["project_name"])
+}
+
+// --- generateList tests ---
+
+func TestUT_GenerateList_NoGenerators(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	var buf bytes.Buffer
+	err := generateList(cfg, &buf)
+
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "No generators found.")
+}
+
+func TestUT_GenerateList_LocalGenerators(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create local generators
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "component"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "page"), 0o750))
+	// Create _shared (should be excluded from listing)
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "_shared"), 0o750))
+
+	cfg := createTestConfig(t, tmpDir)
+
+	var buf bytes.Buffer
+	err := generateList(cfg, &buf)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "component")
+	assert.Contains(t, output, "page")
+	assert.NotContains(t, output, "_shared")
+	assert.Contains(t, output, "PROJECT GENERATORS")
+}
+
+func TestUT_GenerateList_GeneratorWithDescription(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a generator with tag.template.json
+	genDir := filepath.Join(tmpDir, "component")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+	configJSON := `{"description": "Create a React component"}`
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "tag.template.json"), []byte(configJSON), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+
+	err := generateList(cfg, io.Discard)
+
+	require.NoError(t, err)
+}
+
+func TestUT_GenerateList_WithBundles(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a generator
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "component"), 0o750))
+
+	// Create a bundle
+	createBundle(t, tmpDir, "feature", `{"name":"feature","generators":[{"name":"component"}]}`)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	err := generateList(cfg, io.Discard)
+
+	require.NoError(t, err)
+}
+
+func TestUT_GenerateList_NoConfig(t *testing.T) {
+	err := generateList(nil, io.Discard)
+
+	require.Error(t, err)
+}
+
+func TestUT_ScanGenerators_SkipsReserved(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create generators and reserved dirs
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "component"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "_shared"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "_bundles"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".hidden"), 0o750))
+
+	result := scanGenerators(tmpDir)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "component", result[0].Name)
+}
+
+func TestUT_ScanGenerators_NonexistentDir(t *testing.T) {
+	result := scanGenerators("/nonexistent/path")
+	assert.Nil(t, result)
+}
+
+func TestUT_ScanBundles_SkipsReserved(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create bundle dirs
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "feature"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "feature", "feature.json"), []byte(`{"name":"feature"}`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "_internal"), 0o750))
+
+	result := scanBundles(tmpDir)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "feature", result[0].Name)
+}
+
+func TestUT_GeneratorNotFoundError_WithTemplate(t *testing.T) {
+	err := &GeneratorNotFoundError{
+		Generator: "component",
+		Template:  "nextjs-starter",
+		Source:    "gh:acme/nextjs-starter",
+	}
+
+	msg := err.Error()
+	assert.Contains(t, msg, `generator "component" not found in template "nextjs-starter"`)
+	assert.Contains(t, msg, "tag lib add gh:acme/nextjs-starter")
+}
+
+func TestUT_GeneratorNotFoundError_LocalOnly(t *testing.T) {
+	err := &GeneratorNotFoundError{
+		Generator: "component",
+		LocalPath: ".tag",
+	}
+
+	msg := err.Error()
+	assert.Contains(t, msg, `generator "component" not found in .tag`)
 }

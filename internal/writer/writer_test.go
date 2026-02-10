@@ -10,6 +10,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/fileutil"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // testCwd returns the current working directory for test helpers.
@@ -20,9 +23,16 @@ func testCwd(t *testing.T) string {
 	return cwd
 }
 
-func TestUT_New_CachesGetwd(t *testing.T) {
-	w, err := New(false)
+func TestUT_NewFileWriter_CachesGetwd(t *testing.T) {
+	fw, err := NewFileWriter(false)
 	require.NoError(t, err)
+
+	// Verify the writer is functional by checking it implements the interface
+	require.NotNil(t, fw)
+
+	// Verify the internal cwd is set correctly
+	w, ok := fw.(*Write)
+	require.True(t, ok)
 	assert.NotEmpty(t, w.cwd)
 
 	cwd, err := os.Getwd()
@@ -113,7 +123,7 @@ func TestUT_WriteFile_PathContainment(t *testing.T) {
 	})
 }
 
-func TestUT_ValidatePathWithinDir(t *testing.T) {
+func TestUT_PathContainmentIntegration(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	tests := []struct {
@@ -150,7 +160,7 @@ func TestUT_ValidatePathWithinDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validatePathWithinDir(tt.path, tt.baseDir)
+			err := fileutil.ValidatePathContainment(tt.baseDir, tt.path)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -236,7 +246,7 @@ func TestUT_InjectIntoFile_PathContainment(t *testing.T) {
 
 		err := w.InjectIntoFile("/etc/cron.d/backdoor", []byte("malicious"), Inject{
 			Matcher: "// marker",
-			Clause:  InjectAfter,
+			Clause:  types.InjectAfter,
 		})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "path safety check failed")
@@ -259,7 +269,7 @@ func TestUT_InjectIntoFile_PathContainment(t *testing.T) {
 
 		err := w.InjectIntoFile("../../etc/passwd", []byte("malicious"), Inject{
 			Matcher: "// marker",
-			Clause:  InjectAfter,
+			Clause:  types.InjectAfter,
 		})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "path safety check failed")
@@ -280,7 +290,7 @@ func TestUT_InjectIntoFile_PathContainment(t *testing.T) {
 
 		err := w.InjectIntoFile("mypackage/output.go", []byte("data"), Inject{
 			Matcher: "// marker",
-			Clause:  InjectAfter,
+			Clause:  types.InjectAfter,
 		})
 		require.NoError(t, err)
 	})
@@ -341,7 +351,7 @@ func TestWrite_InjectIntoFile_inject_after_should_return_no_error(t *testing.T) 
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// after",
-		Clause:  InjectAfter,
+		Clause:  types.InjectAfter,
 	})
 	require.NoError(t, err)
 }
@@ -359,7 +369,7 @@ func TestWrite_InjectIntoFile_read_file_error_should_return_error(t *testing.T) 
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// after",
-		Clause:  InjectAfter,
+		Clause:  types.InjectAfter,
 	})
 	assert.Error(t, err)
 }
@@ -377,7 +387,7 @@ func TestWrite_InjectIntoFile_inject_before_should_return_no_error(t *testing.T)
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// before",
-		Clause:  InjectBefore,
+		Clause:  types.InjectBefore,
 	})
 	require.NoError(t, err)
 }
@@ -395,7 +405,7 @@ func TestWrite_InjectIntoFile_missing_token_should_return_error(t *testing.T) {
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// before",
-		Clause:  InjectBefore,
+		Clause:  types.InjectBefore,
 	})
 	assert.Error(t, err)
 }
@@ -416,7 +426,7 @@ func TestWrite_InjectIntoFile_write_file_error_should_return_error(t *testing.T)
 	}
 	err := w.InjectIntoFile("blood", []byte("hello world"), Inject{
 		Matcher: "// before",
-		Clause:  InjectBefore,
+		Clause:  types.InjectBefore,
 	})
 	assert.Error(t, err)
 }

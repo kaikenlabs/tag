@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -114,7 +115,8 @@ func TestIT_Scaffold_LocalTemplate(t *testing.T) {
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", "README.md"))
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", ".gitignore"))
 	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
-	assert.DirExists(t, filepath.Join(outputDir, ".tag.templates", "handler"))
+	// Generators are no longer copied to the output — they stay in the library
+	assert.NoDirExists(t, filepath.Join(outputDir, ".tag"))
 
 	// Verify template was processed
 	mainContent, err := os.ReadFile(filepath.Join(outputDir, "awesome_project", "cmd", "main.go"))
@@ -271,7 +273,7 @@ func TestIT_Scaffold_GeneratesTagconfig(t *testing.T) {
 
 	env, ok := tagconfig["env"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, ".tag.templates", env["TAG_PATH"])
+	assert.Equal(t, ".tag", env["TAG_PATH"])
 	assert.Nil(t, env["TAG_EXTENSION"], "TAG_EXTENSION should not be in config")
 }
 
@@ -681,6 +683,46 @@ func TestIT_Scaffold_DerivedVariablesResolved(t *testing.T) {
 		"direct variable should be rendered")
 	assert.Contains(t, string(readmeContent), "Slug: my-service",
 		"derived variable should be rendered as computed value")
+}
+
+func TestUT_DisplaySummary_WritesToOutput(t *testing.T) {
+	var buf bytes.Buffer
+	s := &Scaffold{output: &buf}
+
+	vars := map[string]any{
+		"project_name": "my-app",
+	}
+	opts := Options{
+		TemplateName:    "go-api",
+		TemplateRef:     "gh:user/go-api",
+		TemplateVersion: "1.0.0",
+	}
+
+	s.displaySummary("/tmp/my-app", t.TempDir(), vars, opts)
+
+	output := buf.String()
+	assert.Contains(t, output, "Scaffolding complete!")
+	assert.Contains(t, output, "Output: /tmp/my-app")
+	assert.Contains(t, output, "Project: my-app")
+	assert.Contains(t, output, "Template: gh:user/go-api (1.0.0)")
+	assert.Contains(t, output, "cd /tmp/my-app")
+}
+
+func TestUT_DisplaySummary_NoTemplateOrigin(t *testing.T) {
+	var buf bytes.Buffer
+	s := &Scaffold{output: &buf}
+
+	vars := map[string]any{
+		"project_name": "local-project",
+	}
+	opts := Options{} // No template name
+
+	s.displaySummary("/tmp/local-project", t.TempDir(), vars, opts)
+
+	output := buf.String()
+	assert.Contains(t, output, "Scaffolding complete!")
+	assert.Contains(t, output, "Output: /tmp/local-project")
+	assert.NotContains(t, output, "Template:")
 }
 
 func TestIT_Scaffold_DerivedVarsInWrapperDir(t *testing.T) {

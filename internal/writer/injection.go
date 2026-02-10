@@ -6,22 +6,14 @@ import (
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
-// InjectClause is an alias for types.InjectClause.
-type InjectClause = types.InjectClause
-
-const (
-	InjectBefore = types.InjectBefore
-	InjectAfter  = types.InjectAfter
-)
-
 type Inject struct {
 	Matcher string
-	Clause  InjectClause
+	Clause  types.InjectClause
 }
 
 // Validate - exactly 1 clause must be met. Matcher must not be empty
 func (i *Inject) Validate() error {
-	hasClause := i.Clause == InjectBefore || i.Clause == InjectAfter
+	hasClause := i.Clause == types.InjectBefore || i.Clause == types.InjectAfter
 	if !hasClause {
 		return ErrNoMatchingClause
 	}
@@ -46,10 +38,10 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 
 	var before, after string
 	switch inject.Clause {
-	case InjectBefore:
+	case types.InjectBefore:
 		before = src[:idx]
 		after = src[idx:]
-	case InjectAfter:
+	case types.InjectAfter:
 		end := idx + len(inject.Matcher)
 		before = src[:end]
 		after = src[end:]

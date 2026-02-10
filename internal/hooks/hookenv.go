@@ -1,4 +1,4 @@
-package scaffold
+package hooks
 
 import (
 	"encoding/json"
@@ -63,10 +63,12 @@ func sanitizeEnvValue(name, value string) string {
 	// Truncate overly long values
 	if len(value) > MaxEnvValueLen {
 		value = value[:MaxEnvValueLen]
-		fmt.Printf("Warning: variable %q value truncated to %d bytes for hook environment\n", name, MaxEnvValueLen)
+		fmt.Fprintf(os.Stderr, "Warning: variable %q value truncated to %d bytes for hook environment\n", name, MaxEnvValueLen)
 	}
 
-	// Strip newlines to prevent environment variable injection
+	// Strip null bytes, newlines, and carriage returns to prevent
+	// environment variable injection and C-level string truncation.
+	value = strings.ReplaceAll(value, "\x00", "")
 	value = strings.ReplaceAll(value, "\n", " ")
 	value = strings.ReplaceAll(value, "\r", " ")
 

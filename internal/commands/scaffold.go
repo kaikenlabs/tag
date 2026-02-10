@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
+	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -97,7 +98,7 @@ func scaffoldAction(c *cli.Context) error {
 
 	// Parse meta flags
 	metaSlice := c.StringSlice("meta")
-	meta, err := scaffold.ParseMetaFlags(metaSlice)
+	meta, err := parse.ParseKeyValues(metaSlice, true)
 	if err != nil {
 		return app.Errorf("invalid meta flag: %w", err)
 	}

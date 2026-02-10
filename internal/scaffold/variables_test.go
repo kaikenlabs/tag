@@ -440,51 +440,6 @@ func TestUT_VariableCollector_NumberPrompt(t *testing.T) {
 	assert.Equal(t, 1, mockPrompter.CallCount["Number"])
 }
 
-func TestUT_ParseMetaFlags(t *testing.T) {
-	tests := []struct {
-		name     string
-		flags    []string
-		expected map[string]string
-		wantErr  bool
-	}{
-		{
-			name:     "valid flags",
-			flags:    []string{"key1=value1", "key2=value2"},
-			expected: map[string]string{"key1": "value1", "key2": "value2"},
-			wantErr:  false,
-		},
-		{
-			name:     "value with equals sign",
-			flags:    []string{"key=value=with=equals"},
-			expected: map[string]string{"key": "value=with=equals"},
-			wantErr:  false,
-		},
-		{
-			name:     "empty flags",
-			flags:    []string{},
-			expected: map[string]string{},
-			wantErr:  false,
-		},
-		{
-			name:    "invalid flag format",
-			flags:   []string{"invalid"},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := ParseMetaFlags(tt.flags)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
-		})
-	}
-}
-
 func TestUT_ParseBool(t *testing.T) {
 	tests := []struct {
 		input    string

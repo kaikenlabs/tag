@@ -139,8 +139,62 @@ func TestUT_NewAction_TemplateContent(t *testing.T) {
 	assert.Contains(t, content, "{{ name | snake }}")
 }
 
+func TestUT_NewAction_LibFlag_ValidCreation(t *testing.T) {
+	templateDir := setupFakeLibrary(t, "my-template")
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfigWithLib(t, tmpDir, "my-template")
+
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
+		flags.LibFlag: true,
+		"package":     "mypackage",
+	})
+
+	err := newAction(ctx, cfg)
+
+	require.NoError(t, err)
+
+	// Verify generator was created inside the library template's .tag directory
+	generatorPath := filepath.Join(templateDir, ".tag", "myGenerator", "myGenerator.go")
+	require.FileExists(t, generatorPath)
+
+	data, readErr := os.ReadFile(generatorPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "mypackage")
+}
+
+func TestUT_NewAction_LibFlag_NonExistentTemplate(t *testing.T) {
+	setupFakeLibrary(t, "existing-template")
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfigWithLib(t, tmpDir, "nonexistent")
+
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
+		flags.LibFlag: true,
+		"package":     "mypackage",
+	})
+
+	err := newAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestUT_NewAction_LibFlag_NoTemplateOrigin(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"myGenerator"}, map[string]any{
+		flags.LibFlag: true,
+		"package":     "mypackage",
+	})
+
+	err := newAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no library template configured")
+}
+
 func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {
-	cfg := createTestConfig(t, ".tag.templates")
+	cfg := createTestConfig(t, ".tag")
 	cmd := NewCommand(cfg)
 
 	require.NotNil(t, cmd)
@@ -160,4 +214,14 @@ func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {
 		}
 	}
 	assert.True(t, hasPackageFlag, "should have package flag")
+
+	// Verify lib flag exists
+	var hasLibFlag bool
+	for _, f := range cmd.Flags {
+		if bf, ok := f.(*cli.BoolFlag); ok && bf.Name == flags.LibFlag {
+			hasLibFlag = true
+			break
+		}
+	}
+	assert.True(t, hasLibFlag, "should have lib flag")
 }

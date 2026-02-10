@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 func Test_mergeOutputs(t *testing.T) {
@@ -26,7 +28,7 @@ func Test_mergeOutputs(t *testing.T) {
 				data:   []byte("fart"),
 				inject: Inject{
 					Matcher: "// token",
-					Clause:  InjectBefore,
+					Clause:  types.InjectBefore,
 				},
 			},
 			want:    []byte("fall of  fart// token"),
@@ -39,7 +41,7 @@ func Test_mergeOutputs(t *testing.T) {
 				data:   []byte("injected"),
 				inject: Inject{
 					Matcher: "// token",
-					Clause:  InjectBefore,
+					Clause:  types.InjectBefore,
 				},
 			},
 			want:    []byte("injected// token rest"),
@@ -52,7 +54,7 @@ func Test_mergeOutputs(t *testing.T) {
 				data:   []byte("fart"),
 				inject: Inject{
 					Matcher: "// token",
-					Clause:  InjectAfter,
+					Clause:  types.InjectAfter,
 				},
 			},
 			want:    []byte("fall of // tokenfart"),
@@ -101,7 +103,7 @@ func Test_mergeOutputs(t *testing.T) {
 func TestUT_InjectBefore_MatcherAtStart(t *testing.T) {
 	source := []byte("// marker\nrest of file")
 	data := []byte("injected\n")
-	inject := Inject{Matcher: "// marker", Clause: InjectBefore}
+	inject := Inject{Matcher: "// marker", Clause: types.InjectBefore}
 
 	got, err := mergeInjection(source, data, inject)
 
@@ -112,7 +114,7 @@ func TestUT_InjectBefore_MatcherAtStart(t *testing.T) {
 func TestUT_InjectBefore_PreservesAllContent(t *testing.T) {
 	source := []byte("hello world // marker")
 	data := []byte("INJECTED")
-	inject := Inject{Matcher: "// marker", Clause: InjectBefore}
+	inject := Inject{Matcher: "// marker", Clause: types.InjectBefore}
 
 	got, err := mergeInjection(source, data, inject)
 
@@ -124,7 +126,7 @@ func TestUT_InjectBefore_PreservesAllContent(t *testing.T) {
 func TestUT_InjectBefore_MultipleMatchers(t *testing.T) {
 	source := []byte("// marker first // marker second")
 	data := []byte("BEFORE")
-	inject := Inject{Matcher: "// marker", Clause: InjectBefore}
+	inject := Inject{Matcher: "// marker", Clause: types.InjectBefore}
 
 	got, err := mergeInjection(source, data, inject)
 
@@ -136,7 +138,7 @@ func TestUT_InjectBefore_MultipleMatchers(t *testing.T) {
 func TestUT_InjectAfter_SingleMatcher(t *testing.T) {
 	source := []byte("prefix // marker suffix")
 	data := []byte(" INJECTED")
-	inject := Inject{Matcher: "// marker", Clause: InjectAfter}
+	inject := Inject{Matcher: "// marker", Clause: types.InjectAfter}
 
 	got, err := mergeInjection(source, data, inject)
 
@@ -147,7 +149,7 @@ func TestUT_InjectAfter_SingleMatcher(t *testing.T) {
 func TestUT_InjectAfter_MultipleMatchers(t *testing.T) {
 	source := []byte("// marker first // marker second")
 	data := []byte("AFTER")
-	inject := Inject{Matcher: "// marker", Clause: InjectAfter}
+	inject := Inject{Matcher: "// marker", Clause: types.InjectAfter}
 
 	got, err := mergeInjection(source, data, inject)
 
@@ -159,7 +161,7 @@ func TestUT_InjectAfter_MultipleMatchers(t *testing.T) {
 func TestUT_InjectAfter_MatcherAtEnd(t *testing.T) {
 	source := []byte("some content // marker")
 	data := []byte("\nnew line")
-	inject := Inject{Matcher: "// marker", Clause: InjectAfter}
+	inject := Inject{Matcher: "// marker", Clause: types.InjectAfter}
 
 	got, err := mergeInjection(source, data, inject)
 
@@ -170,7 +172,7 @@ func TestUT_InjectAfter_MatcherAtEnd(t *testing.T) {
 func TestUT_InjectBefore_MatcherNotFound(t *testing.T) {
 	source := []byte("no match here")
 	data := []byte("INJECTED")
-	inject := Inject{Matcher: "// missing", Clause: InjectBefore}
+	inject := Inject{Matcher: "// missing", Clause: types.InjectBefore}
 
 	got, err := mergeInjection(source, data, inject)
 
@@ -182,7 +184,7 @@ func TestUT_InjectBefore_MatcherNotFound(t *testing.T) {
 func TestUT_InjectAfter_MatcherNotFound(t *testing.T) {
 	source := []byte("no match here")
 	data := []byte("INJECTED")
-	inject := Inject{Matcher: "// missing", Clause: InjectAfter}
+	inject := Inject{Matcher: "// missing", Clause: types.InjectAfter}
 
 	got, err := mergeInjection(source, data, inject)
 

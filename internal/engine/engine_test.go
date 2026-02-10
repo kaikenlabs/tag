@@ -9,7 +9,7 @@ import (
 
 var emptyMap = map[string]string{}
 
-func Test_generateMeta(t *testing.T) {
+func Test_parseMeta(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
@@ -133,7 +133,7 @@ func Test_generateMeta(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateMeta(tt.input)
+			result := parseMeta(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

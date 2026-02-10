@@ -1,4 +1,4 @@
-package scaffold
+package hooks
 
 import (
 	"bytes"
@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/google/shlex"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 const (
@@ -52,6 +54,12 @@ type HookRunner interface {
 	// Returns results for each command executed (may be partial on failure).
 	// Returns error if any command fails.
 	Run(phase HookPhase, commands []string, workDir string, env []string) ([]HookResult, error)
+}
+
+// Confirmer is the minimal interface needed for hook confirmation prompts.
+// This is satisfied by scaffold.Prompter and any type with a Confirm method.
+type Confirmer interface {
+	Confirm(label string, defaultValue bool) (bool, error)
 }
 
 // NewHookRunner creates a new hook runner using direct argv execution (no shell interpretation).
@@ -128,14 +136,14 @@ func (l *limitedBuffer) Write(p []byte) (n int, err error) {
 	remaining := l.max - l.buf.Len()
 	if remaining <= 0 {
 		l.truncated = true
-		l.buf.WriteString("\n... output truncated (exceeded 1MB limit) ...\n")
+		fmt.Fprintf(&l.buf, "\n... output truncated (exceeded %d byte limit) ...\n", l.max)
 		return len(p), nil
 	}
 
 	if len(p) > remaining {
 		l.buf.Write(p[:remaining])
 		l.truncated = true
-		l.buf.WriteString("\n... output truncated (exceeded 1MB limit) ...\n")
+		fmt.Fprintf(&l.buf, "\n... output truncated (exceeded %d byte limit) ...\n", l.max)
 		return len(p), nil
 	}
 
@@ -299,7 +307,7 @@ func describeHookCommand(cmd, templateDir string) string {
 // Returns true if hooks should run, false if they should be skipped.
 // Returns an error only if prompting fails.
 // templateDir is used to resolve file-based hook commands for interpreter annotation.
-func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompter, templateDir string) (bool, error) {
+func ConfirmHooks(hooks *types.HooksConfig, acceptHooks, noInput bool, confirmer Confirmer, templateDir string) (bool, error) {
 	if len(collectAllHooks(hooks)) == 0 {
 		return false, nil
 	}
@@ -318,7 +326,7 @@ func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompt
 	// Interactive: display hooks and prompt for confirmation
 	displayHookList(hooks, templateDir)
 
-	confirmed, err := prompter.Confirm("Do you want to execute these hooks?", false)
+	confirmed, err := confirmer.Confirm("Do you want to execute these hooks?", false)
 	if err != nil {
 		return false, fmt.Errorf("failed to confirm hooks: %w", err)
 	}
@@ -331,7 +339,7 @@ func ConfirmHooks(hooks *HooksConfig, acceptHooks, noInput bool, prompter Prompt
 }
 
 // collectAllHooks returns all hooks (pre + post) from the config.
-func collectAllHooks(hooks *HooksConfig) []string {
+func collectAllHooks(hooks *types.HooksConfig) []string {
 	if hooks == nil {
 		return nil
 	}
@@ -343,7 +351,7 @@ func collectAllHooks(hooks *HooksConfig) []string {
 
 // displayHookList prints the list of configured hooks to stdout.
 // templateDir is used to resolve file-based commands for interpreter annotation.
-func displayHookList(hooks *HooksConfig, templateDir string) {
+func displayHookList(hooks *types.HooksConfig, templateDir string) {
 	hasNotFound := false
 
 	fmt.Println("This template defines the following hooks:")
@@ -396,7 +404,7 @@ func PrintHookResults(results []HookResult) {
 
 // RunPreScaffoldHooks executes pre-scaffold hooks and returns an error if any fail.
 // Pre-scaffold hooks run in the template directory before any files are created.
-func RunPreScaffoldHooks(runner HookRunner, hooks *HooksConfig, templateDir string, env []string) error {
+func RunPreScaffoldHooks(runner HookRunner, hooks *types.HooksConfig, templateDir string, env []string) error {
 	if hooks == nil || len(hooks.PreScaffold) == 0 {
 		return nil
 	}
@@ -413,7 +421,7 @@ func RunPreScaffoldHooks(runner HookRunner, hooks *HooksConfig, templateDir stri
 // RunPostScaffoldHooks executes post-scaffold hooks.
 // Post-scaffold hooks run in the output directory after all files are created.
 // Failures are logged as warnings but don't stop the scaffold process.
-func RunPostScaffoldHooks(runner HookRunner, hooks *HooksConfig, outputDir string, env []string) {
+func RunPostScaffoldHooks(runner HookRunner, hooks *types.HooksConfig, outputDir string, env []string) {
 	if hooks == nil || len(hooks.PostScaffold) == 0 {
 		return
 	}
@@ -431,11 +439,11 @@ func RunPostScaffoldHooks(runner HookRunner, hooks *HooksConfig, outputDir strin
 	}
 }
 
-// resolveHookPaths returns a copy of HooksConfig with file-based hook commands
+// ResolveHookPaths returns a copy of HooksConfig with file-based hook commands
 // resolved to absolute paths under baseDir. This is used when a project wrapper
 // is unwrapped: hook scripts live in the original template root, not the output
 // directory, so their paths must be made absolute before post-scaffold execution.
-func resolveHookPaths(hooks *HooksConfig, baseDir string) *HooksConfig {
+func ResolveHookPaths(hooks *types.HooksConfig, baseDir string) *types.HooksConfig {
 	resolve := func(commands []string) []string {
 		resolved := make([]string, len(commands))
 		for i, cmd := range commands {
@@ -444,7 +452,7 @@ func resolveHookPaths(hooks *HooksConfig, baseDir string) *HooksConfig {
 		return resolved
 	}
 
-	return &HooksConfig{
+	return &types.HooksConfig{
 		PreScaffold:  resolve(hooks.PreScaffold),
 		PostScaffold: resolve(hooks.PostScaffold),
 	}

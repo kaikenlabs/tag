@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/library"
+	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
@@ -32,8 +33,9 @@ EXAMPLES:
 
   # With variable overrides
   tag run go-api my-service -m author="Jane Doe"`,
-		Flags:  commonScaffoldFlags(),
-		Action: runAction,
+		Flags:        commonScaffoldFlags(),
+		Action:       runAction,
+		BashComplete: completeLibraryTemplateNames,
 	}
 }
 
@@ -64,13 +66,14 @@ func runAction(c *cli.Context) error {
 		return asAppError(err)
 	}
 
-	meta, err := scaffold.ParseMetaFlags(c.StringSlice("meta"))
+	meta, err := parse.ParseKeyValues(c.StringSlice("meta"), true)
 	if err != nil {
 		return app.Errorf("invalid meta flag: %w", err)
 	}
 
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
 	opts.TemplateRef = entry.Source
+	opts.TemplateName = templateName
 	opts.IsRemote = false // Library templates are local
 
 	s, err := scaffold.NewScaffold(opts)
