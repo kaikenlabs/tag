@@ -15,10 +15,25 @@ import (
 
 const File = ".tagconfig.json"
 
-type Config struct {
-	Env   Env   `json:"env"`
-	Hooks Hooks `json:"hooks"`
+// TemplateOrigin records which template was used to scaffold a project.
+type TemplateOrigin struct {
+	Source  string `json:"source"`            // Original ref (e.g., "gh:acme/nextjs-starter")
+	Name    string `json:"name"`              // Library name (e.g., "nextjs-starter")
+	Version string `json:"version,omitempty"` // From tag.template.json at scaffold time
 }
+
+type Config struct {
+	Template  *TemplateOrigin `json:"template,omitempty"`
+	Variables map[string]any  `json:"variables,omitempty"`
+	Env       Env             `json:"env"`
+	Hooks     Hooks           `json:"hooks"`
+}
+
+// HasTemplateOrigin reports whether the config references a template from the library.
+func (c *Config) HasTemplateOrigin() bool {
+	return c != nil && c.Template != nil && c.Template.Name != ""
+}
+
 type Env struct {
 	Path       string `json:"TAG_PATH"`
 	SharedPath string `json:"TAG_SHARED_PATH"`

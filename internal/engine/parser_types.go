@@ -31,7 +31,8 @@ type ParseData struct {
 
 // InputData represents the input provided by the engine for template parsing.
 type InputData struct {
-	Name string            // Primary name value
-	Args string            // Free-form arguments
-	Meta map[string]string // Key-value metadata from --meta flags
+	Name         string            // Primary name value
+	Args         string            // Free-form arguments
+	Meta         map[string]string // Key-value metadata from --meta flags
+	ScaffoldVars map[string]any    // Variables from scaffold-time .tagconfig.json
 }

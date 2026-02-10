@@ -77,9 +77,10 @@ func NewCore(parser TemplateParser, fwr writer.FileWriter) Core {
 func (c *Core) Generate(data Data) error {
 	// Build input data for the parser
 	input := InputData{
-		Name: data.Name,
-		Args: data.Args,
-		Meta: generateMeta(data.MetaArgs),
+		Name:         data.Name,
+		Args:         data.Args,
+		Meta:         generateMeta(data.MetaArgs),
+		ScaffoldVars: data.ScaffoldVars,
 	}
 
 	// Parse all templates

@@ -75,9 +75,14 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 			return nil
 		}
 
-		// Skip _generators directory (will be handled separately)
+		// Skip _generators directory (legacy convention for template-bundled generators)
 		// Match exact directory name, not prefix (e.g., don't skip "_generators-old")
 		if relPath == types.GeneratorsDir || strings.HasPrefix(relPath, types.GeneratorsDir+string(filepath.Separator)) {
+			return nil
+		}
+
+		// Skip .tag.templates directory (generators stay in the library, not copied to output)
+		if relPath == types.TemplatesDir || strings.HasPrefix(relPath, types.TemplatesDir+string(filepath.Separator)) {
 			return nil
 		}
 
@@ -273,55 +278,6 @@ func buildTemplateContext(vars map[string]any) template.Context {
 		Build()
 }
 
-// CopyGenerators copies the _generators directory to .tag.templates in the output.
-func CopyGenerators(templateRoot, outputDir string) error {
-	generatorsDir := filepath.Join(templateRoot, types.GeneratorsDir)
-
-	// Check if _generators exists
-	if _, err := os.Stat(generatorsDir); os.IsNotExist(err) {
-		// No _generators directory, create empty .tag.templates
-		templatesDir := filepath.Join(outputDir, types.TemplatesDir)
-		return os.MkdirAll(templatesDir, types.DirMode)
-	}
-
-	// Copy _generators to .tag.templates
-	templatesDir := filepath.Join(outputDir, types.TemplatesDir)
-	return copyDir(generatorsDir, templatesDir)
-}
-
-// copyDir recursively copies a directory.
-func copyDir(src, dst string) error {
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Skip symlinks to prevent copying files outside the template
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-
-		// Get relative path
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-
-		destPath := filepath.Join(dst, relPath)
-
-		if d.IsDir() {
-			return os.MkdirAll(destPath, types.DirMode)
-		}
-
-		// Ensure parent directory exists
-		if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
-			return err
-		}
-
-		return fileutil.CopyFile(path, destPath)
-	})
-}
-
 // validatePathWithinDir ensures that path is within the base directory.
 // This prevents path traversal attacks where placeholders could escape the output dir.
 func validatePathWithinDir(path, baseDir string) error {
@@ -334,9 +290,18 @@ func sanitizeFileMode(mode fs.FileMode) fs.FileMode {
 	return mode &^ (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky)
 }
 
+// TagConfigOptions provides template metadata for enriched .tagconfig.json generation.
+type TagConfigOptions struct {
+	TemplateSource  string         // Original ref (e.g., "gh:user/repo")
+	TemplateName    string         // Library name
+	TemplateVersion string         // From tag.template.json
+	Variables       map[string]any // Scaffold-time variable values
+}
+
 // GenerateTagConfig generates a .tagconfig.json file in the output directory.
-func GenerateTagConfig(outputDir string) error {
-	config := map[string]any{
+// When opts contains template metadata, it records the template origin and scaffold variables.
+func GenerateTagConfig(outputDir string, opts TagConfigOptions) error {
+	cfg := map[string]any{
 		"env": map[string]string{
 			"TAG_PATH":        types.TemplatesDir,
 			"TAG_SHARED_PATH": types.SharedDir,
@@ -348,7 +313,26 @@ func GenerateTagConfig(outputDir string) error {
 		},
 	}
 
-	data, err := json.MarshalIndent(config, "", "  ")
+	// Add template origin if a library name is known.
+	// TemplateName is required — writing a partial origin with just source
+	// but no name would create invalid config (HasTemplateOrigin requires Name).
+	if opts.TemplateName != "" {
+		origin := map[string]string{
+			"source": opts.TemplateSource,
+			"name":   opts.TemplateName,
+		}
+		if opts.TemplateVersion != "" {
+			origin["version"] = opts.TemplateVersion
+		}
+		cfg["template"] = origin
+	}
+
+	// Add scaffold variables if provided
+	if len(opts.Variables) > 0 {
+		cfg["variables"] = opts.Variables
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal tagconfig: %w", err)
 	}

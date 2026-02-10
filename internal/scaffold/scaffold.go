@@ -78,6 +78,11 @@ func (s *Scaffold) Run(opts Options) error {
 		return err
 	}
 
+	// Capture template version from loaded config (used in .tagconfig.json)
+	if config.Version != "" && opts.TemplateVersion == "" {
+		opts.TemplateVersion = config.Version
+	}
+
 	// Step 2b: Set derived variable names on the processor for SSTI protection.
 	if configurable, ok := s.processor.(SSTIConfigurable); ok {
 		derivedNames := make(map[string]bool)
@@ -177,12 +182,18 @@ func (s *Scaffold) Run(opts Options) error {
 		return fmt.Errorf("failed to process template: %w", err)
 	}
 
-	if err := CopyGenerators(opts.TemplateDir, outputDir); err != nil {
-		return fmt.Errorf("failed to copy generators: %w", err)
-	}
-
 	// Step 11: Generate config and run post-scaffold hooks
-	if err := GenerateTagConfig(outputDir); err != nil {
+	// Filter out secret variables before writing to .tagconfig.json
+	// (same pattern as saveReplayData — secrets should not be persisted)
+	configVars := filterSecrets(vars, config.Vars)
+
+	tagConfigOpts := TagConfigOptions{
+		TemplateSource:  opts.TemplateRef,
+		TemplateName:    opts.TemplateName,
+		TemplateVersion: opts.TemplateVersion,
+		Variables:       configVars,
+	}
+	if err := GenerateTagConfig(outputDir, tagConfigOpts); err != nil {
 		return fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
@@ -200,7 +211,7 @@ func (s *Scaffold) Run(opts Options) error {
 
 	// Step 12: Save replay data and display summary
 	saveReplayData(opts, config, vars)
-	s.displaySummary(outputDir, templateDirAbs, vars)
+	s.displaySummary(outputDir, templateDirAbs, vars, opts)
 
 	success = true
 	return nil
@@ -266,6 +277,18 @@ func saveReplayData(opts Options, config *TemplateConfig, vars map[string]any) {
 	}
 }
 
+// filterSecrets returns a copy of vars with secret variables removed.
+func filterSecrets(vars map[string]any, varDefs map[string]VariableDef) map[string]any {
+	result := make(map[string]any, len(vars))
+	for k, v := range vars {
+		if def, ok := varDefs[k]; ok && def.Secret {
+			continue
+		}
+		result[k] = v
+	}
+	return result
+}
+
 // loadAndValidateConfig loads tag.template.json and validates it against the schema.
 func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, error) {
 	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
@@ -308,7 +331,7 @@ func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, e
 }
 
 // displaySummary prints a summary of the scaffolding operation.
-func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string]any) {
+func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string]any, opts Options) {
 	fmt.Println()
 	fmt.Println("Scaffolding complete!")
 	fmt.Printf("  Output: %s\n", outputDir)
@@ -318,9 +341,28 @@ func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string
 		fmt.Printf("  Project: %s\n", projectName)
 	}
 
+	// Show template origin
+	if opts.TemplateName != "" {
+		version := ""
+		if opts.TemplateVersion != "" {
+			version = " (" + opts.TemplateVersion + ")"
+		}
+		fmt.Printf("  Template: %s%s\n", opts.TemplateRef, version)
+	}
+
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s\n", outputDir)
+
+	// Check if the template has generators
+	hasGenerators := hasSubdir(templateDir, types.TemplatesDir) || hasSubdir(templateDir, types.GeneratorsDir)
+
+	if hasGenerators && opts.TemplateName != "" {
+		fmt.Println("  tag generate list    # see available generators")
+	} else if hasGenerators && opts.TemplateName == "" {
+		fmt.Println()
+		fmt.Printf("  Add to library for generators: tag lib add %s\n", opts.TemplateRef)
+	}
 	fmt.Println()
 
 	// Display template README if present
@@ -334,6 +376,12 @@ func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string
 			fmt.Print(rendered)
 		}
 	}
+}
+
+// hasSubdir checks if a directory contains a subdirectory with the given name.
+func hasSubdir(dir, subdir string) bool {
+	info, err := os.Stat(filepath.Join(dir, subdir))
+	return err == nil && info.IsDir()
 }
 
 // Result contains the result of a scaffolding operation.

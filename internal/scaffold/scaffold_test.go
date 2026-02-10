@@ -114,7 +114,8 @@ func TestIT_Scaffold_LocalTemplate(t *testing.T) {
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", "README.md"))
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", ".gitignore"))
 	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
-	assert.DirExists(t, filepath.Join(outputDir, ".tag.templates", "handler"))
+	// Generators are no longer copied to the output — they stay in the library
+	assert.NoDirExists(t, filepath.Join(outputDir, ".tag.templates"))
 
 	// Verify template was processed
 	mainContent, err := os.ReadFile(filepath.Join(outputDir, "awesome_project", "cmd", "main.go"))

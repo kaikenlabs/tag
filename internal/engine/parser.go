@@ -117,9 +117,13 @@ func (te *TemplateParser) renderBody(tmplName, body string, ctx template.Context
 }
 
 // buildParserContext creates a Gonja context from the input data using ContextBuilder.
+// When scaffold vars are present, they form the base layer; meta vars override on collision.
 func buildParserContext(input InputData) template.Context {
-	// Convert string metadata to any for vars
+	// Start with scaffold vars as base layer
 	vars := make(map[string]any)
+	maps.Copy(vars, input.ScaffoldVars)
+
+	// Override with generator meta vars (explicit values take precedence)
 	for k, v := range input.Meta {
 		vars[k] = v
 	}

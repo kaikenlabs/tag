@@ -71,6 +71,7 @@ func runAction(c *cli.Context) error {
 
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
 	opts.TemplateRef = entry.Source
+	opts.TemplateName = templateName
 	opts.IsRemote = false // Library templates are local
 
 	s, err := scaffold.NewScaffold(opts)

@@ -121,7 +121,7 @@ func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 	}
 
 	// Read template metadata (non-fatal on error)
-	version, description, metaErr := readTemplateMetadata(destPath)
+	version, description, metaErr := ReadTemplateMetadata(destPath)
 	if metaErr != nil {
 		result.Warnings = append(result.Warnings,
 			fmt.Sprintf("failed to read template metadata: %v", metaErr))
@@ -469,10 +469,10 @@ func validateName(name string) error {
 	return nil
 }
 
-// readTemplateMetadata reads version and description from tag.template.json.
+// ReadTemplateMetadata reads version and description from tag.template.json.
 // Returns empty strings if the config file does not exist.
 // Returns an error if the file exists but cannot be parsed.
-func readTemplateMetadata(templateDir string) (version, description string, err error) {
+func ReadTemplateMetadata(templateDir string) (version, description string, err error) {
 	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
 	data, err := os.ReadFile(configPath)
 	if err != nil {

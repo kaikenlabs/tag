@@ -10,9 +10,10 @@ type Core struct {
 }
 
 type Data struct {
-	Name     string
-	Args     string
-	MetaArgs []string
+	Name         string
+	Args         string
+	MetaArgs     []string
+	ScaffoldVars map[string]any // Variables from scaffold-time .tagconfig.json
 }
 
 // GeneratorRef is a reference to a generator by name within a bundle configuration.

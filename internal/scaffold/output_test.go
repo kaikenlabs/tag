@@ -274,6 +274,33 @@ func TestUT_Write_SkipsGeneratorsDir(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestUT_Write_SkipsTagTemplatesDir(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create .tag.templates directory with generator content
+	tmplDir := filepath.Join(templateDir, types.TemplatesDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(tmplDir, "component"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "component", "template.go"), []byte("component"), 0o644))
+
+	// Create normal file
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	// .tag.templates should NOT exist in output
+	_, err = os.Stat(filepath.Join(outputDir, types.TemplatesDir))
+	assert.True(t, os.IsNotExist(err))
+
+	// Normal file should exist
+	_, err = os.Stat(filepath.Join(outputDir, "keep.txt"))
+	assert.NoError(t, err)
+}
+
 func TestUT_Write_SkipsCacheMetaFile(t *testing.T) {
 	writer := mustNewOutputWriter(t)
 
@@ -642,84 +669,18 @@ func TestUT_ProcessFile_TemplateExecuteError(t *testing.T) {
 	assert.ErrorAs(t, err, &tmplErr)
 }
 
-// --- CopyGenerators ---
-
-func TestUT_CopyGenerators_WithGenerators(t *testing.T) {
-	templateDir := t.TempDir()
-	outputDir := t.TempDir()
-
-	// Create _generators with content
-	genDir := filepath.Join(templateDir, types.GeneratorsDir)
-	require.NoError(t, os.MkdirAll(filepath.Join(genDir, "mygen"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(genDir, "mygen", "template.txt"), []byte("gen content"), 0o644))
-
-	err := CopyGenerators(templateDir, outputDir)
-	require.NoError(t, err)
-
-	// Should be copied to .tag.templates
-	content, err := os.ReadFile(filepath.Join(outputDir, types.TemplatesDir, "mygen", "template.txt"))
-	require.NoError(t, err)
-	assert.Equal(t, "gen content", string(content))
-}
-
-func TestUT_CopyGenerators_NoGenerators(t *testing.T) {
-	templateDir := t.TempDir()
-	outputDir := t.TempDir()
-
-	// No _generators directory exists
-	err := CopyGenerators(templateDir, outputDir)
-	require.NoError(t, err)
-
-	// Should create empty .tag.templates
-	info, err := os.Stat(filepath.Join(outputDir, types.TemplatesDir))
-	require.NoError(t, err)
-	assert.True(t, info.IsDir())
-}
-
-func TestUT_CopyGenerators_SkipsSymlinks(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlink tests unreliable on Windows")
-	}
-
-	templateDir := t.TempDir()
-	outputDir := t.TempDir()
-
-	genDir := filepath.Join(templateDir, types.GeneratorsDir)
-	require.NoError(t, os.MkdirAll(genDir, 0o755))
-
-	// Create real file
-	require.NoError(t, os.WriteFile(filepath.Join(genDir, "real.txt"), []byte("real"), 0o644))
-
-	// Create symlink pointing outside
-	target := filepath.Join(t.TempDir(), "outside.txt")
-	require.NoError(t, os.WriteFile(target, []byte("outside"), 0o644))
-	require.NoError(t, os.Symlink(target, filepath.Join(genDir, "link.txt")))
-
-	err := CopyGenerators(templateDir, outputDir)
-	require.NoError(t, err)
-
-	// Real file should be copied
-	_, err = os.Stat(filepath.Join(outputDir, types.TemplatesDir, "real.txt"))
-	assert.NoError(t, err)
-
-	// Symlink should NOT be copied
-	_, err = os.Stat(filepath.Join(outputDir, types.TemplatesDir, "link.txt"))
-	assert.True(t, os.IsNotExist(err))
-}
-
 // --- GenerateTagConfig ---
 
-func TestUT_GenerateTagConfig(t *testing.T) {
+func TestUT_GenerateTagConfig_WithoutTemplateOrigin(t *testing.T) {
 	outputDir := t.TempDir()
 
-	err := GenerateTagConfig(outputDir)
+	err := GenerateTagConfig(outputDir, TagConfigOptions{})
 	require.NoError(t, err)
 
 	configPath := filepath.Join(outputDir, ".tagconfig.json")
 	data, err := os.ReadFile(configPath)
 	require.NoError(t, err)
 
-	// Parse and validate JSON structure
 	var config map[string]any
 	require.NoError(t, json.Unmarshal(data, &config))
 
@@ -735,6 +696,68 @@ func TestUT_GenerateTagConfig(t *testing.T) {
 	require.True(t, ok, "hooks should be a map")
 	assert.NotNil(t, hooks["pre"])
 	assert.NotNil(t, hooks["post"])
+
+	// No template or variables fields when not provided
+	assert.Nil(t, config["template"])
+	assert.Nil(t, config["variables"])
+}
+
+func TestUT_GenerateTagConfig_WithTemplateOrigin(t *testing.T) {
+	outputDir := t.TempDir()
+
+	err := GenerateTagConfig(outputDir, TagConfigOptions{
+		TemplateSource:  "gh:acme/nextjs-starter",
+		TemplateName:    "nextjs-starter",
+		TemplateVersion: "1.2.0",
+		Variables: map[string]any{
+			"project_name": "my-app",
+			"use_docker":   true,
+		},
+	})
+	require.NoError(t, err)
+
+	configPath := filepath.Join(outputDir, ".tagconfig.json")
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	var config map[string]any
+	require.NoError(t, json.Unmarshal(data, &config))
+
+	// Verify template origin
+	tmpl, ok := config["template"].(map[string]any)
+	require.True(t, ok, "template should be a map")
+	assert.Equal(t, "gh:acme/nextjs-starter", tmpl["source"])
+	assert.Equal(t, "nextjs-starter", tmpl["name"])
+	assert.Equal(t, "1.2.0", tmpl["version"])
+
+	// Verify variables
+	vars, ok := config["variables"].(map[string]any)
+	require.True(t, ok, "variables should be a map")
+	assert.Equal(t, "my-app", vars["project_name"])
+	assert.Equal(t, true, vars["use_docker"])
+}
+
+func TestUT_GenerateTagConfig_WithoutVersion(t *testing.T) {
+	outputDir := t.TempDir()
+
+	err := GenerateTagConfig(outputDir, TagConfigOptions{
+		TemplateSource: "gh:acme/repo",
+		TemplateName:   "repo",
+	})
+	require.NoError(t, err)
+
+	configPath := filepath.Join(outputDir, ".tagconfig.json")
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	var config map[string]any
+	require.NoError(t, json.Unmarshal(data, &config))
+
+	tmpl, ok := config["template"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "gh:acme/repo", tmpl["source"])
+	assert.Equal(t, "repo", tmpl["name"])
+	assert.Nil(t, tmpl["version"]) // version omitted when empty
 }
 
 // --- buildTemplateContext ---
