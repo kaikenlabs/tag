@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
@@ -207,8 +208,8 @@ func scanGenerators(dir string) []generatorInfo {
 			continue
 		}
 		name := entry.Name()
-		// Skip reserved directories
-		if name[0] == '_' || name[0] == '.' {
+		// Skip reserved directories (prefixed with _ or .)
+		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
 			continue
 		}
 
@@ -241,7 +242,7 @@ func scanBundles(dir string) []generatorInfo {
 			continue
 		}
 		name := entry.Name()
-		if name[0] == '_' || name[0] == '.' {
+		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
 			continue
 		}
 
@@ -307,20 +308,24 @@ func resolveGeneratorPaths(cfg *config.Config, name string) (genDir, sharedDir s
 	if cfg.Env.Path != "" {
 		candidate := filepath.Join(cfg.Env.Path, name)
 		if _, statErr := os.Stat(candidate); statErr == nil {
-			shared := filepath.Join(cfg.Env.Path, types.SharedDir)
+			sharedName := cfg.Env.SharedPath
+			if sharedName == "" {
+				sharedName = types.SharedDir
+			}
+			shared := filepath.Join(cfg.Env.Path, sharedName)
 			return candidate, shared, nil
 		}
 	}
 
 	// 3. Not found
 	if cfg.HasTemplateOrigin() {
-		return "", "", app.Errorf("generator not found: %w", &GeneratorNotFoundError{
+		return "", "", app.Errorf("%w", &GeneratorNotFoundError{
 			Generator: name,
 			Template:  cfg.Template.Name,
 			Source:    cfg.Template.Source,
 		})
 	}
-	return "", "", app.Errorf("generator not found: %w", &GeneratorNotFoundError{
+	return "", "", app.Errorf("%w", &GeneratorNotFoundError{
 		Generator: name,
 		LocalPath: cfg.Env.Path,
 	})
