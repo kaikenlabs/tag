@@ -1,15 +1,18 @@
 package commands
 
 import (
+	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 )
 
@@ -57,6 +60,17 @@ func createTestConfig(t *testing.T, basePath string) *config.Config {
 	}
 }
 
+// createTestConfigWithLib creates a config that references a library template.
+func createTestConfigWithLib(t *testing.T, basePath, libName string) *config.Config {
+	t.Helper()
+	cfg := createTestConfig(t, basePath)
+	cfg.Template = &config.TemplateOrigin{
+		Name:   libName,
+		Source: "gh:test/" + libName,
+	}
+	return cfg
+}
+
 // createTestCLIContext creates a cli.Context for testing with the given args and flags.
 func createTestCLIContext(t *testing.T, args []string, flagValues map[string]any) *cli.Context {
 	t.Helper()
@@ -70,6 +84,7 @@ func createTestCLIContext(t *testing.T, args []string, flagValues map[string]any
 			&cli.BoolFlag{Name: "bundle"},
 			&cli.StringSliceFlag{Name: flags.MetaFlag},
 			&cli.StringFlag{Name: "package", Value: "mypackage"},
+			&cli.BoolFlag{Name: flags.LibFlag},
 		},
 	}
 
@@ -152,4 +167,53 @@ func createSharedDir(t *testing.T, basePath string) {
 	if err := os.MkdirAll(sharedDir, 0o750); err != nil {
 		t.Fatalf("failed to create shared dir: %v", err)
 	}
+}
+
+// setupFakeLibrary creates a fake library data directory with a registered template
+// and substitutes newLocalLibrary to use it. Returns the template directory path.
+// Restores the original newLocalLibrary when the test completes.
+//
+// WARNING: This mutates the package-level newLocalLibrary variable.
+// Tests using this helper must NOT call t.Parallel().
+func setupFakeLibrary(t *testing.T, templateName string) string {
+	t.Helper()
+
+	dataDir := t.TempDir()
+
+	// Create template directory on disk
+	templateDir := filepath.Join(dataDir, "templates", templateName)
+	if err := os.MkdirAll(templateDir, 0o750); err != nil {
+		t.Fatalf("failed to create template dir: %v", err)
+	}
+
+	// Write a minimal registry with the template entry
+	reg := library.Registry{
+		Version: 1,
+		Entries: map[string]*library.Entry{
+			templateName: {
+				Name:      templateName,
+				Source:    "gh:test/" + templateName,
+				AddedAt:   time.Now(),
+				UpdatedAt: time.Now(),
+			},
+		},
+	}
+	regData, err := json.Marshal(reg)
+	if err != nil {
+		t.Fatalf("failed to marshal registry: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "library.json"), regData, 0o644); err != nil {
+		t.Fatalf("failed to write registry: %v", err)
+	}
+
+	// Substitute newLocalLibrary
+	orig := newLocalLibrary
+	newLocalLibrary = func() (*library.Library, error) {
+		return library.NewLocal(dataDir), nil
+	}
+	t.Cleanup(func() {
+		newLocalLibrary = orig
+	})
+
+	return templateDir
 }

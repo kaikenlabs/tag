@@ -226,8 +226,8 @@ tag completion fish | source
 | `tag generate <generator> <name>` | Run a generator |
 | `tag convert cookiecutter <source>` | Convert Cookiecutter template |
 | `tag init` | Initialize TAG in a project |
-| `tag new <name>` | Create a new generator |
-| `tag new-bundle <name>` | Create a new bundle |
+| `tag new <name> [--lib]` | Create a new generator |
+| `tag new-bundle <name> [--lib]` | Create a new bundle |
 | `tag completion <shell>` | Output shell completion script |
 
 ## Global Flags

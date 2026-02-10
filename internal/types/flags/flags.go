@@ -7,4 +7,5 @@ const (
 	BundlePathFlag = "bundle-path"
 	NameFlag       = "name"
 	MetaFlag       = "meta"
+	LibFlag        = "lib"
 )

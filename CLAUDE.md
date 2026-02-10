@@ -13,8 +13,8 @@ TAG is a Go-based CLI tool for template-driven code generation and project scaff
 
 **Commands**:
 - `tag init` - Initialize tag directory structure (`.tag/_shared`, `.tag/_bundles`)
-- `tag new <name>` - Create a new generator template
-- `tag new-bundle <name>` (alias: `nb`) - Create a new bundle (collection of generators)
+- `tag new <name>` - Create a new generator template (`--lib` to target the library template from `.tagconfig.json`)
+- `tag new-bundle <name>` (alias: `nb`) - Create a new bundle (`--lib` to target the library template from `.tagconfig.json`)
 - `tag generate <bundle-or-generator> <name>` - Run generators/bundles within existing projects
 - `tag scaffold <template> [project-name]` - Create new projects from local or remote templates
 - `tag convert cookiecutter <source>` - Convert Cookiecutter templates to TAG format

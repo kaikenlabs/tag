@@ -11,6 +11,8 @@ import (
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/fileutil"
+	"github.com/kaikenlabs/tag/internal/types"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -30,15 +32,16 @@ func NewCommand(cfg *config.Config) *cli.Command {
 				Usage:   "Specifies the package for the generator",
 				Aliases: []string{"k"},
 			},
+			&cli.BoolFlag{
+				Name:    flags.LibFlag,
+				Usage:   "Create generator in the library template referenced by .tagconfig.json",
+				Aliases: []string{"l"},
+			},
 		},
 	}
 }
 
 func newAction(c *cli.Context, cfg *config.Config) error {
-	if err := config.CheckConfig(cfg); err != nil {
-		return err
-	}
-
 	generator := c.Args().Get(0)
 	if generator == "" {
 		return app.Errorf("please provide the generator name")
@@ -48,10 +51,29 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 		return app.Errorf("invalid generator name: %w", err)
 	}
 
-	slog.Info(chalk.Green("creating new generator"), "path", cfg.Env.Path)
-	dirPath := filepath.Join(cfg.Env.Path, generator, generator+".go")
+	if err := config.CheckConfig(cfg); err != nil {
+		return err
+	}
 
-	if err := fileutil.ValidatePathContainment(cfg.Env.Path, dirPath); err != nil {
+	var basePath string
+	if c.Bool(flags.LibFlag) {
+		if !cfg.HasTemplateOrigin() {
+			return app.Errorf("no library template configured in %s", config.File)
+		}
+		tagDir, err := resolveLibraryTagDir(cfg.Template.Name)
+		if err != nil {
+			return err
+		}
+		basePath = tagDir
+		slog.Info(chalk.Green("creating new generator in library template"), "template", cfg.Template.Name)
+	} else {
+		basePath = cfg.Env.Path
+		slog.Info(chalk.Green("creating new generator"), "path", basePath)
+	}
+
+	dirPath := filepath.Join(basePath, generator, generator+".go")
+
+	if err := fileutil.ValidatePathContainment(basePath, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
@@ -73,6 +95,27 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+// resolveLibraryTagDir resolves the .tag directory inside a library template.
+// Creates the .tag directory if it doesn't exist.
+func resolveLibraryTagDir(libName string) (string, error) {
+	lib, err := newLocalLibrary()
+	if err != nil {
+		return "", app.Errorf("failed to initialize library: %w", err)
+	}
+
+	templatePath, err := lib.TemplatePath(libName)
+	if err != nil {
+		return "", asAppError(err)
+	}
+
+	tagDir := filepath.Join(templatePath, types.TemplatesDir)
+	if err := os.MkdirAll(tagDir, 0o750); err != nil {
+		return "", app.Errorf("error creating directory %s: %w", tagDir, err)
+	}
+
+	return tagDir, nil
 }
 
 var newGeneratorTemplate = `---

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/types/flags"
@@ -91,6 +92,82 @@ func TestUT_BundleAction_CreatesDirectory(t *testing.T) {
 	info, err := os.Stat(bundleDir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
+}
+
+func TestUT_BundleAction_LibFlag_ValidCreation(t *testing.T) {
+	templateDir := setupFakeLibrary(t, "my-template")
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfigWithLib(t, tmpDir, "my-template")
+
+	ctx := createTestCLIContext(t, []string{"mybundle"}, map[string]any{
+		flags.LibFlag: true,
+	})
+
+	err := bundleAction(ctx, cfg)
+
+	require.NoError(t, err)
+
+	// Verify bundle was created inside the library template's .tag/_bundles directory
+	bundlePath := filepath.Join(templateDir, ".tag", "_bundles", "mybundle", "mybundle.json")
+	require.FileExists(t, bundlePath)
+
+	data, readErr := os.ReadFile(bundlePath)
+	require.NoError(t, readErr)
+
+	var bundle engine.Bundle
+	require.NoError(t, json.Unmarshal(data, &bundle))
+	assert.Equal(t, "mybundle", bundle.Name)
+}
+
+func TestUT_BundleAction_LibFlag_NonExistentTemplate(t *testing.T) {
+	setupFakeLibrary(t, "existing-template")
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfigWithLib(t, tmpDir, "nonexistent")
+
+	ctx := createTestCLIContext(t, []string{"mybundle"}, map[string]any{
+		flags.LibFlag: true,
+	})
+
+	err := bundleAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestUT_BundleAction_LibFlag_NoTemplateOrigin(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle"}, map[string]any{
+		flags.LibFlag: true,
+	})
+
+	err := bundleAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no library template configured")
+}
+
+func TestUT_BundleCommand_ReturnsValidCommand(t *testing.T) {
+	cfg := createTestConfig(t, ".tag")
+	cmd := BundleCommand(cfg)
+
+	require.NotNil(t, cmd)
+	assert.Equal(t, "new-bundle", cmd.Name)
+	assert.NotEmpty(t, cmd.Usage)
+	assert.NotNil(t, cmd.Action)
+	assert.True(t, cmd.Args)
+	assert.Equal(t, "<bundle-name>", cmd.ArgsUsage)
+
+	// Verify lib flag exists
+	var hasLibFlag bool
+	for _, f := range cmd.Flags {
+		if bf, ok := f.(*cli.BoolFlag); ok && bf.Name == flags.LibFlag {
+			hasLibFlag = true
+			break
+		}
+	}
+	assert.True(t, hasLibFlag, "should have lib flag")
 }
 
 func TestUT_GetBundleTemplate(t *testing.T) {
