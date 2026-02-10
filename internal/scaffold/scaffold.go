@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 
+	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/schema"
 	"github.com/kaikenlabs/tag/internal/template"
@@ -27,8 +28,8 @@ type Scaffold struct {
 	writer     OutputWriter
 	engine     template.TemplateRenderer
 	prompter   Prompter
-	hookRunner HookRunner // Executes pre/post scaffold hooks
-	output     io.Writer  // Destination for user-facing messages (default: os.Stdout)
+	hookRunner hooks.HookRunner // Executes pre/post scaffold hooks
+	output     io.Writer        // Destination for user-facing messages (default: os.Stdout)
 }
 
 // NewScaffold creates a new scaffold instance with default dependencies.
@@ -61,18 +62,48 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 		writer:     writer,
 		engine:     engine,
 		prompter:   prompter,
-		hookRunner: NewHookRunner(),
+		hookRunner: hooks.NewHookRunner(),
 		output:     os.Stdout,
 	}, nil
 }
 
+// runContext holds shared state across scaffolding phases.
+type runContext struct {
+	opts                 Options
+	cwd                  string
+	config               *TemplateConfig
+	templateDirAbs       string
+	hooksAllowed         bool
+	vars                 map[string]any
+	outputDir            string
+	effectiveTemplateDir string
+	hookEnv              []string
+}
+
 // Run executes the scaffolding process.
-//
-//nolint:cyclop,gocognit,funlen // orchestration function coordinates multiple phases
 func (s *Scaffold) Run(opts Options) error {
-	// Step 1: Validate template directory exists
-	if _, err := os.Stat(opts.TemplateDir); os.IsNotExist(err) {
-		return fmt.Errorf("%w: %s", ErrTemplateNotFound, opts.TemplateDir)
+	ctx := &runContext{opts: opts}
+
+	if err := s.loadConfig(ctx); err != nil {
+		return err
+	}
+	if err := s.confirmHooks(ctx); err != nil {
+		return err
+	}
+	if err := s.collectVars(ctx); err != nil {
+		return err
+	}
+	if err := s.planOutput(ctx); err != nil {
+		return err
+	}
+	return s.executeScaffold(ctx)
+}
+
+// loadConfig validates the template directory, loads the config, and resolves paths.
+func (s *Scaffold) loadConfig(ctx *runContext) error {
+	// Validate template directory exists
+	if _, err := os.Stat(ctx.opts.TemplateDir); os.IsNotExist(err) {
+		return fmt.Errorf("%w: %s", ErrTemplateNotFound, ctx.opts.TemplateDir)
 	}
 
 	// Resolve working directory once (reused for template dir and output dir resolution)
@@ -80,19 +111,21 @@ func (s *Scaffold) Run(opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
+	ctx.cwd = cwd
 
-	// Step 2: Load and validate tag.template.json
-	config, err := s.loadAndValidateConfig(opts.TemplateDir)
+	// Load and validate tag.template.json
+	config, err := s.loadAndValidateConfig(ctx.opts.TemplateDir)
 	if err != nil {
 		return err
 	}
+	ctx.config = config
 
 	// Capture template version from loaded config (used in .tagconfig.json)
-	if config.Version != "" && opts.TemplateVersion == "" {
-		opts.TemplateVersion = config.Version
+	if config.Version != "" && ctx.opts.TemplateVersion == "" {
+		ctx.opts.TemplateVersion = config.Version
 	}
 
-	// Step 2b: Set derived variable names on the processor for SSTI protection.
+	// Set derived variable names on the processor for SSTI protection.
 	if configurable, ok := s.processor.(SSTIConfigurable); ok {
 		derivedNames := make(map[string]bool)
 		for name, def := range config.Vars {
@@ -103,74 +136,92 @@ func (s *Scaffold) Run(opts Options) error {
 		configurable.SetDerivedVarNames(derivedNames)
 	}
 
-	// Step 3: Make template directory absolute for hooks
-	templateDirAbs := opts.TemplateDir
-	if !filepath.IsAbs(templateDirAbs) {
-		templateDirAbs = filepath.Join(cwd, templateDirAbs)
+	// Make template directory absolute for hooks
+	ctx.templateDirAbs = ctx.opts.TemplateDir
+	if !filepath.IsAbs(ctx.templateDirAbs) {
+		ctx.templateDirAbs = filepath.Join(cwd, ctx.templateDirAbs)
 	}
 
-	// Step 4: Check hook confirmation (before variable collection so user sees hooks first)
-	hooksAllowed, err := ConfirmHooks(config.Hooks, opts.AcceptHooks, opts.NoInput, s.prompter, templateDirAbs)
+	return nil
+}
+
+// confirmHooks checks whether the user accepts hook execution.
+func (s *Scaffold) confirmHooks(ctx *runContext) error {
+	hooksAllowed, err := hooks.ConfirmHooks(ctx.config.Hooks, ctx.opts.AcceptHooks, ctx.opts.NoInput, s.prompter, ctx.templateDirAbs)
 	if err != nil {
 		return fmt.Errorf("hook confirmation failed: %w", err)
 	}
+	ctx.hooksAllowed = hooksAllowed
+	return nil
+}
 
-	// Step 5: Collect variables
-	if opts.ProjectName != "" {
-		if opts.Meta == nil {
-			opts.Meta = make(map[string]string)
+// collectVars gathers template variables from all sources and resolves derived values.
+func (s *Scaffold) collectVars(ctx *runContext) error {
+	if ctx.opts.ProjectName != "" {
+		if ctx.opts.Meta == nil {
+			ctx.opts.Meta = make(map[string]string)
 		}
-		opts.Meta["project_name"] = opts.ProjectName
+		ctx.opts.Meta["project_name"] = ctx.opts.ProjectName
 	}
 
-	vars, err := s.collector.Collect(config, opts)
+	vars, err := s.collector.Collect(ctx.config, ctx.opts)
 	if err != nil {
 		return fmt.Errorf("failed to collect variables: %w", err)
 	}
 
-	// Step 5b: Resolve derived variables.
-	// Derived variables have template expression defaults (e.g., "{{ vars.name | lower }}").
-	// These must be evaluated before template rendering so their computed values are used.
-	if err := ResolveDerivedVars(s.engine, config, vars); err != nil { //nolint:govet // shadow in if-init is idiomatic
+	// Resolve derived variables — template expression defaults (e.g., "{{ vars.name | lower }}")
+	// must be evaluated before template rendering so their computed values are used.
+	if err := ResolveDerivedVars(s.engine, ctx.config, vars); err != nil {
 		return fmt.Errorf("failed to resolve derived variables: %w", err)
 	}
 
-	// Step 6: Resolve output directory
-	outputDir, err := resolveOutputDir(opts.OutputDir, vars, cwd)
+	ctx.vars = vars
+	return nil
+}
+
+// planOutput resolves the output directory and detects project wrappers.
+func (s *Scaffold) planOutput(ctx *runContext) error {
+	outputDir, err := resolveOutputDir(ctx.opts.OutputDir, ctx.vars, ctx.cwd)
 	if err != nil {
 		return err
 	}
+	ctx.outputDir = outputDir
 
-	// Step 6b: Detect project wrapper to avoid double nesting.
+	// Detect project wrapper to avoid double nesting.
 	// Cookiecutter-style templates wrap project files in a directory named after
 	// the project (e.g., "{{ vars.project_name }}"). When no explicit --output-dir
 	// is set, the output dir is derived from project_name, which would create
 	// project_name/project_name nesting. Unwrap by using the wrapper as the
 	// effective template root for Write().
-	effectiveTemplateDir := opts.TemplateDir
-	if opts.OutputDir == "" {
-		if wrapperDir := findProjectWrapper(opts.TemplateDir); wrapperDir != "" {
-			effectiveTemplateDir = filepath.Join(opts.TemplateDir, wrapperDir)
+	ctx.effectiveTemplateDir = ctx.opts.TemplateDir
+	if ctx.opts.OutputDir == "" {
+		if wrapperDir := findProjectWrapper(ctx.opts.TemplateDir); wrapperDir != "" {
+			ctx.effectiveTemplateDir = filepath.Join(ctx.opts.TemplateDir, wrapperDir)
 		}
 	}
 
-	// Step 7: Prepare output directory (safety checks, force handling)
-	if err := prepareOutputDir(outputDir, opts.Force); err != nil {
+	return nil
+}
+
+// executeScaffold prepares the output directory, runs hooks, writes files, and finalizes.
+func (s *Scaffold) executeScaffold(ctx *runContext) error {
+	// Prepare output directory (safety checks, force handling)
+	if err := prepareOutputDir(ctx.outputDir, ctx.opts.Force); err != nil {
 		return err
 	}
 
-	// Step 8: Build hook environment
-	hookEnv := BuildHookEnv(vars, templateDirAbs, outputDir)
+	// Build hook environment
+	ctx.hookEnv = hooks.BuildHookEnv(ctx.vars, ctx.templateDirAbs, ctx.outputDir)
 
-	// Step 9: Run pre-scaffold hooks
-	if hooksAllowed {
-		if err := RunPreScaffoldHooks(s.hookRunner, config.Hooks, templateDirAbs, hookEnv); err != nil {
+	// Run pre-scaffold hooks
+	if ctx.hooksAllowed {
+		if err := hooks.RunPreScaffoldHooks(s.hookRunner, ctx.config.Hooks, ctx.templateDirAbs, ctx.hookEnv); err != nil {
 			return fmt.Errorf("pre-scaffold hook failed: %w", err)
 		}
 	}
 
-	// Step 10: Create output directory and write files
-	if err := os.MkdirAll(outputDir, types.DirMode); err != nil {
+	// Create output directory and write files
+	if err := os.MkdirAll(ctx.outputDir, types.DirMode); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -178,44 +229,42 @@ func (s *Scaffold) Run(opts Options) error {
 	success := false
 	defer func() {
 		if !success {
-			_ = os.RemoveAll(outputDir)
+			_ = os.RemoveAll(ctx.outputDir)
 		}
 	}()
 
-	if err := s.writer.Write(effectiveTemplateDir, outputDir, vars); err != nil {
+	if err := s.writer.Write(ctx.effectiveTemplateDir, ctx.outputDir, ctx.vars); err != nil {
 		return fmt.Errorf("failed to process template: %w", err)
 	}
 
-	// Step 11: Generate config and run post-scaffold hooks
-	// Filter out secret variables before writing to .tagconfig.json
-	// (same pattern as saveReplayData — secrets should not be persisted)
-	configVars := filterSecrets(vars, config.Vars)
-
+	// Generate config — filter out secret variables before writing to .tagconfig.json
+	configVars := filterSecrets(ctx.vars, ctx.config.Vars)
 	tagConfigOpts := TagConfigOptions{
-		TemplateSource:  opts.TemplateRef,
-		TemplateName:    opts.TemplateName,
-		TemplateVersion: opts.TemplateVersion,
+		TemplateSource:  ctx.opts.TemplateRef,
+		TemplateName:    ctx.opts.TemplateName,
+		TemplateVersion: ctx.opts.TemplateVersion,
 		Variables:       configVars,
 	}
-	if err := GenerateTagConfig(outputDir, tagConfigOpts); err != nil {
+	if err := GenerateTagConfig(ctx.outputDir, tagConfigOpts); err != nil {
 		return fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
-	if hooksAllowed {
+	// Run post-scaffold hooks
+	if ctx.hooksAllowed {
 		// When a project wrapper was unwrapped, hook scripts live in the
 		// original template root (not the output dir). Resolve file-based
 		// hook commands to absolute paths so they are found correctly while
 		// still executing with workDir=outputDir.
-		postHooks := config.Hooks
-		if effectiveTemplateDir != opts.TemplateDir && config.Hooks != nil {
-			postHooks = resolveHookPaths(config.Hooks, templateDirAbs)
+		postHooks := ctx.config.Hooks
+		if ctx.effectiveTemplateDir != ctx.opts.TemplateDir && ctx.config.Hooks != nil {
+			postHooks = hooks.ResolveHookPaths(ctx.config.Hooks, ctx.templateDirAbs)
 		}
-		RunPostScaffoldHooks(s.hookRunner, postHooks, outputDir, hookEnv)
+		hooks.RunPostScaffoldHooks(s.hookRunner, postHooks, ctx.outputDir, ctx.hookEnv)
 	}
 
-	// Step 12: Save replay data and display summary
-	saveReplayData(opts, config, vars)
-	s.displaySummary(outputDir, templateDirAbs, vars, opts)
+	// Save replay data and display summary
+	saveReplayData(ctx.opts, ctx.config, ctx.vars)
+	s.displaySummary(ctx.outputDir, ctx.templateDirAbs, ctx.vars, ctx.opts)
 
 	success = true
 	return nil
