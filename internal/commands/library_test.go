@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -96,6 +97,41 @@ func TestUT_ResolveEditor_NoTTY_NoEditor_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "no editor configured")
 }
 
+func TestUT_ResolveEditor_ConfigLoadError_FallsThrough(t *testing.T) {
+	s := &editorSource{
+		loadConfig: func() (*config.GlobalConfig, error) {
+			return nil, errors.New("corrupt config")
+		},
+		saveConfig: func(*config.GlobalConfig) error { return nil },
+		getenv: func(key string) string {
+			if key == "VISUAL" {
+				return "visual-fallback"
+			}
+			return ""
+		},
+		isTTY:  func() bool { return false },
+		prompt: func() (string, error) { return "", nil },
+	}
+
+	editor, err := s.resolve("")
+	require.NoError(t, err)
+	assert.Equal(t, "visual-fallback", editor)
+}
+
+func TestUT_ResolveEditor_EmptyPrompt_Error(t *testing.T) {
+	s := &editorSource{
+		loadConfig: func() (*config.GlobalConfig, error) { return &config.GlobalConfig{}, nil },
+		saveConfig: func(*config.GlobalConfig) error { return nil },
+		getenv:     func(string) string { return "" },
+		isTTY:      func() bool { return true },
+		prompt:     func() (string, error) { return "", nil },
+	}
+
+	_, err := s.resolve("")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no editor configured")
+}
+
 func TestUT_SplitEditorArgs(t *testing.T) {
 	tests := []struct {
 		input string
@@ -105,10 +141,18 @@ func TestUT_SplitEditorArgs(t *testing.T) {
 		{"code --wait", []string{"code", "--wait"}},
 		{"  nano  ", []string{"nano"}},
 		{"subl -w --new-window", []string{"subl", "-w", "--new-window"}},
+		{`code --goto "my file.txt"`, []string{"code", "--goto", "my file.txt"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.want, splitEditorArgs(tt.input))
+			got, err := splitEditorArgs(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestUT_SplitEditorArgs_InvalidQuoting(t *testing.T) {
+	_, err := splitEditorArgs(`code "unterminated`)
+	assert.Error(t, err)
 }

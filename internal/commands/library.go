@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/shlex"
 	"github.com/manifoldco/promptui"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
@@ -429,7 +430,13 @@ func libEditCommand() *cli.Command {
 				return err
 			}
 
-			args := splitEditorArgs(editor)
+			args, err := splitEditorArgs(editor)
+			if err != nil {
+				return app.Errorf("invalid editor command %q: %w", editor, err)
+			}
+			if len(args) == 0 {
+				return app.Errorf("editor command is empty")
+			}
 			args = append(args, templatePath)
 
 			cmd := exec.CommandContext(c.Context, args[0], args[1:]...) //nolint:gosec // editor command is user-configured
@@ -465,6 +472,8 @@ func defaultEditorSource() *editorSource {
 	}
 }
 
+var errNoEditor = app.Errorf("no editor configured\n\nSet one with:\n  tag lib edit --editor <cmd> <name>\n  export EDITOR=<cmd>\n  export VISUAL=<cmd>")
+
 // resolveEditor determines which editor to use.
 // Resolution order: flag → global config → $VISUAL → $EDITOR → interactive prompt → error.
 func resolveEditor(flagValue string) (string, error) {
@@ -479,7 +488,9 @@ func (s *editorSource) resolve(flagValue string) (string, error) {
 
 	// 2. Global TAG config
 	cfg, err := s.loadConfig()
-	if err == nil && cfg.Editor != "" {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not load editor config: %v\n", err)
+	} else if cfg.Editor != "" {
 		return cfg.Editor, nil
 	}
 
@@ -495,7 +506,7 @@ func (s *editorSource) resolve(flagValue string) (string, error) {
 
 	// 5. Interactive prompt (TTY only)
 	if !s.isTTY() {
-		return "", app.Errorf("no editor configured\n\nSet one with:\n  tag lib edit --editor <cmd> <name>\n  export EDITOR=<cmd>\n  export VISUAL=<cmd>")
+		return "", errNoEditor
 	}
 
 	editor, err := s.prompt()
@@ -503,7 +514,7 @@ func (s *editorSource) resolve(flagValue string) (string, error) {
 		return "", err
 	}
 	if editor == "" {
-		return "", app.Errorf("no editor configured\n\nSet one with:\n  tag lib edit --editor <cmd> <name>\n  export EDITOR=<cmd>\n  export VISUAL=<cmd>")
+		return "", errNoEditor
 	}
 
 	// Save for future use
@@ -538,8 +549,8 @@ func promptEditorInput() (string, error) {
 	return strings.TrimSpace(result), nil
 }
 
-// splitEditorArgs splits an editor command string into command and arguments.
-// For example, "code --wait" becomes ["code", "--wait"].
-func splitEditorArgs(editor string) []string {
-	return strings.Fields(editor)
+// splitEditorArgs splits an editor command string into command and arguments
+// using POSIX shell quoting rules. For example, "code --wait" becomes ["code", "--wait"].
+func splitEditorArgs(editor string) ([]string, error) {
+	return shlex.Split(editor)
 }

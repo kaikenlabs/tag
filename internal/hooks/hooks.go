@@ -136,14 +136,14 @@ func (l *limitedBuffer) Write(p []byte) (n int, err error) {
 	remaining := l.max - l.buf.Len()
 	if remaining <= 0 {
 		l.truncated = true
-		l.buf.WriteString("\n... output truncated (exceeded 1MB limit) ...\n")
+		fmt.Fprintf(&l.buf, "\n... output truncated (exceeded %d byte limit) ...\n", l.max)
 		return len(p), nil
 	}
 
 	if len(p) > remaining {
 		l.buf.Write(p[:remaining])
 		l.truncated = true
-		l.buf.WriteString("\n... output truncated (exceeded 1MB limit) ...\n")
+		fmt.Fprintf(&l.buf, "\n... output truncated (exceeded %d byte limit) ...\n", l.max)
 		return len(p), nil
 	}
 

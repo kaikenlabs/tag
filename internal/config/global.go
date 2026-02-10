@@ -58,7 +58,7 @@ func SaveGlobalConfig(cfg *GlobalConfig) error {
 		return err
 	}
 
-	if mkdirErr := os.MkdirAll(filepath.Dir(path), types.DirMode); mkdirErr != nil {
+	if mkdirErr := os.MkdirAll(filepath.Dir(path), types.DirModePrivate); mkdirErr != nil {
 		return mkdirErr
 	}
 
@@ -67,5 +67,5 @@ func SaveGlobalConfig(cfg *GlobalConfig) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, types.FileMode)
+	return os.WriteFile(path, data, types.FileModePrivate)
 }
