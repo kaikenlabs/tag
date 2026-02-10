@@ -131,7 +131,7 @@ func ParseMetadata(rendered string) (*Metadata, error) {
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 

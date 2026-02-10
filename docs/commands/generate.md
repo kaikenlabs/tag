@@ -247,6 +247,19 @@ Hooks defined in `.tagconfig.json` run automatically:
 
 Generate hooks use direct argv execution (no shell interpretation), which is safer than shell-based execution. Each hook has a **5-minute timeout** and output is limited to **1 MB**.
 
+## Frontmatter Reference
+
+The `---` block at the top of every generator file controls how and where the output is written. Lines starting with `#` are treated as comments and ignored.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `to` | string | Yes | Output file path (supports template expressions) |
+| `inject` | bool | No | Enable inject mode (insert content at a marker) |
+| `before` | string | No | Marker string to inject *before* (requires `inject: true`) |
+| `after` | string | No | Marker string to inject *after* (requires `inject: true`) |
+| `append` | bool | No | Append content to the end of an existing file |
+| `notes` | string | No | Message displayed after generation completes |
+
 ## Template Actions
 
 Templates support three actions via metadata:
@@ -284,6 +297,14 @@ before: "// END MARKER"
 ---
 ```
 
+### Notes
+```
+---
+to: path/to/file.go
+notes: "Remember to register the handler in routes.go"
+---
+```
+
 ## Error Handling
 
 | Error | Cause | Solution |
@@ -297,5 +318,6 @@ before: "// END MARKER"
 
 ## See Also
 
+- [New Command](new.md) - Creating generators and bundles
 - [Template Authoring](../templates/authoring.md) - Creating generators
 - [Hooks Guide](../templates/hooks.md) - Pre and post hooks

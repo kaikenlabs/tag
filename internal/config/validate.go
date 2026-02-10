@@ -24,8 +24,10 @@ func (c *Config) Validate() error {
 		return &ValidationError{Field: "config", Message: "configuration is nil"}
 	}
 
-	// Validate template path exists (if specified)
-	if c.Env.Path != "" {
+	// Validate template path exists (if specified).
+	// Skip when a library template is configured — the local .tag/ is optional
+	// because generators may come from the library.
+	if c.Env.Path != "" && !c.HasTemplateOrigin() {
 		if err := validateDirectory("env.TAG_PATH", c.Env.Path); err != nil {
 			return err
 		}

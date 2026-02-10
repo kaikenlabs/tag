@@ -55,6 +55,21 @@ func TestUT_Validate_InvalidPath(t *testing.T) {
 	assert.Contains(t, valErr.Message, "does not exist")
 }
 
+func TestUT_Validate_InvalidPathSkippedWithLibraryTemplate(t *testing.T) {
+	cfg := &Config{
+		Template: &TemplateOrigin{
+			Source: "bb:acme/my-template",
+			Name:   "my-template",
+		},
+		Env: Env{
+			Path: "/nonexistent/path/that/does/not/exist",
+		},
+	}
+	err := cfg.Validate()
+
+	require.NoError(t, err)
+}
+
 func TestUT_Validate_PathIsFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "file.txt")
