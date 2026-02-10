@@ -26,7 +26,7 @@ func TestUT_InitAction_CreatesDirectories(t *testing.T) {
 	})
 
 	ctx := createTestCLIContext(t, []string{}, map[string]any{
-		flags.PathFlag:       ".tag.templates",
+		flags.PathFlag:       ".tag",
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
 	})
@@ -36,13 +36,13 @@ func TestUT_InitAction_CreatesDirectories(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify shared directory was created
-	sharedDir := filepath.Join(tmpDir, ".tag.templates", "_shared")
+	sharedDir := filepath.Join(tmpDir, ".tag", "_shared")
 	info, err := os.Stat(sharedDir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 
 	// Verify bundle directory was created
-	bundleDir := filepath.Join(tmpDir, ".tag.templates", "_bundles")
+	bundleDir := filepath.Join(tmpDir, ".tag", "_bundles")
 	info, err = os.Stat(bundleDir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
@@ -60,7 +60,7 @@ func TestUT_InitAction_CreatesConfigFile(t *testing.T) {
 	})
 
 	ctx := createTestCLIContext(t, []string{}, map[string]any{
-		flags.PathFlag:       ".tag.templates",
+		flags.PathFlag:       ".tag",
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
 	})
@@ -76,7 +76,7 @@ func TestUT_InitAction_CreatesConfigFile(t *testing.T) {
 	// Verify config file can be loaded
 	cfg, err := config.LoadConfigFile(".")
 	require.NoError(t, err)
-	assert.Equal(t, ".tag.templates", cfg.Env.Path)
+	assert.Equal(t, ".tag", cfg.Env.Path)
 	assert.Equal(t, "_shared", cfg.Env.SharedPath)
 }
 
@@ -92,7 +92,7 @@ func TestUT_InitAction_IdempotentExecution(t *testing.T) {
 	})
 
 	ctx := createTestCLIContext(t, []string{}, map[string]any{
-		flags.PathFlag:       ".tag.templates",
+		flags.PathFlag:       ".tag",
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
 	})

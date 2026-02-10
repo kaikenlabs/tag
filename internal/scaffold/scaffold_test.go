@@ -116,7 +116,7 @@ func TestIT_Scaffold_LocalTemplate(t *testing.T) {
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", ".gitignore"))
 	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
 	// Generators are no longer copied to the output — they stay in the library
-	assert.NoDirExists(t, filepath.Join(outputDir, ".tag.templates"))
+	assert.NoDirExists(t, filepath.Join(outputDir, ".tag"))
 
 	// Verify template was processed
 	mainContent, err := os.ReadFile(filepath.Join(outputDir, "awesome_project", "cmd", "main.go"))
@@ -273,7 +273,7 @@ func TestIT_Scaffold_GeneratesTagconfig(t *testing.T) {
 
 	env, ok := tagconfig["env"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, ".tag.templates", env["TAG_PATH"])
+	assert.Equal(t, ".tag", env["TAG_PATH"])
 	assert.Nil(t, env["TAG_EXTENSION"], "TAG_EXTENSION should not be in config")
 }
 

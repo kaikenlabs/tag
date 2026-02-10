@@ -280,7 +280,7 @@ func TestUT_Write_SkipsTagTemplatesDir(t *testing.T) {
 	templateDir := t.TempDir()
 	outputDir := t.TempDir()
 
-	// Create .tag.templates directory with generator content
+	// Create .tag directory with generator content
 	tmplDir := filepath.Join(templateDir, types.TemplatesDir)
 	require.NoError(t, os.MkdirAll(filepath.Join(tmplDir, "component"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "component", "template.go"), []byte("component"), 0o644))
@@ -292,7 +292,7 @@ func TestUT_Write_SkipsTagTemplatesDir(t *testing.T) {
 	err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
-	// .tag.templates should NOT exist in output
+	// .tag should NOT exist in output
 	_, err = os.Stat(filepath.Join(outputDir, types.TemplatesDir))
 	assert.True(t, os.IsNotExist(err))
 

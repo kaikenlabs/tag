@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 TAG is a Go-based CLI tool for template-driven code generation and project scaffolding.
 
 **Commands**:
-- `tag init` - Initialize tag directory structure (`.tag.templates/_shared`, `.tag.templates/_bundles`)
+- `tag init` - Initialize tag directory structure (`.tag/_shared`, `.tag/_bundles`)
 - `tag new <name>` - Create a new generator template
 - `tag new-bundle <name>` (alias: `nb`) - Create a new bundle (collection of generators)
 - `tag generate <bundle-or-generator> <name>` - Run generators/bundles within existing projects

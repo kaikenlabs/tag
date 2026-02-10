@@ -58,7 +58,7 @@ func generateList(cfg *config.Config, w io.Writer) error {
 		}
 	}
 
-	// 2. Collect generators from local .tag.templates/
+	// 2. Collect generators from local .tag/
 	if cfg.Env.Path != "" {
 		localGens = scanGenerators(cfg.Env.Path)
 		localBundles = scanBundles(filepath.Join(cfg.Env.Path, cfg.Env.BundlePath))
@@ -70,7 +70,7 @@ func generateList(cfg *config.Config, w io.Writer) error {
 		if templateName == "" {
 			fmt.Fprintln(w)
 			fmt.Fprintln(w, "This project was not scaffolded from a library template.")
-			fmt.Fprintln(w, "Create generators in .tag.templates/ or scaffold from a template with generators.")
+			fmt.Fprintln(w, "Create generators in .tag/ or scaffold from a template with generators.")
 		}
 		return nil
 	}

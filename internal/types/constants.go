@@ -12,7 +12,7 @@ const (
 	GeneratorsDir = "_generators"
 
 	// TemplatesDir is the directory within a scaffolded project that holds generators.
-	TemplatesDir = ".tag.templates"
+	TemplatesDir = ".tag"
 
 	// SharedDir is the default subdirectory for shared templates.
 	SharedDir = "_shared"

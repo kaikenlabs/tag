@@ -140,7 +140,7 @@ func TestUT_NewAction_TemplateContent(t *testing.T) {
 }
 
 func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {
-	cfg := createTestConfig(t, ".tag.templates")
+	cfg := createTestConfig(t, ".tag")
 	cmd := NewCommand(cfg)
 
 	require.NotNil(t, cmd)

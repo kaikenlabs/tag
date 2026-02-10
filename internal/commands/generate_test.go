@@ -837,9 +837,9 @@ func TestUT_GeneratorNotFoundError_WithTemplate(t *testing.T) {
 func TestUT_GeneratorNotFoundError_LocalOnly(t *testing.T) {
 	err := &GeneratorNotFoundError{
 		Generator: "component",
-		LocalPath: ".tag.templates",
+		LocalPath: ".tag",
 	}
 
 	msg := err.Error()
-	assert.Contains(t, msg, `generator "component" not found in .tag.templates`)
+	assert.Contains(t, msg, `generator "component" not found in .tag`)
 }

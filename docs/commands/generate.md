@@ -17,8 +17,8 @@ The `generate` command runs a generator (or bundle of generators) to add files t
 
 Generators are resolved using a **library-first, local-fallback** strategy:
 
-1. **Library template**: If the project was scaffolded from a library template (recorded in `.tagconfig.json`), generators from that template's `.tag.templates/` directory are checked first.
-2. **Local project**: Generators in the project's `.tag.templates/` directory (configured via `TAG_PATH`) are used as a fallback.
+1. **Library template**: If the project was scaffolded from a library template (recorded in `.tagconfig.json`), generators from that template's `.tag/` directory are checked first.
+2. **Local project**: Generators in the project's `.tag/` directory (configured via `TAG_PATH`) are used as a fallback.
 3. **Local wins on collision**: If both sources have a generator with the same name, the local version takes precedence.
 
 Generators can:
@@ -51,7 +51,7 @@ When a project was scaffolded from a template, the scaffold-time variables (e.g.
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--path` | `-tp` | `.tag.templates` | Templates directory path |
+| `--path` | `-tp` | `.tag` | Templates directory path |
 | `--shared` | `-sp` | `_shared` | Shared templates directory name |
 
 ## Subcommands
@@ -128,7 +128,7 @@ tag generate handler User --dry-run
 
 ```bash
 # Custom templates directory
-tag generate handler User --path custom.tag.templates
+tag generate handler User --path custom.tag
 ```
 
 ## Template Data
@@ -168,7 +168,7 @@ func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
 | Feature | Generator | Bundle |
 |---------|-----------|--------|
 | Creates | One or more related files | Multiple generators' output |
-| Location | `.tag.templates/<name>/` | `_bundles/<name>/<name>.bundle.json` |
+| Location | `.tag/<name>/` | `_bundles/<name>/<name>.bundle.json` |
 | Use case | Single concern (handler, model) | Full feature (CRUD, module) |
 
 ### Bundle File Format
@@ -204,7 +204,7 @@ When a project is scaffolded from a library template, `.tagconfig.json` includes
     "router": "chi"
   },
   "env": {
-    "TAG_PATH": ".tag.templates",
+    "TAG_PATH": ".tag",
     "TAG_SHARED_PATH": "_shared",
     "TAG_BUNDLE_PATH": "_bundles"
   },
@@ -227,7 +227,7 @@ When created via `tag init`, the config contains only `env` and `hooks` (no temp
 ```json
 {
   "env": {
-    "TAG_PATH": ".tag.templates",
+    "TAG_PATH": ".tag",
     "TAG_SHARED_PATH": "_shared",
     "TAG_BUNDLE_PATH": "_bundles"
   },
@@ -288,8 +288,8 @@ before: "// END MARKER"
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "generator not found in template ... or local path" | Generator not found in library template or local `.tag.templates/` | Ensure the template is in the library (`tag lib add <ref>`) and the generator name is correct |
-| "generator not found in .tag.templates" | Generator not found locally (no library template configured) | Create the generator in `.tag.templates/` |
+| "generator not found in template ... or local path" | Generator not found in library template or local `.tag/` | Ensure the template is in the library (`tag lib add <ref>`) and the generator name is correct |
+| "generator not found in .tag" | Generator not found locally (no library template configured) | Create the generator in `.tag/` |
 | "template not found in library" | `.tagconfig.json` references a template that isn't installed | Run `tag lib add <ref>` to install the template |
 | "template version mismatch" | Library template version differs from scaffold-time version | Consider re-scaffolding or running `tag lib update <name>` |
 | "cannot open bundle file" | Bundle file not found | Verify bundle exists in `_bundles/` |

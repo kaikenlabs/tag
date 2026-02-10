@@ -23,7 +23,7 @@ func TestUT_LoadConfigFile_WithTemplateOrigin(t *testing.T) {
 			"port": 8080
 		},
 		"env": {
-			"TAG_PATH": ".tag.templates",
+			"TAG_PATH": ".tag",
 			"TAG_SHARED_PATH": "_shared",
 			"TAG_BUNDLE_PATH": "_bundles"
 		},
@@ -51,7 +51,7 @@ func TestUT_LoadConfigFile_WithTemplateOrigin(t *testing.T) {
 	assert.Equal(t, float64(8080), cfg.Variables["port"]) // JSON numbers → float64
 
 	// Env (unchanged)
-	assert.Equal(t, ".tag.templates", cfg.Env.Path)
+	assert.Equal(t, ".tag", cfg.Env.Path)
 	assert.Equal(t, "_shared", cfg.Env.SharedPath)
 	assert.Equal(t, "_bundles", cfg.Env.BundlePath)
 }
@@ -60,7 +60,7 @@ func TestUT_LoadConfigFile_WithoutTemplateOrigin(t *testing.T) {
 	dir := t.TempDir()
 	content := `{
 		"env": {
-			"TAG_PATH": ".tag.templates",
+			"TAG_PATH": ".tag",
 			"TAG_SHARED_PATH": "_shared",
 			"TAG_BUNDLE_PATH": "_bundles"
 		},
@@ -78,7 +78,7 @@ func TestUT_LoadConfigFile_WithoutTemplateOrigin(t *testing.T) {
 
 	assert.Nil(t, cfg.Template)
 	assert.Nil(t, cfg.Variables)
-	assert.Equal(t, ".tag.templates", cfg.Env.Path)
+	assert.Equal(t, ".tag", cfg.Env.Path)
 }
 
 func TestUT_LoadConfigFile_TemplateOriginWithoutVersion(t *testing.T) {
@@ -88,7 +88,7 @@ func TestUT_LoadConfigFile_TemplateOriginWithoutVersion(t *testing.T) {
 			"source": "gh:acme/repo",
 			"name": "repo"
 		},
-		"env": {"TAG_PATH": ".tag.templates", "TAG_SHARED_PATH": "_shared", "TAG_BUNDLE_PATH": "_bundles"},
+		"env": {"TAG_PATH": ".tag", "TAG_SHARED_PATH": "_shared", "TAG_BUNDLE_PATH": "_bundles"},
 		"hooks": {"pre": [], "post": []}
 	}`
 	err := os.WriteFile(filepath.Join(dir, File), []byte(content), 0o644)

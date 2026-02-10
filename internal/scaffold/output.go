@@ -81,7 +81,7 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 			return nil
 		}
 
-		// Skip .tag.templates directory (generators stay in the library, not copied to output)
+		// Skip .tag directory (generators stay in the library, not copied to output)
 		if relPath == types.TemplatesDir || strings.HasPrefix(relPath, types.TemplatesDir+string(filepath.Separator)) {
 			return nil
 		}
