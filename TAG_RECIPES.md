@@ -536,7 +536,58 @@ tag lib add gh:user/cookiecutter-flask --as flask
 
 ---
 
-## Recipe 9: Replay and Non-Interactive Scaffolding
+## Recipe 9: Previewing Templates with `tag info`
+
+Inspect any template before scaffolding — see its variables, hooks, and documentation.
+
+### Local template
+
+```bash
+tag info ./my-template
+```
+
+### Library template (by name)
+
+```bash
+tag info go-api
+```
+
+### Remote template
+
+```bash
+# Preview a GitHub template
+tag info gh:user/awesome-template
+
+# Force refresh of a cached remote template
+tag info gh:user/awesome-template --update
+```
+
+### What you'll see
+
+`tag info` displays (in order):
+
+1. **Metadata** — Name, version, description from `tag.template.json`
+2. **Variables** — Sorted list with types, defaults, and choice options
+3. **Hooks** — Pre/post scaffold commands
+4. **README.md** — Rendered with terminal formatting (if present)
+5. **HOWTO.md** — Rendered with terminal formatting (if present)
+
+### Typical workflow
+
+```bash
+# 1. Browse library
+tag lib ls
+
+# 2. Inspect before using
+tag info go-api
+
+# 3. Scaffold with confidence
+tag run go-api my-service
+```
+
+---
+
+## Recipe 10: Replay and Non-Interactive Scaffolding
 
 ### Save and replay inputs
 

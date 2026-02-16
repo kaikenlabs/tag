@@ -15,6 +15,9 @@ TAG is a CLI tool for two complementary workflows:
 ## Decision Tree
 
 ```
+Need to preview a template before using it?
+  → tag info <template> (works with local, remote, and library templates)
+
 Need to create a new project from scratch?
   → tag scaffold (remote/local template)
   → tag run (library template)
@@ -562,6 +565,7 @@ Cookiecutter templates are **auto-detected and converted** when added to the lib
 | `tag new <name>` | Create a new generator |
 | `tag new-bundle <name>` (alias: `nb`) | Create a new bundle |
 | `tag generate <gen-or-bundle> <name>` | Run a generator or bundle |
+| `tag info <template>` | Show template info without scaffolding |
 | `tag scaffold <ref> [project-name]` | Create project from template |
 | `tag run [template] [project-name]` | Scaffold from library template |
 | `tag convert cookiecutter <src> -d <dst>` | Convert Cookiecutter template |
@@ -585,6 +589,7 @@ Cookiecutter templates are **auto-detected and converted** when added to the lib
 | `--force` | scaffold, run | Overwrite existing output |
 | `--accept-hooks` | scaffold, run | Run hooks without prompting |
 | `-l` / `--lib` | new, new-bundle | Target library template |
+| `--update` / `-u` | scaffold, info | Force refresh of cached remote templates |
 | `--dry-run` | generate | Preview without writing files |
 
 ## Pitfalls & Gotchas
