@@ -40,7 +40,7 @@ func NewCommand(cfg *config.Config) *cli.Command {
 			&cli.StringFlag{
 				Name:    flags.InBundleFlag,
 				Usage:   "Create generator inside a self-contained bundle directory",
-				Aliases: []string{"b"},
+				Aliases: []string{"B"},
 			},
 		},
 	}

@@ -136,6 +136,9 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	for _, generator := range bundle.Generators {
 		var genDirPath, sharedPath string
 		if bundle.SelfContained {
+			if err := ValidateNameSafe(generator.Name); err != nil {
+				return app.Errorf("invalid generator name in bundle: %w", err)
+			}
 			bundleDir := filepath.Dir(bundlePath)
 			genDirPath = filepath.Join(bundleDir, generator.Name)
 			sharedPath = filepath.Join(bundleDir, types.SharedDir)

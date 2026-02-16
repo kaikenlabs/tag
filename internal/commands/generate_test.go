@@ -629,6 +629,30 @@ Hello {{ .Name }}`
 	assert.NotEqual(t, rootShared, capturedSharedPath)
 }
 
+func TestUT_GenerateBundle_SelfContained_PathTraversal(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create bundle with a generator name containing path traversal
+	bundleDir := filepath.Join(tmpDir, "_bundles", "evil")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o750))
+
+	bundleJSON := `{"name":"evil","self_contained":true,"generators":[{"name":"../../etc"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "evil.json"), []byte(bundleJSON), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"evil", "target"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid generator name in bundle")
+}
+
 // --- resolveGeneratorPaths tests ---
 
 func TestUT_ResolveGeneratorPaths_LocalFallback(t *testing.T) {
