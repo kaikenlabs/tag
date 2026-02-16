@@ -44,6 +44,7 @@ func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, s
 	if len(sharedTemplates) > 0 {
 		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
 		tmplEngine.SetLoader(loader)
+		tmplEngine.SetSharedContent(sharedTemplates)
 		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
 	}
 

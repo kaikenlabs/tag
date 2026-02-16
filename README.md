@@ -4,6 +4,8 @@ A powerful code generation and project scaffolding CLI for developers.
 
 TAG combines the project bootstrapping capabilities of [Cookiecutter](https://cookiecutter.readthedocs.io/) with incremental code generation, supporting both full project scaffolding from templates and adding code to existing projects.
 
+If you are an AI coding assistant, or you are looking for a quick reference, please read the [TAG quick reference doc](TAG_REFERENCE.md) and the [TAG recipes doc](TAG_RECIPES.md) files.
+
 ## Features
 
 - **Project Scaffolding** - Create complete projects from local or remote templates

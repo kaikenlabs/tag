@@ -1,0 +1,7 @@
+---
+to: config/{{ name | snake }}.go
+---
+package config
+
+const ProjectName = "{{ vars.project_name }}"
+const UseDocker = "{{ vars.use_docker }}"

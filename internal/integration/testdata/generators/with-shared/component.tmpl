@@ -1,0 +1,8 @@
+---
+to: app/{{ name | snake }}.go
+---
+{% include "header.tmpl" %}
+package app
+
+// {{ name | pascal }} is a generated component.
+type {{ name | pascal }} struct{}

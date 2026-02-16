@@ -31,7 +31,7 @@ The `scaffold` command creates a new project from a local or remote template. It
 | `--update` | `-u` | Force refresh of cached remote templates |
 | `--replay` | | Reuse saved values from a previous scaffold |
 | `--no-save` | | Don't save values for future replay |
-| `--allow-hooks` | | Allow hooks to run for remote templates (disabled by default) |
+| `--accept-hooks` | | Accept hooks without prompting (disabled by default for remote templates) |
 
 ## Template Formats
 
@@ -222,12 +222,12 @@ For security, hooks defined in remote templates are **disabled by default**. A m
 When hooks are skipped, TAG displays a warning:
 ```
 Warning: This remote template defines hooks that have been skipped for security.
-  To allow hooks, re-run with --allow-hooks
+  To allow hooks, re-run with --accept-hooks
 ```
 
 To allow hooks for a trusted remote template:
 ```bash
-tag scaffold gh:trusted-org/template --allow-hooks
+tag scaffold gh:trusted-org/template --accept-hooks
 ```
 
 Local templates always run hooks, since you control the template source.
@@ -244,6 +244,8 @@ Local templates always run hooks, since you control the template source.
 
 ## See Also
 
+- [tag run](run.md) - Scaffold from a library template
+- [tag lib](lib.md) - Manage the template library
 - [Template Authoring](../templates/authoring.md) - How to create templates
 - [Remote References](../reference/remote-refs.md) - Template source formats
 - [tag.template.json Reference](../reference/tag.template.json.md) - Configuration format

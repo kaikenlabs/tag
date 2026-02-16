@@ -843,3 +843,139 @@ func TestUT_GeneratorNotFoundError_LocalOnly(t *testing.T) {
 	msg := err.Error()
 	assert.Contains(t, msg, `generator "component" not found in .tag`)
 }
+
+// --- Library-first resolution tests ---
+
+func TestUT_ResolveGeneratorPaths_LibraryFirst(t *testing.T) {
+	// Generator found in library template — should return library path.
+	templateDir := setupFakeLibrary(t, "my-template")
+
+	// Create generator inside the library template's .tag dir
+	genDir := filepath.Join(templateDir, ".tag", "component")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
+
+	gotGen, gotShared, err := resolveGeneratorPaths(cfg, "component")
+
+	require.NoError(t, err)
+	assert.Equal(t, genDir, gotGen)
+	assert.Equal(t, filepath.Join(templateDir, ".tag", "_shared"), gotShared)
+}
+
+func TestUT_ResolveGeneratorPaths_LibraryFallbackToLocal(t *testing.T) {
+	// Generator not in library template — should fall back to local .tag/.
+	templateDir := setupFakeLibrary(t, "my-template")
+
+	// Create .tag dir in library but WITHOUT the requested generator
+	require.NoError(t, os.MkdirAll(filepath.Join(templateDir, ".tag"), 0o750))
+
+	// Create local generator
+	tmpDir := setupTempDir(t)
+	localGenDir := filepath.Join(tmpDir, "component")
+	require.NoError(t, os.MkdirAll(localGenDir, 0o750))
+
+	cfg := createTestConfigWithLib(t, tmpDir, "my-template")
+
+	gotGen, _, err := resolveGeneratorPaths(cfg, "component")
+
+	require.NoError(t, err)
+	assert.Equal(t, localGenDir, gotGen)
+}
+
+func TestUT_ResolveBundlePath_LibraryFirst(t *testing.T) {
+	// Bundle found in library template — should return library path.
+	templateDir := setupFakeLibrary(t, "my-template")
+
+	// Create bundle inside the library template's .tag/_bundles dir
+	bundleDir := filepath.Join(templateDir, ".tag", "_bundles", "fullstack")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o750))
+	bundlePath := filepath.Join(bundleDir, "fullstack.json")
+	require.NoError(t, os.WriteFile(bundlePath, []byte(`{"name":"fullstack","generators":[]}`), 0o644))
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
+
+	got, err := resolveBundlePath(cfg, "fullstack", "_bundles")
+
+	require.NoError(t, err)
+	assert.Equal(t, bundlePath, got)
+}
+
+func TestUT_WarnVersionMismatch_PrintsWarning(t *testing.T) {
+	templateDir := setupFakeLibrary(t, "my-template")
+
+	// Write a tag.template.json with a different version in the library
+	configJSON := `{"version": "2.0.0", "description": "test template"}`
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), []byte(configJSON), 0o644))
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
+	cfg.Template.Version = "1.0.0" // scaffolded version differs
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	warnVersionMismatch(cfg, templateDir)
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	assert.Contains(t, output, "Warning: template version mismatch")
+	assert.Contains(t, output, "1.0.0")
+	assert.Contains(t, output, "2.0.0")
+}
+
+func TestUT_WarnVersionMismatch_NoWarningWhenMatch(t *testing.T) {
+	templateDir := setupFakeLibrary(t, "my-template")
+
+	configJSON := `{"version": "1.0.0"}`
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), []byte(configJSON), 0o644))
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
+	cfg.Template.Version = "1.0.0"
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	warnVersionMismatch(cfg, templateDir)
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+
+	assert.Empty(t, buf.String(), "no warning expected when versions match")
+}
+
+func TestUT_WarnVersionMismatch_SkipsWhenNoVersion(t *testing.T) {
+	templateDir := setupFakeLibrary(t, "my-template")
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
+	cfg.Template.Version = "" // no version recorded at scaffold time
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	warnVersionMismatch(cfg, templateDir)
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+
+	assert.Empty(t, buf.String(), "no warning expected when scaffold version is empty")
+}

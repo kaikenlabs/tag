@@ -168,7 +168,7 @@ func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
 | Feature | Generator | Bundle |
 |---------|-----------|--------|
 | Creates | One or more related files | Multiple generators' output |
-| Location | `.tag/<name>/` | `_bundles/<name>/<name>.bundle.json` |
+| Location | `.tag/<name>/` | `.tag/_bundles/<name>.json` |
 | Use case | Single concern (handler, model) | Full feature (CRUD, module) |
 
 ### Bundle File Format
