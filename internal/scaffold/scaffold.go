@@ -77,6 +77,7 @@ type runContext struct {
 	vars                 map[string]any
 	outputDir            string
 	effectiveTemplateDir string
+	projectRoot          string // actual project directory (may differ from outputDir when wrapper + explicit --output-dir)
 	hookEnv              []string
 }
 
@@ -186,6 +187,7 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 		return err
 	}
 	ctx.outputDir = outputDir
+	ctx.projectRoot = outputDir // default: project root is the output directory
 
 	// Detect project wrapper to avoid double nesting.
 	// Cookiecutter-style templates wrap project files in a directory named after
@@ -194,9 +196,19 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 	// project_name/project_name nesting. Unwrap by using the wrapper as the
 	// effective template root for Write().
 	ctx.effectiveTemplateDir = ctx.opts.TemplateDir
-	if ctx.opts.OutputDir == "" {
-		if wrapperDir := findProjectWrapper(ctx.opts.TemplateDir); wrapperDir != "" {
+	wrapperDir := findProjectWrapper(ctx.opts.TemplateDir)
+	if wrapperDir != "" {
+		if ctx.opts.OutputDir == "" {
+			// No explicit output dir — unwrap to avoid double nesting
 			ctx.effectiveTemplateDir = filepath.Join(ctx.opts.TemplateDir, wrapperDir)
+		} else {
+			// Explicit output dir — wrapper creates a subdirectory inside outputDir.
+			// The project root (for .tagconfig.json, hooks workdir) is that subdirectory.
+			tmplCtx := template.NewContextBuilder().WithVars(ctx.vars).Build()
+			rendered, err := s.engine.ExecuteToString(wrapperDir, tmplCtx)
+			if err == nil && rendered != "" {
+				ctx.projectRoot = filepath.Join(ctx.outputDir, rendered)
+			}
 		}
 	}
 
@@ -210,12 +222,20 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 		return err
 	}
 
-	// Build hook environment
-	ctx.hookEnv = hooks.BuildHookEnv(ctx.vars, ctx.templateDirAbs, ctx.outputDir)
+	// Build hook environment — use projectRoot so TAG_OUTPUT_DIR matches the
+	// actual working directory where hooks execute (inside the wrapper when present).
+	ctx.hookEnv = hooks.BuildHookEnv(ctx.vars, ctx.templateDirAbs, ctx.projectRoot)
 
-	// Run pre-scaffold hooks
+	// Render and run hooks only when allowed — avoid failing on invalid hook
+	// templates when the user has opted to skip hooks.
+	var renderedHooks *types.HooksConfig
 	if ctx.hooksAllowed {
-		if err := hooks.RunPreScaffoldHooks(s.hookRunner, ctx.config.Hooks, ctx.templateDirAbs, ctx.hookEnv); err != nil {
+		var err error
+		renderedHooks, err = renderHooksConfig(s.engine, ctx.config.Hooks, ctx.vars)
+		if err != nil {
+			return err
+		}
+		if err := hooks.RunPreScaffoldHooks(s.hookRunner, renderedHooks, ctx.templateDirAbs, ctx.hookEnv); err != nil {
 			return fmt.Errorf("pre-scaffold hook failed: %w", err)
 		}
 	}
@@ -245,7 +265,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 		TemplateVersion: ctx.opts.TemplateVersion,
 		Variables:       configVars,
 	}
-	if err := GenerateTagConfig(ctx.outputDir, tagConfigOpts); err != nil {
+	if err := GenerateTagConfig(ctx.projectRoot, tagConfigOpts); err != nil {
 		return fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
@@ -254,12 +274,12 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 		// When a project wrapper was unwrapped, hook scripts live in the
 		// original template root (not the output dir). Resolve file-based
 		// hook commands to absolute paths so they are found correctly while
-		// still executing with workDir=outputDir.
-		postHooks := ctx.config.Hooks
-		if ctx.effectiveTemplateDir != ctx.opts.TemplateDir && ctx.config.Hooks != nil {
-			postHooks = hooks.ResolveHookPaths(ctx.config.Hooks, ctx.templateDirAbs)
+		// still executing with workDir=projectRoot.
+		postHooks := renderedHooks
+		if ctx.effectiveTemplateDir != ctx.opts.TemplateDir && renderedHooks != nil {
+			postHooks = hooks.ResolveHookPaths(renderedHooks, ctx.templateDirAbs)
 		}
-		hooks.RunPostScaffoldHooks(s.hookRunner, postHooks, ctx.outputDir, ctx.hookEnv)
+		hooks.RunPostScaffoldHooks(s.hookRunner, postHooks, ctx.projectRoot, ctx.hookEnv)
 	}
 
 	// Save replay data and display summary
@@ -532,4 +552,46 @@ func findProjectWrapper(templateRoot string) string {
 	}
 
 	return wrapper
+}
+
+// renderHookCommands renders template expressions in hook command strings.
+// Commands without template syntax ({{ }}) are returned unchanged.
+func renderHookCommands(engine template.TemplateRenderer, commands []string, vars map[string]any) ([]string, error) {
+	if len(commands) == 0 {
+		return commands, nil
+	}
+	ctx := template.NewContextBuilder().WithVars(vars).Build()
+	rendered := make([]string, len(commands))
+	for i, cmd := range commands {
+		if !strings.Contains(cmd, "{{") {
+			rendered[i] = cmd
+			continue
+		}
+		result, err := engine.ExecuteToString(cmd, ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to render hook command %q: %w", cmd, err)
+		}
+		rendered[i] = result
+	}
+	return rendered, nil
+}
+
+// renderHooksConfig renders template expressions in all hook commands.
+// Returns the input unchanged when hc is nil or has no template expressions.
+func renderHooksConfig(engine template.TemplateRenderer, hc *types.HooksConfig, vars map[string]any) (*types.HooksConfig, error) {
+	if hc == nil {
+		return &types.HooksConfig{}, nil
+	}
+	pre, err := renderHookCommands(engine, hc.PreScaffold, vars)
+	if err != nil {
+		return nil, err
+	}
+	post, err := renderHookCommands(engine, hc.PostScaffold, vars)
+	if err != nil {
+		return nil, err
+	}
+	return &types.HooksConfig{
+		PreScaffold:  pre,
+		PostScaffold: post,
+	}, nil
 }

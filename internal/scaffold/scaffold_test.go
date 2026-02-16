@@ -9,6 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // createTestTemplate creates a test template structure in a temporary directory.
@@ -114,7 +117,8 @@ func TestIT_Scaffold_LocalTemplate(t *testing.T) {
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", "cmd", "main.go"))
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", "README.md"))
 	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", ".gitignore"))
-	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
+	// .tagconfig.json goes inside the project wrapper directory
+	assert.FileExists(t, filepath.Join(outputDir, "awesome_project", ".tagconfig.json"))
 	// Generators are no longer copied to the output — they stay in the library
 	assert.NoDirExists(t, filepath.Join(outputDir, ".tag"))
 
@@ -628,6 +632,12 @@ func TestIT_Scaffold_ExplicitOutputDir_KeepsNesting(t *testing.T) {
 	// should be preserved as a subdirectory (no unwrapping)
 	assert.DirExists(t, filepath.Join(outputDir, "my_project"))
 	assert.FileExists(t, filepath.Join(outputDir, "my_project", "cmd", "main.go"))
+
+	// .tagconfig.json should be inside the project wrapper (where users cd into)
+	assert.FileExists(t, filepath.Join(outputDir, "my_project", ".tagconfig.json"),
+		".tagconfig.json should be inside wrapper directory for tag generate to work")
+	assert.NoFileExists(t, filepath.Join(outputDir, ".tagconfig.json"),
+		".tagconfig.json should NOT be at the parent level")
 }
 
 func TestIT_Scaffold_DerivedVariablesResolved(t *testing.T) {
@@ -780,4 +790,187 @@ func TestIT_Scaffold_DerivedVarsInWrapperDir(t *testing.T) {
 		"derived variable in wrapper template should be resolved")
 	assert.NotContains(t, string(goModContent), "{{ vars.",
 		"no unrendered template expressions should remain")
+}
+
+// --- Tests for renderHookCommands ---
+
+func TestUT_RenderHookCommands_WithVars(t *testing.T) {
+	t.Parallel()
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	vars := map[string]any{
+		"project_name": "order-ms",
+		"module_path":  "test.com/order-ms",
+	}
+	commands := []string{
+		"cd {{ vars.project_name }} && go mod tidy",
+		"echo {{ vars.module_path }}",
+	}
+
+	rendered, err := renderHookCommands(engine, commands, vars)
+	require.NoError(t, err)
+	assert.Equal(t, "cd order-ms && go mod tidy", rendered[0])
+	assert.Equal(t, "echo test.com/order-ms", rendered[1])
+}
+
+func TestUT_RenderHookCommands_NoTemplateExpressions(t *testing.T) {
+	t.Parallel()
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	commands := []string{"go mod tidy", "make build"}
+	rendered, err := renderHookCommands(engine, commands, map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, commands, rendered)
+}
+
+func TestUT_RenderHookCommands_EmptySlice(t *testing.T) {
+	t.Parallel()
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	rendered, err := renderHookCommands(engine, nil, map[string]any{})
+	require.NoError(t, err)
+	assert.Nil(t, rendered)
+
+	rendered, err = renderHookCommands(engine, []string{}, map[string]any{})
+	require.NoError(t, err)
+	assert.Empty(t, rendered)
+}
+
+func TestUT_RenderHookCommands_InvalidTemplate(t *testing.T) {
+	t.Parallel()
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	commands := []string{"echo {{ vars.missing_close"}
+	_, err = renderHookCommands(engine, commands, map[string]any{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to render hook command")
+}
+
+func TestUT_RenderHooksConfig_NilConfig(t *testing.T) {
+	t.Parallel()
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	result, err := renderHooksConfig(engine, nil, map[string]any{})
+	require.NoError(t, err)
+	assert.Empty(t, result.PreScaffold)
+	assert.Empty(t, result.PostScaffold)
+}
+
+func TestUT_RenderHooksConfig_BothPhases(t *testing.T) {
+	t.Parallel()
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	hc := &types.HooksConfig{
+		PreScaffold:  []string{"echo pre {{ vars.name }}"},
+		PostScaffold: []string{"cd {{ vars.name }} && make"},
+	}
+	vars := map[string]any{"name": "my-project"}
+
+	result, err := renderHooksConfig(engine, hc, vars)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"echo pre my-project"}, result.PreScaffold)
+	assert.Equal(t, []string{"cd my-project && make"}, result.PostScaffold)
+}
+
+// --- Tests for .tagconfig.json placement with wrapper directories ---
+
+func TestIT_Scaffold_TagConfigInProjectWrapper(t *testing.T) {
+	templateDir := createTestTemplate(t) // has {{ vars.project_name }}/ wrapper
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir, // explicit output dir
+		Meta: map[string]string{
+			"project_name": "my_service",
+			"author":       "Test",
+		},
+		NoInput: true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// .tagconfig.json should be inside the wrapper directory
+	assert.FileExists(t, filepath.Join(outputDir, "my_service", ".tagconfig.json"),
+		".tagconfig.json should be inside wrapper dir so 'tag generate' works from project root")
+	assert.NoFileExists(t, filepath.Join(outputDir, ".tagconfig.json"),
+		".tagconfig.json should NOT be at the parent output dir")
+
+	// Verify content is valid
+	data, err := os.ReadFile(filepath.Join(outputDir, "my_service", ".tagconfig.json"))
+	require.NoError(t, err)
+	var cfg map[string]any
+	require.NoError(t, json.Unmarshal(data, &cfg))
+	assert.NotNil(t, cfg["env"])
+}
+
+func TestIT_Scaffold_TagConfigWithoutWrapper(t *testing.T) {
+	dir := t.TempDir()
+
+	// Template without a wrapper directory
+	config := map[string]any{
+		"vars": map[string]any{
+			"project_name": "flat-project",
+		},
+	}
+	configData, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), configData, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
+
+	outputDir := filepath.Join(t.TempDir(), "output")
+	opts := Options{
+		TemplateDir: dir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Without a wrapper, .tagconfig.json goes to outputDir (no change)
+	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
+}
+
+func TestIT_Scaffold_TagConfigDefaultOutputDir(t *testing.T) {
+	templateDir := createTestTemplate(t) // has {{ vars.project_name }}/ wrapper
+
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	tempDir := t.TempDir()
+	require.NoError(t, os.Chdir(tempDir))
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	opts := Options{
+		TemplateDir: templateDir,
+		// No OutputDir — wrapper is unwrapped, outputDir = project_name
+		Meta: map[string]string{
+			"project_name": "unwrapped_proj",
+			"author":       "Test",
+		},
+		NoInput: true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Unwrapped: .tagconfig.json goes to outputDir (== projectRoot)
+	outputDir := filepath.Join(tempDir, "unwrapped_proj")
+	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
 }
