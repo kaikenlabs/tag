@@ -136,8 +136,14 @@ func (e *Engine) parseWithName(content, name string) (Template, error) {
 	}
 
 	// Slow path: parse and cache
-	// Memory loader requires keys to start with '/'
+	// Memory loader requires keys to start with '/'.
+	// When shared content exists, use the basename so that the memory loader's
+	// common-prefix root computation yields "/" — this ensures {% include %}
+	// resolves shared templates correctly regardless of the original file path.
 	loaderKey := name
+	if len(e.sharedContent) > 0 {
+		loaderKey = filepath.Base(name)
+	}
 	if loaderKey == "" || loaderKey[0] != '/' {
 		loaderKey = "/" + loaderKey
 	}
