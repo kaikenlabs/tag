@@ -40,19 +40,24 @@ EXAMPLES:
 }
 
 func runAction(c *cli.Context) error {
+	positional, err := reparseTrailingFlags(c, commonScaffoldFlags())
+	if err != nil {
+		return app.Errorf("invalid flags: %w", err)
+	}
+
 	lib, err := newLocalLibrary()
 	if err != nil {
 		return app.Errorf("failed to initialize library: %w", err)
 	}
 
-	templateName, err := resolveTemplateName(c, lib)
+	templateName, err := resolveTemplateName(c, lib, positional)
 	if err != nil {
 		return err
 	}
 
 	projectName := ""
-	if c.NArg() >= 2 {
-		projectName = c.Args().Get(1)
+	if len(positional) >= 2 {
+		projectName = positional[1]
 	}
 
 	// Get entry first — provides both path and source in one lookup
@@ -94,11 +99,11 @@ func runAction(c *cli.Context) error {
 	return nil
 }
 
-// resolveTemplateName determines the template name from args or interactive picker.
-func resolveTemplateName(c *cli.Context, lib *library.Library) (string, error) {
+// resolveTemplateName determines the template name from positional args or interactive picker.
+func resolveTemplateName(c *cli.Context, lib *library.Library, positional []string) (string, error) {
 	switch {
-	case c.NArg() >= 1:
-		return c.Args().Get(0), nil
+	case len(positional) >= 1:
+		return positional[0], nil
 	case scaffold.IsTTY() && !c.Bool("no-input"):
 		return pickTemplate(lib)
 	default:
