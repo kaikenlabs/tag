@@ -193,6 +193,52 @@ func TestUT_NewAction_LibFlag_NoTemplateOrigin(t *testing.T) {
 	assert.Contains(t, err.Error(), "no library template configured")
 }
 
+func TestUT_NewAction_BundleFlag(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	// Create the bundle directory first (simulates tag new-bundle was run)
+	bundleDir := filepath.Join(tmpDir, "_bundles", "mybundle")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o750))
+
+	ctx := createTestCLIContext(t, []string{"mygen"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+		flags.InBundleFlag:   "mybundle",
+		"package":            "mypackage",
+	})
+
+	err := newAction(ctx, cfg)
+
+	require.NoError(t, err)
+
+	// Verify generator was created inside the bundle directory
+	generatorPath := filepath.Join(bundleDir, "mygen", "mygen.go")
+	require.FileExists(t, generatorPath)
+
+	data, err := os.ReadFile(generatorPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "mypackage")
+}
+
+func TestUT_NewAction_BundleFlag_BundleNotFound(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mygen"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+		flags.InBundleFlag:   "nonexistent",
+		"package":            "mypackage",
+	})
+
+	err := newAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+	assert.Contains(t, err.Error(), "tag new-bundle nonexistent")
+}
+
 func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {
 	cfg := createTestConfig(t, ".tag")
 	cmd := NewCommand(cfg)
@@ -224,4 +270,14 @@ func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {
 		}
 	}
 	assert.True(t, hasLibFlag, "should have lib flag")
+
+	// Verify bundle flag exists
+	var hasBundleFlag bool
+	for _, f := range cmd.Flags {
+		if sf, ok := f.(*cli.StringFlag); ok && sf.Name == flags.InBundleFlag {
+			hasBundleFlag = true
+			break
+		}
+	}
+	assert.True(t, hasBundleFlag, "should have bundle flag")
 }

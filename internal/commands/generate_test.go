@@ -495,6 +495,140 @@ func TestUT_RunHooks_RelativePathCommand(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// --- Self-contained bundle tests ---
+
+func TestUT_GenerateBundle_SelfContained_Valid(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	// Create generators inside the bundle directory (self-contained)
+	bundleDir := filepath.Join(tmpDir, "_bundles", "mybundle")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o750))
+
+	// Create generator inside bundle dir
+	genDir := filepath.Join(bundleDir, "hello")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "hello.go"), []byte(templateContent), 0o644))
+
+	// Create bundle JSON with self_contained: true
+	bundleJSON := `{"name":"mybundle","self_contained":true,"generators":[{"name":"hello"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "mybundle.json"), []byte(bundleJSON), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	var capturedDirPath, capturedSharedPath string
+	originalBundleEngine := newBundleEngine
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+		capturedDirPath = dirPath
+		capturedSharedPath = sharedPath
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	// Verify generator was resolved from bundle dir, not root .tag/
+	assert.Equal(t, filepath.Join(bundleDir, "hello"), capturedDirPath)
+	assert.Equal(t, filepath.Join(bundleDir, "_shared"), capturedSharedPath)
+}
+
+func TestUT_GenerateBundle_SelfContained_GeneratorNotFound(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create bundle dir with no generators inside
+	bundleDir := filepath.Join(tmpDir, "_bundles", "mybundle")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o750))
+
+	// Create bundle JSON referencing a generator that doesn't exist in bundle dir
+	bundleJSON := `{"name":"mybundle","self_contained":true,"generators":[{"name":"missing"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "mybundle.json"), []byte(bundleJSON), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `generator "missing" not found in self-contained bundle "mybundle"`)
+}
+
+func TestUT_GenerateBundle_SelfContained_UsesOwnShared(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	// Create bundle with its own _shared directory
+	bundleDir := filepath.Join(tmpDir, "_bundles", "mybundle")
+	bundleShared := filepath.Join(bundleDir, "_shared")
+	require.NoError(t, os.MkdirAll(bundleShared, 0o750))
+
+	// Create generator inside bundle
+	genDir := filepath.Join(bundleDir, "hello")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "hello.go"), []byte(templateContent), 0o644))
+
+	// Also create root _shared (should NOT be used)
+	rootShared := filepath.Join(tmpDir, "_shared")
+	require.NoError(t, os.MkdirAll(rootShared, 0o750))
+
+	bundleJSON := `{"name":"mybundle","self_contained":true,"generators":[{"name":"hello"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "mybundle.json"), []byte(bundleJSON), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+		"bundle":             true,
+	})
+
+	var capturedSharedPath string
+	originalBundleEngine := newBundleEngine
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+		capturedSharedPath = sharedPath
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) error {
+				return nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	// Should use bundle's own _shared, not root _shared
+	assert.Equal(t, bundleShared, capturedSharedPath)
+	assert.NotEqual(t, rootShared, capturedSharedPath)
+}
+
 // --- resolveGeneratorPaths tests ---
 
 func TestUT_ResolveGeneratorPaths_LocalFallback(t *testing.T) {

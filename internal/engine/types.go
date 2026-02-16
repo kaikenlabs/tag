@@ -22,6 +22,7 @@ type GeneratorRef struct {
 }
 
 type Bundle struct {
-	Name       string         `json:"name" yaml:"name"`
-	Generators []GeneratorRef `json:"generators" yaml:"generators"`
+	Name          string         `json:"name" yaml:"name"`
+	SelfContained bool           `json:"self_contained,omitempty" yaml:"self_contained,omitempty"`
+	Generators    []GeneratorRef `json:"generators" yaml:"generators"`
 }

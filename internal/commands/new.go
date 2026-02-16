@@ -37,6 +37,11 @@ func NewCommand(cfg *config.Config) *cli.Command {
 				Usage:   "Create generator in the library template referenced by .tagconfig.json",
 				Aliases: []string{"l"},
 			},
+			&cli.StringFlag{
+				Name:    flags.InBundleFlag,
+				Usage:   "Create generator inside a self-contained bundle directory",
+				Aliases: []string{"b"},
+			},
 		},
 	}
 }
@@ -69,6 +74,25 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	} else {
 		basePath = cfg.Env.Path
 		slog.Info(chalk.Green("creating new generator"), "path", basePath)
+	}
+
+	// When --bundle is set, create generator inside the bundle directory
+	bundleName := c.String(flags.InBundleFlag)
+	if bundleName != "" {
+		if err := ValidateNameSafe(bundleName); err != nil {
+			return app.Errorf("invalid bundle name: %w", err)
+		}
+		bundleSubPath := c.Path(flags.BundlePathFlag)
+		if bundleSubPath == "" {
+			bundleSubPath = types.BundlesDir
+		}
+		bundleDir := filepath.Join(basePath, bundleSubPath, bundleName)
+		if _, statErr := os.Stat(bundleDir); statErr != nil {
+			return app.Errorf("bundle directory %q does not exist; create it first with 'tag new-bundle %s'",
+				bundleDir, bundleName)
+		}
+		basePath = bundleDir
+		slog.Info(chalk.Green("creating generator in bundle"), "bundle", bundleName)
 	}
 
 	dirPath := filepath.Join(basePath, generator, generator+".go")
