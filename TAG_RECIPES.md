@@ -269,8 +269,8 @@ go-service-template/
   },
   "hooks": {
     "post_scaffold": [
-      "go mod tidy",
-      "git init"
+      "cd {{ vars.project_name | snake }} && go mod tidy",
+      "cd {{ vars.project_name | snake }} && git init"
     ]
   }
 }

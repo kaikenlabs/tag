@@ -36,6 +36,30 @@ Define hooks in `tag.template.json`:
 
 ## Hook Execution
 
+### Template Variables in Hook Commands
+
+Hook command strings support template expressions using the same `{{ vars.* }}` syntax as template files. Variables are rendered through the template engine before the command is executed:
+
+```json
+{
+  "hooks": {
+    "post_scaffold": [
+      "cd {{ vars.project_name }} && go mod tidy",
+      "echo 'Created project: {{ vars.project_name | upper }}'"
+    ]
+  }
+}
+```
+
+This renders to `cd my-project && go mod tidy` (assuming `project_name` is `my-project`).
+
+**Notes:**
+- All resolved variables are available, including derived and private variables
+- Commands without `{{ }}` syntax are passed through unchanged (no performance cost)
+- If a template expression fails to render (e.g., referencing an undefined variable), the scaffold fails with an error
+- Hook rendering only runs when hooks are enabled — invalid template syntax in hooks won't affect scaffolding when hooks are skipped
+- For shell variable expansion (`$TAG_VAR_*`), use explicit shell invocation: `sh -c 'echo $TAG_VAR_PROJECT_NAME'`
+
 ### Script Execution
 
 Hooks are executed as direct commands (no shell wrapper). Bare commands like `go`, `npm`, and `git` are looked up on `PATH` as usual.
@@ -79,7 +103,7 @@ Hooks receive all template variables as environment variables:
 | Environment Variable | Description |
 |---------------------|-------------|
 | `TAG_TEMPLATE_DIR` | Absolute path to the template directory |
-| `TAG_OUTPUT_DIR` | Absolute path to the output directory |
+| `TAG_OUTPUT_DIR` | Absolute path to the project root directory (inside the wrapper directory when the template uses one) |
 | `TAG_PROJECT_NAME` | Value of the `project_name` variable |
 | `TAG_VAR_<NAME>` | Each variable as `TAG_VAR_` + uppercase name |
 

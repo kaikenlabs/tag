@@ -536,7 +536,7 @@ All hooks receive these environment variables:
 | Variable | Description |
 |----------|-------------|
 | `TAG_TEMPLATE_DIR` | Absolute path to template directory |
-| `TAG_OUTPUT_DIR` | Absolute path to output directory |
+| `TAG_OUTPUT_DIR` | Absolute path to project root directory |
 | `TAG_PROJECT_NAME` | Value of `project_name` variable |
 | `TAG_VAR_<NAME>` | Each variable as `TAG_VAR_` + UPPER_SNAKE name |
 
@@ -544,6 +544,7 @@ Example: variable `project_name` → `TAG_VAR_PROJECT_NAME`
 
 ### Hook execution
 
+- Hook commands support `{{ vars.* }}` template expressions (rendered before execution)
 - Commands are parsed using POSIX shell quoting rules (shlex)
 - No shell interpretation by default — pipes, redirects, `$VAR` expansion don't work
 - For shell features, explicitly invoke a shell: `sh -c 'echo hello | grep hello'`
