@@ -49,6 +49,7 @@ func main() {
 			commands.ConvertCommand(),
 			commands.LibCommand(),
 			commands.RunCommand(),
+			commands.InfoCommand(),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{

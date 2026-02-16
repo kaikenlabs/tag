@@ -85,6 +85,8 @@ func createTestCLIContext(t *testing.T, args []string, flagValues map[string]any
 			&cli.StringSliceFlag{Name: flags.MetaFlag},
 			&cli.StringFlag{Name: "package", Value: "mypackage"},
 			&cli.BoolFlag{Name: flags.LibFlag},
+			&cli.BoolFlag{Name: flags.SelfContainedFlag},
+			&cli.StringFlag{Name: flags.InBundleFlag},
 		},
 	}
 

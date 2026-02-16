@@ -34,6 +34,11 @@ func BundleCommand(cfg *config.Config) *cli.Command {
 				Usage:   "Create bundle in the library template referenced by .tagconfig.json",
 				Aliases: []string{"l"},
 			},
+			&cli.BoolFlag{
+				Name:    flags.SelfContainedFlag,
+				Usage:   "Create a self-contained bundle (generators resolved from bundle directory)",
+				Aliases: []string{"s"},
+			},
 		},
 	}
 }
@@ -92,7 +97,7 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 		}
 	}()
 
-	bundleTemplate, err := getBundleTemplate(bundleName)
+	bundleTemplate, err := getBundleTemplate(bundleName, c.Bool(flags.SelfContainedFlag))
 	if err != nil {
 		return err
 	}
@@ -104,9 +109,10 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	return nil
 }
 
-func getBundleTemplate(name string) ([]byte, error) {
+func getBundleTemplate(name string, selfContained bool) ([]byte, error) {
 	newBundle := engine.Bundle{
-		Name: name,
+		Name:          name,
+		SelfContained: selfContained,
 		Generators: []engine.GeneratorRef{
 			{
 				Name: "myGenerator",

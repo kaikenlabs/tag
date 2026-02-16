@@ -168,10 +168,20 @@ func TestUT_BundleCommand_ReturnsValidCommand(t *testing.T) {
 		}
 	}
 	assert.True(t, hasLibFlag, "should have lib flag")
+
+	// Verify self-contained flag exists
+	var hasSelfContainedFlag bool
+	for _, f := range cmd.Flags {
+		if bf, ok := f.(*cli.BoolFlag); ok && bf.Name == flags.SelfContainedFlag {
+			hasSelfContainedFlag = true
+			break
+		}
+	}
+	assert.True(t, hasSelfContainedFlag, "should have self-contained flag")
 }
 
 func TestUT_GetBundleTemplate(t *testing.T) {
-	data, err := getBundleTemplate("testbundle")
+	data, err := getBundleTemplate("testbundle", false)
 
 	require.NoError(t, err)
 	require.NotNil(t, data)
@@ -181,6 +191,51 @@ func TestUT_GetBundleTemplate(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "testbundle", bundle.Name)
+	assert.False(t, bundle.SelfContained)
 	assert.Len(t, bundle.Generators, 1)
 	assert.Equal(t, "myGenerator", bundle.Generators[0].Name)
+}
+
+func TestUT_GetBundleTemplate_SelfContained(t *testing.T) {
+	data, err := getBundleTemplate("testbundle", true)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+
+	var bundle engine.Bundle
+	err = json.Unmarshal(data, &bundle)
+	require.NoError(t, err)
+
+	assert.Equal(t, "testbundle", bundle.Name)
+	assert.True(t, bundle.SelfContained)
+}
+
+func TestUT_BundleAction_SelfContainedFlag(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle"}, map[string]any{
+		flags.PathFlag:          tmpDir,
+		flags.BundlePathFlag:    "_bundles",
+		flags.SelfContainedFlag: true,
+	})
+
+	err := bundleAction(ctx, cfg)
+
+	require.NoError(t, err)
+
+	// Verify bundle file was created
+	bundlePath := filepath.Join(tmpDir, "_bundles", "mybundle", "mybundle.json")
+	require.FileExists(t, bundlePath)
+
+	// Verify content has self_contained: true
+	data, err := os.ReadFile(bundlePath)
+	require.NoError(t, err)
+
+	var bundle engine.Bundle
+	err = json.Unmarshal(data, &bundle)
+	require.NoError(t, err)
+
+	assert.Equal(t, "mybundle", bundle.Name)
+	assert.True(t, bundle.SelfContained)
 }

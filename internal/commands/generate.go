@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/urfave/cli/v2"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
@@ -132,10 +134,24 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 
 	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
 	for _, generator := range bundle.Generators {
-		// Resolve each generator independently (supports mixed-source bundles)
-		genDirPath, sharedPath, resolveErr := resolveGeneratorPaths(cfg, generator.Name)
-		if resolveErr != nil {
-			return resolveErr
+		var genDirPath, sharedPath string
+		if bundle.SelfContained {
+			if err := ValidateNameSafe(generator.Name); err != nil {
+				return app.Errorf("invalid generator name in bundle: %w", err)
+			}
+			bundleDir := filepath.Dir(bundlePath)
+			genDirPath = filepath.Join(bundleDir, generator.Name)
+			sharedPath = filepath.Join(bundleDir, types.SharedDir)
+			if _, statErr := os.Stat(genDirPath); statErr != nil {
+				return app.Errorf("generator %q not found in self-contained bundle %q (expected at %s)",
+					generator.Name, generatorName, genDirPath)
+			}
+		} else {
+			var resolveErr error
+			genDirPath, sharedPath, resolveErr = resolveGeneratorPaths(cfg, generator.Name)
+			if resolveErr != nil {
+				return resolveErr
+			}
 		}
 
 		gen, genErr := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath)

@@ -28,6 +28,9 @@ const (
 
 	// TemplateReadme is the template documentation file displayed after scaffolding.
 	TemplateReadme = "README.md"
+
+	// TemplateHowto is the optional how-to documentation file included in templates.
+	TemplateHowto = "HOWTO.md"
 )
 
 // InjectClause represents where to inject content relative to a marker.

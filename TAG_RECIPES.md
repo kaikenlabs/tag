@@ -536,7 +536,114 @@ tag lib add gh:user/cookiecutter-flask --as flask
 
 ---
 
-## Recipe 9: Replay and Non-Interactive Scaffolding
+## Recipe 9: Self-Contained Bundles
+
+Create a distributable bundle where generators live inside the bundle directory instead of the project's `.tag/` root. Useful for example generators, utility bundles, or sharing bundles across projects.
+
+### Step 1: Create the bundle
+
+```bash
+tag new-bundle examples --self-contained
+```
+
+This creates `.tag/_bundles/examples/examples.json` with `"self_contained": true`.
+
+### Step 2: Add generators inside the bundle
+
+```bash
+tag new hello --in-bundle examples -k mypackage
+tag new greet --in-bundle examples -k mypackage
+```
+
+This creates generators at `.tag/_bundles/examples/hello/hello.go` and `.tag/_bundles/examples/greet/greet.go` instead of the usual `.tag/hello/`.
+
+### Step 3: (Optional) Add bundle-scoped shared templates
+
+```bash
+mkdir -p .tag/_bundles/examples/_shared
+```
+
+Place shared template fragments here. When running a self-contained bundle, `{% include %}` resolves from the bundle's own `_shared/`, not the project root's `_shared/`.
+
+### Step 4: Use it
+
+```bash
+tag generate --bundle examples world
+```
+
+Runs all generators in the bundle with `name="world"`.
+
+### Why self-contained?
+
+- **No namespace pollution**: Bundle generators don't appear in the project's generator list
+- **Distributable**: Copy the entire bundle directory to share with other projects
+- **Isolated shared templates**: Each bundle can have its own `_shared/` fragments
+- **Library-compatible**: Works with `--lib` flag to add bundles to library templates
+
+### Combining with `--lib`
+
+```bash
+# Create a self-contained bundle in a library template
+tag new-bundle examples --self-contained --lib
+
+# Add generators to it
+tag new hello --in-bundle examples --lib
+```
+
+---
+
+## Recipe 10: Previewing Templates with `tag info`
+
+Inspect any template before scaffolding — see its variables, hooks, and documentation.
+
+### Local template
+
+```bash
+tag info ./my-template
+```
+
+### Library template (by name)
+
+```bash
+tag info go-api
+```
+
+### Remote template
+
+```bash
+# Preview a GitHub template
+tag info gh:user/awesome-template
+
+# Force refresh of a cached remote template
+tag info gh:user/awesome-template --update
+```
+
+### What you'll see
+
+`tag info` displays (in order):
+
+1. **Metadata** — Name, version, description from `tag.template.json`
+2. **Variables** — Sorted list with types, defaults, and choice options
+3. **Hooks** — Pre/post scaffold commands
+4. **README.md** — Rendered with terminal formatting (if present)
+5. **HOWTO.md** — Rendered with terminal formatting (if present)
+
+### Typical workflow
+
+```bash
+# 1. Browse library
+tag lib ls
+
+# 2. Inspect before using
+tag info go-api
+
+# 3. Scaffold with confidence
+tag run go-api my-service
+```
+
+---
+
+## Recipe 11: Replay and Non-Interactive Scaffolding
 
 ### Save and replay inputs
 
