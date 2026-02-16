@@ -44,12 +44,20 @@ After running `tag init` in a project, you get:
 my-project/
 ├── .tag/                    # Generator directory
 │   ├── _shared/             # Shared template fragments ({% include %})
-│   ├── _bundles/             # Bundle definitions (JSON)
-│   ├── my-generator/         # A generator (directory with template files)
-│   │   └── my-generator.go   # Generator template file
+│   ├── _bundles/            # Bundle definitions (JSON)
+│   │   ├── resource.json    # Regular bundle (references generators from .tag/)
+│   │   └── examples/        # Self-contained bundle (generators inside)
+│   │       ├── examples.json
+│   │       ├── _shared/     # Bundle-scoped shared templates
+│   │       ├── hello/
+│   │       │   └── hello.go
+│   │       └── greet/
+│   │           └── greet.go
+│   ├── my-generator/        # A generator (directory with template files)
+│   │   └── my-generator.go  # Generator template file
 │   └── another-gen/
 │       └── another-gen.ts
-└── .tagconfig.json           # Project config (created by scaffold)
+└── .tagconfig.json          # Project config (created by scaffold)
 ```
 
 ### .tagconfig.json
@@ -206,10 +214,59 @@ tag generate fullstack order
 # Runs: model, service, handler, route-inject — all with name="order"
 ```
 
+### Self-contained bundles
+
+A self-contained bundle stores its generators **inside the bundle directory** instead of referencing generators from root `.tag/`. This makes bundles distributable and independent.
+
+```json
+{
+  "name": "examples",
+  "self_contained": true,
+  "generators": [
+    { "name": "hello" },
+    { "name": "greet" }
+  ]
+}
+```
+
+**Directory layout**:
+
+```
+.tag/_bundles/examples/
+├── examples.json          # Bundle definition with "self_contained": true
+├── _shared/               # Bundle-scoped shared templates (NOT root _shared)
+│   └── header.tmpl
+├── hello/
+│   └── hello.go           # Generator template
+└── greet/
+    └── greet.go           # Generator template
+```
+
+Key differences from regular bundles:
+
+- Generators are resolved from the bundle directory, not `.tag/`
+- `_shared/` templates come from the bundle's own `_shared/`, not root
+- Generator names in the bundle JSON are validated for path safety
+
+**Creating a self-contained bundle**:
+
+```bash
+# Create the bundle with self_contained flag
+tag new-bundle examples --self-contained
+
+# Add generators inside the bundle
+tag new hello --in-bundle examples
+tag new greet --in-bundle examples
+
+# Run it
+tag generate --bundle examples myName
+```
+
 ### When to use bundles vs single generators
 
 - **Single generator**: One file operation (create a component, inject a route).
 - **Bundle**: Multiple related files that should be created together (model + service + handler + route injection for a new resource).
+- **Self-contained bundle**: Distributable generator packages that don't depend on project-level generators.
 
 ## Template Syntax
 
@@ -562,8 +619,8 @@ Cookiecutter templates are **auto-detected and converted** when added to the lib
 | Command | Description |
 |---------|-------------|
 | `tag init` | Initialize `.tag/` directory structure |
-| `tag new <name>` | Create a new generator |
-| `tag new-bundle <name>` (alias: `nb`) | Create a new bundle |
+| `tag new <name>` | Create a new generator (`--in-bundle`, `--lib`) |
+| `tag new-bundle <name>` (alias: `nb`) | Create a new bundle (`--self-contained`, `--lib`) |
 | `tag generate <gen-or-bundle> <name>` | Run a generator or bundle |
 | `tag info <template>` | Show template info without scaffolding |
 | `tag scaffold <ref> [project-name]` | Create project from template |
@@ -589,6 +646,8 @@ Cookiecutter templates are **auto-detected and converted** when added to the lib
 | `--force` | scaffold, run | Overwrite existing output |
 | `--accept-hooks` | scaffold, run | Run hooks without prompting |
 | `-l` / `--lib` | new, new-bundle | Target library template |
+| `-B` / `--in-bundle` | new | Create generator inside a bundle directory |
+| `-s` / `--self-contained` | new-bundle | Create bundle with `self_contained: true` |
 | `--update` / `-u` | scaffold, info | Force refresh of cached remote templates |
 | `--dry-run` | generate | Preview without writing files |
 
