@@ -65,23 +65,27 @@ Examples:
 
   # Scaffold without saving replay data
   tag scaffold gh:user/template test-project --no-save`,
-		Flags: append(commonScaffoldFlags(), &cli.BoolFlag{
-			Name:    "update",
-			Aliases: []string{"u"},
-			Usage:   "Force refresh of cached remote templates",
-		}),
+		Flags:  scaffoldFlags(),
 		Action: scaffoldAction,
 	}
 }
 
 func scaffoldAction(c *cli.Context) error {
+	positional, err := reparseTrailingFlags(c, scaffoldFlags())
+	if err != nil {
+		return app.Errorf("invalid flags: %w", err)
+	}
+
 	// Validate arguments
-	if c.NArg() < 1 {
+	if len(positional) < 1 {
 		return app.Errorf("template path is required\n\nUsage: tag scaffold <template> [project-name]")
 	}
 
-	templateRef := c.Args().Get(0)
-	projectName := c.Args().Get(1) // May be empty
+	templateRef := positional[0]
+	projectName := ""
+	if len(positional) >= 2 {
+		projectName = positional[1]
+	}
 
 	// Resolve template reference (handles both local and remote)
 	resolver, err := remote.NewResolver()
@@ -127,6 +131,15 @@ func scaffoldAction(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+// scaffoldFlags returns the full set of flags for the scaffold command.
+func scaffoldFlags() []cli.Flag {
+	return append(commonScaffoldFlags(), &cli.BoolFlag{
+		Name:    "update",
+		Aliases: []string{"u"},
+		Usage:   "Force refresh of cached remote templates",
+	})
 }
 
 // handleCookiecutterDetection handles the case when a Cookiecutter template is detected.
