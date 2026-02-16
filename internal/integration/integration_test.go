@@ -364,3 +364,65 @@ func TestIT_GenerateMixed(t *testing.T) {
 
 	compareDirectories(t, expectedDir, workDir)
 }
+
+// TestIT_GenerateSharedTemplates tests that {% include %} resolves shared templates
+// from the _shared/ directory during generation.
+func TestIT_GenerateSharedTemplates(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "with-shared")
+	sharedDir := filepath.Join(testdataDir, "_shared")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-shared")
+
+	workDir := setupWorkDir(t, "")
+
+	gen, err := engine.NewGenerator(false, generatorDir, sharedDir)
+	require.NoError(t, err)
+
+	err = gen.Generate(engine.Data{Name: "my_widget"})
+	require.NoError(t, err)
+
+	compareDirectories(t, expectedDir, workDir)
+}
+
+// TestIT_GenerateDryRun tests that dryRun=true prevents files from being written to disk.
+func TestIT_GenerateDryRun(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "service")
+
+	workDir := setupWorkDir(t, "")
+
+	gen, err := engine.NewGenerator(true, generatorDir, "")
+	require.NoError(t, err)
+
+	err = gen.Generate(engine.Data{Name: "user_service"})
+	require.NoError(t, err)
+
+	// Verify NO files were created
+	entries, err := os.ReadDir(workDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "dry run should not create any files on disk")
+}
+
+// TestIT_GenerateWithScaffoldVars tests that ScaffoldVars are available in
+// templates via the {{ vars.* }} namespace during generation.
+func TestIT_GenerateWithScaffoldVars(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "scaffold-vars")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-scaffold-vars")
+
+	workDir := setupWorkDir(t, "")
+
+	gen, err := engine.NewGenerator(false, generatorDir, "")
+	require.NoError(t, err)
+
+	err = gen.Generate(engine.Data{
+		Name: "settings",
+		ScaffoldVars: map[string]any{
+			"project_name": "my-project",
+			"use_docker":   "true",
+		},
+	})
+	require.NoError(t, err)
+
+	compareDirectories(t, expectedDir, workDir)
+}

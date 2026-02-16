@@ -117,5 +117,7 @@ See [Template Syntax](templates/syntax.md) for the complete syntax guide.
 ## What's Next?
 
 - [Scaffold Command Reference](commands/scaffold.md) - All flags and options for project scaffolding
+- [Template Library](commands/lib.md) - Install and manage templates locally
+- [Run Command](commands/run.md) - Scaffold from library templates
 - [Creating Templates](templates/authoring.md) - How to create your own templates
 - [Filter Reference](templates/filters.md) - Available template filters

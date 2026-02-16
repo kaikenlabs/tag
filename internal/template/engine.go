@@ -3,6 +3,7 @@ package template
 import (
 	"fmt"
 	"hash/fnv"
+	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -44,11 +45,13 @@ func contentHash(content string) string {
 
 // Engine wraps Gonja to provide a consistent template interface.
 type Engine struct {
-	config  *config.Config
-	env     *exec.Environment
-	baseDir string
-	loader  loaders.Loader
-	cache   *templateCache
+	config            *config.Config
+	env               *exec.Environment
+	baseDir           string
+	loader            loaders.Loader
+	sharedContent     map[string]string // raw shared template content for {% include %} in string-parsed templates
+	sharedContentHash string            // hash of sharedContent for cache key differentiation
+	cache             *templateCache
 }
 
 // gonjaTemplate wraps a Gonja template to implement our Template interface.
@@ -118,8 +121,10 @@ func (e *Engine) ParseStringNamed(content, name string) (Template, error) {
 
 // parseWithName parses a template with a given name for error reporting.
 // Parsed templates are cached by content hash to avoid re-parsing identical content.
+// The cache key incorporates shared template content so that the same template body
+// parsed with different _shared/ directories produces distinct cache entries.
 func (e *Engine) parseWithName(content, name string) (Template, error) {
-	key := contentHash(content)
+	key := contentHash(content + "\x00" + e.sharedContentHash)
 
 	// Fast path: check cache with read lock
 	if cached := e.cache.get(key); cached != nil {
@@ -137,10 +142,18 @@ func (e *Engine) parseWithName(content, name string) (Template, error) {
 		loaderKey = "/" + loaderKey
 	}
 
-	// Create a memory loader with the content
-	loader := loaders.MustNewMemoryLoader(map[string]string{
-		loaderKey: content,
-	})
+	// Create a loader for this template.
+	// When shared templates are available (e.sharedContent), merge them into the
+	// memory loader so that {% include %} directives can resolve shared templates.
+	loaderMap := map[string]string{loaderKey: content}
+	for k, v := range e.sharedContent {
+		sharedKey := k
+		if sharedKey != "" && sharedKey[0] != '/' {
+			sharedKey = "/" + sharedKey
+		}
+		loaderMap[sharedKey] = v
+	}
+	loader := loaders.MustNewMemoryLoader(loaderMap)
 
 	// Create the template using the low-level API
 	tmpl, err := exec.NewTemplate(loaderKey, e.config, loader, e.env)
@@ -190,9 +203,28 @@ func (e *Engine) ParseFile(path string) (Template, error) {
 	}, nil
 }
 
-// SetLoader sets a custom loader for template resolution.
+// SetLoader sets a custom loader for template resolution (used by ParseFile).
 func (e *Engine) SetLoader(loader loaders.Loader) {
 	e.loader = loader
+}
+
+// SetSharedContent stores raw shared template content so that
+// {% include %} directives in string-parsed templates can resolve them.
+// Keys are normalised to basenames so that {% include "header.tmpl" %}
+// resolves regardless of the original filesystem path.
+func (e *Engine) SetSharedContent(content map[string]string) {
+	normalised := make(map[string]string, len(content))
+	h := fnv.New64a()
+	for k, v := range content {
+		base := filepath.Base(k)
+		normalised[base] = v
+		_, _ = h.Write([]byte(base))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(v))
+		_, _ = h.Write([]byte{0})
+	}
+	e.sharedContent = normalised
+	e.sharedContentHash = strconv.FormatUint(h.Sum64(), 36)
 }
 
 // Environment returns the underlying Gonja environment.

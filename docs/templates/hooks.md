@@ -301,7 +301,7 @@ For security, hooks are **disabled by default** when scaffolding from remote tem
 
 To allow hooks for a trusted remote template:
 ```bash
-tag scaffold gh:trusted-org/template --allow-hooks
+tag scaffold gh:trusted-org/template --accept-hooks
 ```
 
 Local templates always run hooks since you control the template source.

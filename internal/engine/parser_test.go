@@ -491,3 +491,63 @@ func TestUT_NewParserWithExecutor_BodyRenderError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mock parse error")
 }
+
+func TestUT_Parse_SharedTemplateInclude(t *testing.T) {
+	// Verify {% include %} resolves shared templates when wired through a real engine.
+	eng, err := template.NewEngine()
+	require.NoError(t, err)
+
+	// Shared templates keyed by name (LoadTemplateFiles returns path-keyed map;
+	// CreateMemoryLoaderFromMap normalises keys with leading "/").
+	shared := map[string]string{
+		"header.tmpl": "// AUTO-GENERATED — DO NOT EDIT",
+	}
+	loader := template.CreateMemoryLoaderFromMap(shared)
+	eng.SetLoader(loader)
+	eng.SetSharedContent(shared)
+
+	primary := map[string]string{
+		"component.tmpl": "---\nto: app/component.go\n---\n{% include \"header.tmpl\" %}\npackage app\n",
+	}
+	te := NewParserWithExecutor(eng, primary, shared)
+
+	data, err := te.Parse(InputData{Name: "widget"})
+	require.NoError(t, err)
+	require.Len(t, data, 1)
+	assert.Equal(t, "app/component.go", data[0].To)
+	assert.Contains(t, string(data[0].Output), "// AUTO-GENERATED")
+	assert.Contains(t, string(data[0].Output), "package app")
+}
+
+func TestUT_Parse_MalformedYAMLMetadata(t *testing.T) {
+	// Template with metadata that has no colon separator.
+	strTmp := "---\nthis is not valid metadata\n---\nbody\n"
+	te := newTestParser(t)
+	te.templates = map[string]string{"bad.tmpl": strTmp}
+
+	_, err := te.Parse(InputData{Name: "test"})
+	require.Error(t, err)
+}
+
+func TestUT_Parse_TemplateSyntaxErrorInBody(t *testing.T) {
+	// Unclosed if block should cause a parse/render error.
+	strTmp := "---\nto: output.go\n---\n{% if vars.x %}\nmissing endif\n"
+	te := newTestParser(t)
+	te.templates = map[string]string{"bad.tmpl": strTmp}
+
+	_, err := te.Parse(InputData{Name: "test"})
+	require.Error(t, err)
+}
+
+func TestUT_Parse_EmptyGeneratorDir(t *testing.T) {
+	dir := t.TempDir()
+	templates, err := LoadTemplateFiles(dir)
+	require.NoError(t, err)
+
+	te := newTestParser(t)
+	te.templates = templates
+
+	data, err := te.Parse(InputData{Name: "test"})
+	require.NoError(t, err)
+	assert.Empty(t, data, "empty directory should produce no parsed templates")
+}
