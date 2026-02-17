@@ -103,6 +103,21 @@ func TestUT_DeriveTemplateName(t *testing.T) {
 			input:    "https://github.com/user/my-template.git",
 			expected: "my-template",
 		},
+		{
+			name:     "cookiecutter prefix only with .git suffix",
+			input:    "gh:user/cookiecutter-.git",
+			expected: "gh:user/cookiecutter-.git",
+		},
+		{
+			name:     "cookiecutter prefix only",
+			input:    "gh:user/cookiecutter-",
+			expected: "gh:user/cookiecutter-",
+		},
+		{
+			name:     "URL without .git suffix",
+			input:    "https://github.com/user/my-template",
+			expected: "my-template",
+		},
 	}
 
 	for _, tt := range tests {

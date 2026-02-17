@@ -36,8 +36,6 @@ install: build ## build and install to ~/.local/bin
 	@mkdir -p ~/.local/bin
 	@cp $(APP_NAME) ~/.local/bin/$(APP_NAME)
 	@echo "Installed $(APP_NAME) to ~/.local/bin/$(APP_NAME)"
-	@cp $(APP_NAME) ${GOROOT}/bin/$(APP_NAME)
-	@echo "Installed $(APP_NAME) to ${GOROOT}/bin/$(APP_NAME)"
 
 # HELP
 # This will output the help for each task

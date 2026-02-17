@@ -56,12 +56,21 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 
 	data := string(dataInjection)
 
+	// Detect line ending style from source.
+	lineEnd := "\n"
+	if strings.Contains(src, "\r\n") {
+		lineEnd = "\r\n"
+	}
+
 	// Ensure injected content is separated from the marker by a newline.
 	// For InjectBefore: data must end with a newline so the marker stays on its own line.
-	// For InjectAfter: data must start on the line after the marker (handled above by
-	// advancing past the marker's trailing newline).
+	// For InjectAfter: if marker is at EOF without trailing newline, insert a separator.
 	if inject.Clause == types.InjectBefore && data != "" && data[len(data)-1] != '\n' {
-		data += "\n"
+		data += lineEnd
+	}
+	if inject.Clause == types.InjectAfter && data != "" && after == "" &&
+		!strings.HasSuffix(before, "\n") && data[0] != '\n' && data[0] != '\r' {
+		before += lineEnd
 	}
 
 	var result strings.Builder

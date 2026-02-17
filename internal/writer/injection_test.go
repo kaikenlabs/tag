@@ -57,7 +57,7 @@ func Test_mergeOutputs(t *testing.T) {
 					Clause:  types.InjectAfter,
 				},
 			},
-			want:    []byte("fall of // tokenfart"),
+			want:    []byte("fall of // token\nfart"),
 			wantErr: false,
 		},
 		{
@@ -236,4 +236,63 @@ func TestUT_InjectAfter_MatcherNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, ErrNoMatchingExpression, err)
 	assert.Equal(t, string(source), string(got))
+}
+
+func TestUT_InjectBefore_MarkerWithCRLF(t *testing.T) {
+	source := []byte("header\r\n// marker\r\nfooter\r\n")
+	data := []byte("injected")
+	inject := Inject{Matcher: "// marker", Clause: types.InjectBefore}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	// CRLF source should use \r\n as separator
+	assert.Equal(t, "header\r\ninjected\r\n// marker\r\nfooter\r\n", string(got))
+}
+
+func TestUT_InjectBefore_EmptyData(t *testing.T) {
+	source := []byte("header\n// marker\nfooter\n")
+	data := []byte("")
+	inject := Inject{Matcher: "// marker", Clause: types.InjectBefore}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	// Empty data is a no-op (marker stays in place, no extra newline)
+	assert.Equal(t, "header\n// marker\nfooter\n", string(got))
+}
+
+func TestUT_InjectAfter_EmptyData(t *testing.T) {
+	source := []byte("// marker\ncontent\n")
+	data := []byte("")
+	inject := Inject{Matcher: "// marker", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	assert.Equal(t, "// marker\ncontent\n", string(got))
+}
+
+func TestUT_InjectAfter_MarkerAtEOF_DataNoNewline(t *testing.T) {
+	source := []byte("some content\n// marker")
+	data := []byte("appended")
+	inject := Inject{Matcher: "// marker", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	// When marker is at EOF without trailing newline, a newline separator is inserted
+	assert.Equal(t, "some content\n// marker\nappended", string(got))
+}
+
+func TestUT_InjectAfter_MarkerAtEOF_CRLF(t *testing.T) {
+	source := []byte("content\r\n// marker")
+	data := []byte("appended")
+	inject := Inject{Matcher: "// marker", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	// CRLF source at EOF should use \r\n separator
+	assert.Equal(t, "content\r\n// marker\r\nappended", string(got))
 }

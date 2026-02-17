@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -262,6 +263,7 @@ func promptForProjectDir(prompter scaffold.Prompter, opts *scaffold.Options) err
 }
 
 // addToLibrary adds a scaffolded remote template to the library (non-fatal on error).
+// If an entry with the same name already exists, it is left unchanged.
 func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 	lib, err := newLocalLibrary()
 	if err != nil {
@@ -270,6 +272,13 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 	}
 
 	name := deriveTemplateName(templateRef)
+
+	// Skip if the template is already in the library.
+	if _, getErr := lib.Get(name); getErr == nil {
+		fmt.Printf("\nTemplate %q already in library. Run with: tag run %s\n", name, name)
+		return
+	}
+
 	result, err := lib.Add(c.Context, library.AddOptions{
 		Ref:         templateRef,
 		Name:        name,
@@ -289,11 +298,18 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 func deriveTemplateName(ref string) string {
 	parsed, err := remote.Parse(ref)
 	if err == nil && parsed.Repo != "" {
-		return strings.TrimPrefix(parsed.Repo, "cookiecutter-")
+		name := strings.TrimPrefix(parsed.Repo, "cookiecutter-")
+		if name != "" {
+			return name
+		}
 	}
-	base := filepath.Base(ref)
+	// Use path.Base (not filepath.Base) so forward-slash URLs work on all platforms.
+	base := path.Base(ref)
 	base = strings.TrimPrefix(base, "cookiecutter-")
 	base = strings.TrimSuffix(base, ".git")
+	if base == "" || base == "." {
+		return ref
+	}
 	return base
 }
 
