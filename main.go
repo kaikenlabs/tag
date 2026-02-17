@@ -50,6 +50,7 @@ func main() {
 			commands.LibCommand(),
 			commands.RunCommand(),
 			commands.InfoCommand(),
+			commands.VersionCheckCommand(Version),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
