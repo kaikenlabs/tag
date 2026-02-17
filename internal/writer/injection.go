@@ -60,7 +60,7 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 	// For InjectBefore: data must end with a newline so the marker stays on its own line.
 	// For InjectAfter: data must start on the line after the marker (handled above by
 	// advancing past the marker's trailing newline).
-	if inject.Clause == types.InjectBefore && len(data) > 0 && data[len(data)-1] != '\n' {
+	if inject.Clause == types.InjectBefore && data != "" && data[len(data)-1] != '\n' {
 		data += "\n"
 	}
 

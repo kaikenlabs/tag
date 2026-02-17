@@ -114,6 +114,9 @@ func scaffoldAction(c *cli.Context) error {
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
 	opts.TemplateRef = templateRef // Original reference for replay ID generation
 	opts.IsRemote = isRemote
+	if isRemote {
+		opts.TemplateName = deriveTemplateName(templateRef)
+	}
 
 	// Create and run scaffold
 	s, err := scaffold.NewScaffold(opts)
@@ -249,6 +252,19 @@ func promptForProjectDir(prompter scaffold.Prompter, opts *scaffold.Options) err
 	}
 	opts.OutputDir = projectDir
 	return nil
+}
+
+// deriveTemplateName extracts a library-compatible template name from a remote reference.
+// For example, "bb:whalar/go-ms-service-template" becomes "go-ms-service-template".
+func deriveTemplateName(ref string) string {
+	parsed, err := remote.Parse(ref)
+	if err == nil && parsed.Repo != "" {
+		return strings.TrimPrefix(parsed.Repo, "cookiecutter-")
+	}
+	base := filepath.Base(ref)
+	base = strings.TrimPrefix(base, "cookiecutter-")
+	base = strings.TrimSuffix(base, ".git")
+	return base
 }
 
 // suggestConvertedTemplateName generates a default name for converted template output.
