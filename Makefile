@@ -21,7 +21,7 @@ MAKE_LIB:=$(PROJECT_ROOT)/scripts
 -include $(MAKE_LIB)/generator.mk
 
 
-GO_BUILD_FLAGS=-ldflags="-X 'main.Version=$(COMMIT)'"
+GO_BUILD_FLAGS=-ldflags="-X 'main.Version=dev-$(COMMIT)'"
 
 #####################
 ##@ Main   
