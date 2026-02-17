@@ -24,9 +24,10 @@ const registryVersion = 1
 
 // AddOptions configures the lib add operation.
 type AddOptions struct {
-	Ref   string // Remote or local template reference
-	Name  string // Override name (--as flag); empty = auto-derive from ref
-	Force bool   // Overwrite existing template with same name
+	Ref         string // Remote or local template reference
+	Name        string // Override name (--as flag); empty = auto-derive from ref
+	Force       bool   // Overwrite existing template with same name
+	ResolvedDir string // Pre-resolved local path; skips remote resolution when set
 }
 
 // AddResult describes what happened during lib add.

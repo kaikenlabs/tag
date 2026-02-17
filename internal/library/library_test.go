@@ -570,6 +570,38 @@ func TestUT_Add_NilResolver(t *testing.T) {
 	assert.Contains(t, err.Error(), "resolver not configured")
 }
 
+func TestUT_Add_WithResolvedDir(t *testing.T) {
+	dataDir := t.TempDir()
+	templateSrc := t.TempDir()
+	createTagTemplate(t, templateSrc, "go-api", "A Go API template", "1.0.0")
+
+	// Use nil resolver — ResolvedDir should bypass resolution entirely
+	lib := NewLocal(dataDir)
+
+	result, err := lib.Add(context.Background(), AddOptions{
+		Ref:         "gh:user/go-api",
+		Name:        "go-api",
+		Force:       true,
+		ResolvedDir: templateSrc,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "go-api", result.Name)
+	assert.Equal(t, "gh:user/go-api", result.Source)
+	assert.False(t, result.IsUpdate)
+
+	// Verify template was copied
+	assert.FileExists(t, filepath.Join(result.TemplateDir, "tag.template.json"))
+	assert.FileExists(t, filepath.Join(result.TemplateDir, "README.md"))
+
+	// Verify registry entry
+	entry, err := lib.Get("go-api")
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0", entry.Version)
+	assert.Equal(t, "A Go API template", entry.Description)
+	assert.Equal(t, "gh:user/go-api", entry.Source)
+}
+
 func TestUT_SecureRemoveAll_RegularDir(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "mydir")

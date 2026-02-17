@@ -6,6 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. Before pushing code, run the linter with `make lint`
 2. Before pushing code, run the tests with `make test`
+3. Use serena MCP as much as possible for code operations.
+4. Use sequential thinking MCP for complexe thinking operations.
+5. Use ref MCP server to look for documentation on well known libraries.
 
 ## Project Overview
 

@@ -3,12 +3,15 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
+	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
@@ -114,6 +117,9 @@ func scaffoldAction(c *cli.Context) error {
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
 	opts.TemplateRef = templateRef // Original reference for replay ID generation
 	opts.IsRemote = isRemote
+	if isRemote {
+		opts.TemplateName = deriveTemplateName(templateRef)
+	}
 
 	// Create and run scaffold
 	s, err := scaffold.NewScaffold(opts)
@@ -128,6 +134,11 @@ func scaffoldAction(c *cli.Context) error {
 			return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts)
 		}
 		return app.Errorf("scaffolding failed: %w", err)
+	}
+
+	// Auto-add remote templates to the library for future use with `tag run`
+	if isRemote {
+		addToLibrary(c, templateRef, templateDir)
 	}
 
 	return nil
@@ -249,6 +260,57 @@ func promptForProjectDir(prompter scaffold.Prompter, opts *scaffold.Options) err
 	}
 	opts.OutputDir = projectDir
 	return nil
+}
+
+// addToLibrary adds a scaffolded remote template to the library (non-fatal on error).
+// If an entry with the same name already exists, it is left unchanged.
+func addToLibrary(c *cli.Context, templateRef, templateDir string) {
+	lib, err := newLocalLibrary()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not add template to library: %v\n", err)
+		return
+	}
+
+	name := deriveTemplateName(templateRef)
+
+	// Skip if the template is already in the library.
+	if _, getErr := lib.Get(name); getErr == nil {
+		fmt.Printf("\nTemplate %q already in library. Run with: tag run %s\n", name, name)
+		return
+	}
+
+	result, err := lib.Add(c.Context, library.AddOptions{
+		Ref:         templateRef,
+		Name:        name,
+		Force:       true,
+		ResolvedDir: templateDir,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not add template to library: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\nTemplate added to library as %q. Run with: tag run %s\n", result.Name, result.Name)
+}
+
+// deriveTemplateName extracts a library-compatible template name from a remote reference.
+// For example, "bb:whalar/go-ms-service-template" becomes "go-ms-service-template".
+func deriveTemplateName(ref string) string {
+	parsed, err := remote.Parse(ref)
+	if err == nil && parsed.Repo != "" {
+		name := strings.TrimPrefix(parsed.Repo, "cookiecutter-")
+		if name != "" {
+			return name
+		}
+	}
+	// Use path.Base (not filepath.Base) so forward-slash URLs work on all platforms.
+	base := path.Base(ref)
+	base = strings.TrimPrefix(base, "cookiecutter-")
+	base = strings.TrimSuffix(base, ".git")
+	if base == "" || base == "." {
+		return ref
+	}
+	return base
 }
 
 // suggestConvertedTemplateName generates a default name for converted template output.

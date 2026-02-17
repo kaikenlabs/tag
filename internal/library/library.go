@@ -101,15 +101,20 @@ func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 		isUpdate = true
 	}
 
-	// Resolve template (fetch from remote if needed)
-	if l.resolver == nil {
-		return nil, &LibraryError{Name: name, Operation: "add", Err: errors.New("resolver not configured")}
-	}
-	resolvedDir, err := l.resolver.Resolve(ctx, opts.Ref, remote.ResolveOptions{
-		ForceUpdate: true,
-	})
-	if err != nil {
-		return nil, &LibraryError{Name: name, Operation: "add", Err: fmt.Errorf("resolve template: %w", err)}
+	// Resolve template (use pre-resolved path or fetch from remote)
+	var resolvedDir string
+	if opts.ResolvedDir != "" {
+		resolvedDir = opts.ResolvedDir
+	} else {
+		if l.resolver == nil {
+			return nil, &LibraryError{Name: name, Operation: "add", Err: errors.New("resolver not configured")}
+		}
+		resolvedDir, err = l.resolver.Resolve(ctx, opts.Ref, remote.ResolveOptions{
+			ForceUpdate: true,
+		})
+		if err != nil {
+			return nil, &LibraryError{Name: name, Operation: "add", Err: fmt.Errorf("resolve template: %w", err)}
+		}
 	}
 
 	destPath := filepath.Join(l.dataDir, templatesDir, name)
