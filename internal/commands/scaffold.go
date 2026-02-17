@@ -3,12 +3,14 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
+	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
@@ -133,6 +135,11 @@ func scaffoldAction(c *cli.Context) error {
 		return app.Errorf("scaffolding failed: %w", err)
 	}
 
+	// Auto-add remote templates to the library for future use with `tag run`
+	if isRemote {
+		addToLibrary(c, templateRef, templateDir)
+	}
+
 	return nil
 }
 
@@ -252,6 +259,29 @@ func promptForProjectDir(prompter scaffold.Prompter, opts *scaffold.Options) err
 	}
 	opts.OutputDir = projectDir
 	return nil
+}
+
+// addToLibrary adds a scaffolded remote template to the library (non-fatal on error).
+func addToLibrary(c *cli.Context, templateRef, templateDir string) {
+	lib, err := newLocalLibrary()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not add template to library: %v\n", err)
+		return
+	}
+
+	name := deriveTemplateName(templateRef)
+	result, err := lib.Add(c.Context, library.AddOptions{
+		Ref:         templateRef,
+		Name:        name,
+		Force:       true,
+		ResolvedDir: templateDir,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not add template to library: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\nTemplate added to library as %q. Run with: tag run %s\n", result.Name, result.Name)
 }
 
 // deriveTemplateName extracts a library-compatible template name from a remote reference.
