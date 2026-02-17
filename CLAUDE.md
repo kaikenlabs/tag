@@ -2,12 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Mandatory
+## MANDATORY RULES - ALWAYS COMPLY WITH THESE ONES
 
 1. Before pushing code, run the linter with `make lint`
 2. Before pushing code, run the tests with `make test`
 3. Use serena MCP as much as possible for code operations.
-4. Use sequential thinking MCP for complexe thinking operations.
+  - Prefer `get_symbols_overview` / `find_symbol` over full file reads for Go source
+  - Prefer `replace_symbol_body` / `insert_after_symbol` / `insert_before_symbol` over Edit/Write for modifying existing Go code
+  - Prefer `find_referencing_symbols` for impact analysis before changes
+  - Reserve Write/Edit for new files or non-code files (config, docs, memory)
+4. Use sequential thinking MCP for complex thinking operations.
 5. Use ref MCP server to look for documentation on well known libraries.
 
 ## Project Overview
@@ -21,6 +25,10 @@ TAG is a Go-based CLI tool for template-driven code generation and project scaff
 - `tag generate <bundle-or-generator> <name>` - Run generators/bundles within existing projects
 - `tag scaffold <template> [project-name]` - Create new projects from local or remote templates
 - `tag convert cookiecutter <source>` - Convert Cookiecutter templates to TAG format
+- `tag lib install|list|resolve` - Template library management
+- `tag run <generator>` - Run template-bundled generators
+- `tag info <template>` - Show template metadata, variables, hooks, and docs
+- `tag version-check` - Check if a newer version is available
 
 **Key Features**:
 - Template engine: Gonja (Jinja2-compatible)
@@ -101,6 +109,10 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── convert.go          - Cookiecutter conversion command
     │       ├── library.go          - Template library commands
     │       ├── run.go              - Run command (template-bundled generators)
+    │       ├── info.go             - Template info display
+    │       ├── version_check.go    - Version update checker
+    │       ├── completion.go       - Shell completion command
+    │       ├── completion_helpers.go - Completion helper functions
     │       ├── flags.go            - Shared CLI flag definitions
     │       └── validate.go         - Input validation helpers
     │
@@ -169,8 +181,17 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── config.go           - Config file loading
     │       └── validate.go         - Config validation
     │
+    ├── internal/validate/      Input name validation
+    │       └── name.go             - Name validation rules
+    │
     ├── internal/formats/       String formatting utilities
     │       └── cases.go            - Case conversions (snake, pascal, camel, etc.)
+    │
+    ├── internal/fileutil/      File utility functions
+    │       └── ...                 - Copy, symlink checks, path helpers
+    │
+    ├── internal/integration/   Integration test suite
+    │       └── ...                 - Cookiecutter pipeline tests
     │
     ├── internal/replay/        Replay system for saved inputs
     ├── internal/schema/        JSON Schema validation
@@ -231,6 +252,9 @@ if err != nil {
 - Test naming: `TestUT_*` for unit tests, `TestIT_*` for integration tests
 - Unit tests: Use mock interfaces (e.g., `MockPrompter`) to avoid real filesystem/TTY
 - Integration tests: Use `t.TempDir()` for isolated filesystem testing with auto-cleanup
+- Tests using `setupFakeLibrary` must NOT use `t.Parallel()` (mutates package-level var)
+- Integration tests live in `internal/integration/` and require `make build` first
+- HTTP-dependent tests use `httptest.NewServer` with parameterized base URLs
 
 ## Documentation
 
