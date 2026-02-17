@@ -74,7 +74,7 @@ func (c *Core) Generate(data Data) error {
 	input := InputData{
 		Name:         data.Name,
 		Args:         data.Args,
-		Meta:         parseMeta(data.MetaArgs),
+		Meta:         parseMeta(data.RawMeta),
 		ScaffoldVars: data.ScaffoldVars,
 	}
 
@@ -106,7 +106,7 @@ func (c *Core) Generate(data Data) error {
 			action = chalk.Yellow("modified")
 		default:
 			if err := c.fwr.WriteFile(item.To, item.Output, 0o750); err != nil {
-				slog.Error("cannot writing to file", "file", item.To, "error", err)
+				slog.Error("cannot write to file", "file", item.To, "error", err)
 				return err
 			}
 			action = chalk.Blue("created")

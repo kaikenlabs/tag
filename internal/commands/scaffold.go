@@ -4,9 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
-	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -296,43 +293,10 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 // deriveTemplateName extracts a library-compatible template name from a remote reference.
 // For example, "bb:whalar/go-ms-service-template" becomes "go-ms-service-template".
 func deriveTemplateName(ref string) string {
-	parsed, err := remote.Parse(ref)
-	if err == nil && parsed.Repo != "" {
-		name := strings.TrimPrefix(parsed.Repo, "cookiecutter-")
-		if name != "" {
-			return name
-		}
-	}
-	// Use path.Base (not filepath.Base) so forward-slash URLs work on all platforms.
-	base := path.Base(ref)
-	base = strings.TrimPrefix(base, "cookiecutter-")
-	base = strings.TrimSuffix(base, ".git")
-	if base == "" || base == "." {
-		return ref
-	}
-	return base
+	return remote.DeriveName(ref)
 }
 
 // suggestConvertedTemplateName generates a default name for converted template output.
 func suggestConvertedTemplateName(templateRef string) string {
-	// Extract base name from template reference
-	baseName := filepath.Base(templateRef)
-
-	// Handle remote references like gh:user/repo
-	if strings.Contains(templateRef, ":") {
-		parts := strings.Split(templateRef, ":")
-		if len(parts) > 1 {
-			baseName = filepath.Base(parts[1])
-		}
-	}
-
-	// Strip version tags like @v1.0.0
-	if idx := strings.Index(baseName, "@"); idx != -1 {
-		baseName = baseName[:idx]
-	}
-
-	// Strip common cookiecutter prefixes
-	baseName = strings.TrimPrefix(baseName, "cookiecutter-")
-
-	return baseName + "-tag"
+	return remote.DeriveName(templateRef) + "-tag"
 }

@@ -77,14 +77,14 @@ func resolveGeneratorPaths(cfg *config.Config, name string) (genDir, sharedDir s
 func resolveFromLibrary(cfg *config.Config, name string) (string, string, bool, error) {
 	lib, err := newLocalLibrary()
 	if err != nil {
-		return "", "", false, fmt.Errorf("failed to initialize library: %w", err)
+		return "", "", false, app.Errorf("failed to initialize library: %w", err)
 	}
 
 	templateDir, err := lib.TemplatePath(cfg.Template.Name)
 	if err != nil {
 		// Only fall through on ErrTemplateNotFound (cache miss).
 		if !errors.Is(err, library.ErrTemplateNotFound) {
-			return "", "", false, fmt.Errorf("error accessing library template %q: %w", cfg.Template.Name, err)
+			return "", "", false, app.Errorf("error accessing library template %q: %w", cfg.Template.Name, err)
 		}
 		slog.Debug("template not found in library, falling back to local", "template", cfg.Template.Name)
 		return "", "", false, nil
@@ -146,13 +146,13 @@ func resolveBundlePath(cfg *config.Config, bundleName, bundleSubDir string) (str
 func resolveBundleFromLibrary(cfg *config.Config, bundleFile string) (string, error) {
 	lib, err := newLocalLibrary()
 	if err != nil {
-		return "", fmt.Errorf("failed to initialize library: %w", err)
+		return "", app.Errorf("failed to initialize library: %w", err)
 	}
 
 	templateDir, err := lib.TemplatePath(cfg.Template.Name)
 	if err != nil {
 		if !errors.Is(err, library.ErrTemplateNotFound) {
-			return "", fmt.Errorf("error accessing library template %q: %w", cfg.Template.Name, err)
+			return "", app.Errorf("error accessing library template %q: %w", cfg.Template.Name, err)
 		}
 		return "", nil
 	}

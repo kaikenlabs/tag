@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 func TestUT_ExtractMetadata_ValidBlock(t *testing.T) {
@@ -190,7 +192,7 @@ func TestUT_ParseMetadata_ValidFields(t *testing.T) {
 			want: &Metadata{
 				To:            "output/file.go",
 				Action:        ActionInject,
-				InjectClause:  InjectAfter,
+				InjectClause:  types.InjectAfter,
 				InjectMatcher: "// marker",
 				Extra:         map[string]string{},
 			},
@@ -201,7 +203,7 @@ func TestUT_ParseMetadata_ValidFields(t *testing.T) {
 			want: &Metadata{
 				To:            "output/file.go",
 				Action:        ActionInject,
-				InjectClause:  InjectBefore,
+				InjectClause:  types.InjectBefore,
 				InjectMatcher: "// marker",
 				Extra:         map[string]string{},
 			},

@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/kaikenlabs/tag/internal/template"
 )
@@ -196,24 +198,13 @@ func LoadTemplateFiles(dirPath string) (map[string]string, error) {
 
 // orderTemplateData sorts templates by action: Create first, then Inject, then Append.
 func orderTemplateData(data []TemplateData) []TemplateData {
-	create := []TemplateData{}
-	inject := []TemplateData{}
-	app := []TemplateData{}
-
-	for _, tmp := range data {
-		switch tmp.Action {
-		case template.ActionCreate:
-			create = append(create, tmp)
-		case template.ActionInject:
-			inject = append(inject, tmp)
-		case template.ActionAppend:
-			app = append(app, tmp)
-		}
+	priority := map[template.Action]int{
+		template.ActionCreate: 0,
+		template.ActionInject: 1,
+		template.ActionAppend: 2,
 	}
-
-	result := []TemplateData{}
-	result = append(result, create...)
-	result = append(result, inject...)
-	result = append(result, app...)
-	return result
+	slices.SortStableFunc(data, func(a, b TemplateData) int {
+		return cmp.Compare(priority[a.Action], priority[b.Action])
+	})
+	return data
 }

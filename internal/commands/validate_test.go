@@ -40,7 +40,6 @@ func TestUT_ValidateNameSafe_RejectsPathTraversal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateNameSafe(tt.input)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "path traversal")
 		})
 	}
 }
@@ -60,7 +59,7 @@ func TestUT_ValidateNameSafe_RejectsBackslash(t *testing.T) {
 func TestUT_ValidateNameSafe_RejectsSingleDot(t *testing.T) {
 	err := ValidateNameSafe(".")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not a valid name")
+	assert.Contains(t, err.Error(), "reserved name")
 }
 
 func TestUT_ValidateNameSafe_RejectsEmptyName(t *testing.T) {

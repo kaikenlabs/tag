@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	stdpath "path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/validate"
 )
 
 // ReferenceType indicates the type of template source.
@@ -471,14 +474,8 @@ func buildReference(p refParts) (*Reference, error) {
 // validateRefComponent checks that a reference component (owner, repo) is safe.
 // It rejects empty strings, path traversal sequences, and path separators.
 func validateRefComponent(name, value string) error {
-	if value == "" {
-		return fmt.Errorf("%s must not be empty", name)
-	}
-	if value == "." || value == ".." {
-		return fmt.Errorf("%s contains path traversal component: %s", name, value)
-	}
-	if strings.ContainsAny(value, "/\\") {
-		return fmt.Errorf("%s contains path separator: %s", name, value)
+	if err := validate.PathSegmentSafe(value); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
 }
@@ -527,4 +524,25 @@ func (r *Reference) String() string {
 		return result
 	}
 	return r.Original
+}
+
+// DeriveName extracts a library-compatible template name from a remote reference.
+// For example, "bb:whalar/go-ms-service-template" becomes "go-ms-service-template",
+// and "gh:user/cookiecutter-django" becomes "django".
+func DeriveName(ref string) string {
+	parsed, err := Parse(ref)
+	if err == nil && parsed.Repo != "" {
+		name := strings.TrimPrefix(parsed.Repo, "cookiecutter-")
+		if name != "" {
+			return name
+		}
+	}
+	// Use path.Base (not filepath.Base) so forward-slash URLs work on all platforms.
+	base := stdpath.Base(ref)
+	base = strings.TrimPrefix(base, "cookiecutter-")
+	base = strings.TrimSuffix(base, ".git")
+	if base == "" || base == "." {
+		return ref
+	}
+	return base
 }

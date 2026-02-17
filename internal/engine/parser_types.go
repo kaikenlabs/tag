@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // TemplateParser wraps the Gonja template engine for parsing TAG templates.
@@ -21,10 +22,9 @@ type TemplateData struct {
 
 // ParseData holds the parsing configuration and user input.
 type ParseData struct {
-	Action        template.Action       // File operation: Create, Append, or Inject
-	InjectClause  template.InjectClause // Before or After (for inject action)
+	Action        template.Action    // File operation: Create, Append, or Inject
+	InjectClause  types.InjectClause // Before or After (for inject action)
 	InjectMatcher string
-	Args          string            // Free-form arguments string
 	Meta          map[string]string // User-provided metadata from --meta flags
 	Notes         string
 }

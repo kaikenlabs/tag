@@ -527,22 +527,22 @@ func TestUT_Parse_RejectsTraversalInOwnerRepo(t *testing.T) {
 		{
 			name:        "shorthand dotdot owner",
 			input:       "gh:../repo",
-			errContains: "path traversal",
+			errContains: "reserved name",
 		},
 		{
 			name:        "shorthand dotdot repo",
 			input:       "gh:user/..",
-			errContains: "path traversal",
+			errContains: "reserved name",
 		},
 		{
 			name:        "https dotdot owner",
 			input:       "https://github.com/../repo.git",
-			errContains: "path traversal",
+			errContains: "reserved name",
 		},
 		{
 			name:        "https dotdot repo",
 			input:       "https://github.com/user/...git",
-			errContains: "path traversal",
+			errContains: "reserved name",
 		},
 	}
 
@@ -761,6 +761,76 @@ func TestUT_Reference_String(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.ref.String())
+		})
+	}
+}
+
+func TestUT_DeriveName(t *testing.T) {
+	tests := []struct {
+		name     string
+		ref      string
+		expected string
+	}{
+		{
+			name:     "github shorthand",
+			ref:      "gh:user/my-template",
+			expected: "my-template",
+		},
+		{
+			name:     "gitlab shorthand",
+			ref:      "gl:org/my-template",
+			expected: "my-template",
+		},
+		{
+			name:     "bitbucket shorthand",
+			ref:      "bb:team/go-service",
+			expected: "go-service",
+		},
+		{
+			name:     "strips cookiecutter prefix",
+			ref:      "gh:user/cookiecutter-django",
+			expected: "django",
+		},
+		{
+			name:     "strips .git suffix",
+			ref:      "https://github.com/user/my-template.git",
+			expected: "my-template",
+		},
+		{
+			name:     "strips cookiecutter prefix and .git suffix",
+			ref:      "https://github.com/user/cookiecutter-flask.git",
+			expected: "flask",
+		},
+		{
+			name:     "local path",
+			ref:      "/some/path/to/template",
+			expected: "template",
+		},
+		{
+			name:     "relative path",
+			ref:      "./my-template",
+			expected: "my-template",
+		},
+		{
+			name:     "with version tag",
+			ref:      "gh:user/my-template@v1.0.0",
+			expected: "my-template",
+		},
+		{
+			name:     "empty string returns original",
+			ref:      "",
+			expected: "",
+		},
+		{
+			name:     "dot returns original",
+			ref:      ".",
+			expected: ".",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, DeriveName(tt.ref))
 		})
 	}
 }

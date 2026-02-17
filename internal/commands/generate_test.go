@@ -189,7 +189,7 @@ Hello {{ .Name }}`
 	err := generateAction(ctx, cfg)
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"key1=value1", "key2=value2"}, capturedData.MetaArgs)
+	assert.Equal(t, []string{"key1=value1", "key2=value2"}, capturedData.RawMeta)
 }
 
 func TestUT_GenerateAction_GeneratorError(t *testing.T) {

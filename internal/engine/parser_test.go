@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // mockExecutor implements template.TemplateExecutor for testing NewParserWithExecutor.
@@ -262,7 +263,7 @@ injected content
 	data, err := te.Parse(InputData{Name: "test"})
 	require.NoError(t, err)
 	assert.Equal(t, template.ActionInject, data[0].Action)
-	assert.Equal(t, template.InjectAfter, data[0].InjectClause)
+	assert.Equal(t, types.InjectAfter, data[0].InjectClause)
 	assert.Equal(t, "// marker", data[0].InjectMatcher)
 }
 
@@ -280,7 +281,7 @@ injected content
 	data, err := te.Parse(InputData{Name: "test"})
 	require.NoError(t, err)
 	assert.Equal(t, template.ActionInject, data[0].Action)
-	assert.Equal(t, template.InjectBefore, data[0].InjectClause)
+	assert.Equal(t, types.InjectBefore, data[0].InjectClause)
 	assert.Equal(t, "// marker", data[0].InjectMatcher)
 }
 

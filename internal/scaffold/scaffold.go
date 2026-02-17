@@ -148,7 +148,7 @@ func (s *Scaffold) loadConfig(ctx *runContext) error {
 
 // confirmHooks checks whether the user accepts hook execution.
 func (s *Scaffold) confirmHooks(ctx *runContext) error {
-	hooksAllowed, err := hooks.ConfirmHooks(ctx.config.Hooks, ctx.opts.AcceptHooks, ctx.opts.NoInput, s.prompter, ctx.templateDirAbs)
+	hooksAllowed, err := hooks.ConfirmHooks(ctx.config.Hooks, ctx.opts.AcceptHooks, ctx.opts.NoInput, s.prompter, ctx.templateDirAbs, s.output)
 	if err != nil {
 		return fmt.Errorf("hook confirmation failed: %w", err)
 	}
@@ -235,7 +235,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 		if err != nil {
 			return err
 		}
-		if err := hooks.RunPreScaffoldHooks(s.hookRunner, renderedHooks, ctx.templateDirAbs, ctx.hookEnv); err != nil {
+		if err := hooks.RunPreScaffoldHooks(s.hookRunner, renderedHooks, ctx.templateDirAbs, ctx.hookEnv, s.output); err != nil {
 			return fmt.Errorf("pre-scaffold hook failed: %w", err)
 		}
 	}
@@ -279,7 +279,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 		if ctx.effectiveTemplateDir != ctx.opts.TemplateDir && renderedHooks != nil {
 			postHooks = hooks.ResolveHookPaths(renderedHooks, ctx.templateDirAbs)
 		}
-		hooks.RunPostScaffoldHooks(s.hookRunner, postHooks, ctx.projectRoot, ctx.hookEnv)
+		hooks.RunPostScaffoldHooks(s.hookRunner, postHooks, ctx.projectRoot, ctx.hookEnv, s.output)
 	}
 
 	// Save replay data and display summary
@@ -453,15 +453,6 @@ func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string
 func hasSubdir(dir, subdir string) bool {
 	info, err := os.Stat(filepath.Join(dir, subdir))
 	return err == nil && info.IsDir()
-}
-
-// Result contains the result of a scaffolding operation.
-type Result struct {
-	OutputDir      string
-	Variables      map[string]any
-	FilesCount     int
-	DirsCount      int
-	TemplatesCount int
 }
 
 // validateSafeOutputDir checks that the output directory is safe for deletion with --force.

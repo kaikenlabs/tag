@@ -12,7 +12,7 @@ type Core struct {
 type Data struct {
 	Name         string
 	Args         string
-	MetaArgs     []string
+	RawMeta      []string
 	ScaffoldVars map[string]any // Variables from scaffold-time .tagconfig.json
 }
 
