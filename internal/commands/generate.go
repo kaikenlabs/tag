@@ -159,7 +159,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 			return app.Errorf("error creating engine: %w", genErr)
 		}
 
-		genData := engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)}
+		genData := engine.Data{Name: targetName, Args: args, RawMeta: c.StringSlice(flags.MetaFlag)}
 		if cfg.Variables != nil {
 			genData.ScaffoldVars = cfg.Variables
 		}
@@ -195,7 +195,7 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		return app.Errorf("error creating engine: %w", err)
 	}
 
-	data := engine.Data{Name: targetName, Args: args, MetaArgs: c.StringSlice(flags.MetaFlag)}
+	data := engine.Data{Name: targetName, Args: args, RawMeta: c.StringSlice(flags.MetaFlag)}
 	if cfg.Variables != nil {
 		data.ScaffoldVars = cfg.Variables
 	}
@@ -223,7 +223,7 @@ func runHooks(hookCmds [][]string, phase hooks.HookPhase) error {
 
 	results, err := hooks.RunArgvHooks(phase, hookCmds, dir, nil)
 
-	hooks.PrintHookResults(results)
+	hooks.PrintHookResults(results, os.Stdout)
 
 	if err != nil {
 		return app.Errorf("hook failed: %w", err)

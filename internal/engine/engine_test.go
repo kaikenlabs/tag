@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/writer"
 )
 
@@ -113,7 +114,7 @@ func TestUT_Generate_InjectAction(t *testing.T) {
 		renderMetadataResult: &template.Metadata{
 			To:            "output.go",
 			Action:        template.ActionInject,
-			InjectClause:  template.InjectAfter,
+			InjectClause:  types.InjectAfter,
 			InjectMatcher: "// marker",
 			Extra:         map[string]string{},
 		},
@@ -128,7 +129,7 @@ func TestUT_Generate_InjectAction(t *testing.T) {
 	require.Len(t, fw.injectCalls, 1)
 	assert.Equal(t, "output.go", fw.injectCalls[0].Name)
 	assert.Equal(t, "injected code", string(fw.injectCalls[0].Data))
-	assert.Equal(t, template.InjectAfter, fw.injectCalls[0].Inject.Clause)
+	assert.Equal(t, types.InjectAfter, fw.injectCalls[0].Inject.Clause)
 	assert.Equal(t, "// marker", fw.injectCalls[0].Inject.Matcher)
 }
 
@@ -213,7 +214,7 @@ func TestUT_Generate_InjectError_Propagates(t *testing.T) {
 		renderMetadataResult: &template.Metadata{
 			To:            "output.go",
 			Action:        template.ActionInject,
-			InjectClause:  template.InjectAfter,
+			InjectClause:  types.InjectAfter,
 			InjectMatcher: "// marker",
 			Extra:         map[string]string{},
 		},

@@ -64,7 +64,7 @@ type Confirmer interface {
 
 // NewHookRunner creates a new hook runner using direct argv execution (no shell interpretation).
 func NewHookRunner() HookRunner {
-	return &ArgvHookRunner{}
+	return &ArgvHookRunner{Out: os.Stdout}
 }
 
 // shellMetachars contains characters that indicate shell features (pipes, redirects, etc.)
@@ -160,11 +160,13 @@ var _ io.Writer = (*limitedBuffer)(nil)
 // ArgvHookRunner executes hooks using direct argv arrays (no shell interpretation).
 // It implements HookRunner and also provides RunArgv for pre-split command arrays.
 // This is the unified hook runner used by both scaffold and generate commands.
-type ArgvHookRunner struct{}
+type ArgvHookRunner struct {
+	Out io.Writer // Destination for user-facing messages (default: os.Stdout)
+}
 
 // NewArgvHookRunner creates a new argv-based hook runner.
 func NewArgvHookRunner() *ArgvHookRunner {
-	return &ArgvHookRunner{}
+	return &ArgvHookRunner{Out: os.Stdout}
 }
 
 // Run implements HookRunner by splitting shell command strings into argv arrays
@@ -176,13 +178,15 @@ func (r *ArgvHookRunner) Run(phase HookPhase, commands []string, workDir string,
 		return nil, nil
 	}
 
+	w := r.out()
+
 	// Convert string commands to argv arrays
 	argvCommands := make([][]string, 0, len(commands))
 	for _, cmdStr := range commands {
 		// Warn if the command contains shell metacharacters and doesn't already use a shell
 		if containsShellMetachars(cmdStr) && !isExplicitShellCommand(cmdStr) {
-			fmt.Printf("Warning: hook command %q contains shell metacharacters that won't be interpreted.\n", cmdStr)
-			fmt.Printf("  If you need shell features, use: sh -c '%s'\n", cmdStr)
+			fmt.Fprintf(w, "Warning: hook command %q contains shell metacharacters that won't be interpreted.\n", cmdStr)
+			fmt.Fprintf(w, "  If you need shell features, use: sh -c '%s'\n", cmdStr)
 		}
 
 		argv, err := shlex.Split(cmdStr)
@@ -196,6 +200,14 @@ func (r *ArgvHookRunner) Run(phase HookPhase, commands []string, workDir string,
 	}
 
 	return r.RunArgv(phase, argvCommands, workDir, env)
+}
+
+// out returns the configured output writer, defaulting to os.Stdout.
+func (r *ArgvHookRunner) out() io.Writer {
+	if r.Out != nil {
+		return r.Out
+	}
+	return os.Stdout
 }
 
 // containsShellMetachars checks if a command string contains shell metacharacters
@@ -307,7 +319,7 @@ func describeHookCommand(cmd, templateDir string) string {
 // Returns true if hooks should run, false if they should be skipped.
 // Returns an error only if prompting fails.
 // templateDir is used to resolve file-based hook commands for interpreter annotation.
-func ConfirmHooks(hooks *types.HooksConfig, acceptHooks, noInput bool, confirmer Confirmer, templateDir string) (bool, error) {
+func ConfirmHooks(hooks *types.HooksConfig, acceptHooks, noInput bool, confirmer Confirmer, templateDir string, w io.Writer) (bool, error) {
 	if len(collectAllHooks(hooks)) == 0 {
 		return false, nil
 	}
@@ -319,12 +331,12 @@ func ConfirmHooks(hooks *types.HooksConfig, acceptHooks, noInput bool, confirmer
 
 	// --no-input without --accept-hooks: skip hooks
 	if noInput {
-		fmt.Println("Skipping hooks (use --accept-hooks to run them in non-interactive mode).")
+		fmt.Fprintln(w, "Skipping hooks (use --accept-hooks to run them in non-interactive mode).")
 		return false, nil
 	}
 
 	// Interactive: display hooks and prompt for confirmation
-	displayHookList(hooks, templateDir)
+	displayHookList(hooks, templateDir, w)
 
 	confirmed, err := confirmer.Confirm("Do you want to execute these hooks?", false)
 	if err != nil {
@@ -332,7 +344,7 @@ func ConfirmHooks(hooks *types.HooksConfig, acceptHooks, noInput bool, confirmer
 	}
 
 	if !confirmed {
-		fmt.Println("Hooks skipped by user choice.")
+		fmt.Fprintln(w, "Hooks skipped by user choice.")
 	}
 
 	return confirmed, nil
@@ -349,20 +361,20 @@ func collectAllHooks(hooks *types.HooksConfig) []string {
 	return all
 }
 
-// displayHookList prints the list of configured hooks to stdout.
+// displayHookList prints the list of configured hooks to the given writer.
 // templateDir is used to resolve file-based commands for interpreter annotation.
-func displayHookList(hooks *types.HooksConfig, templateDir string) {
+func displayHookList(hooks *types.HooksConfig, templateDir string, w io.Writer) {
 	hasNotFound := false
 
-	fmt.Println("This template defines the following hooks:")
+	fmt.Fprintln(w, "This template defines the following hooks:")
 	if len(hooks.PreScaffold) > 0 {
-		fmt.Println("  Pre-scaffold:")
+		fmt.Fprintln(w, "  Pre-scaffold:")
 		for _, cmd := range hooks.PreScaffold {
 			annotation := describeHookCommand(cmd, templateDir)
 			if annotation != "" {
-				fmt.Printf("    - %s  %s\n", cmd, annotation)
+				fmt.Fprintf(w, "    - %s  %s\n", cmd, annotation)
 			} else {
-				fmt.Printf("    - %s\n", cmd)
+				fmt.Fprintf(w, "    - %s\n", cmd)
 			}
 			if strings.Contains(annotation, "NOT FOUND") {
 				hasNotFound = true
@@ -370,13 +382,13 @@ func displayHookList(hooks *types.HooksConfig, templateDir string) {
 		}
 	}
 	if len(hooks.PostScaffold) > 0 {
-		fmt.Println("  Post-scaffold:")
+		fmt.Fprintln(w, "  Post-scaffold:")
 		for _, cmd := range hooks.PostScaffold {
 			annotation := describeHookCommand(cmd, templateDir)
 			if annotation != "" {
-				fmt.Printf("    - %s  %s\n", cmd, annotation)
+				fmt.Fprintf(w, "    - %s  %s\n", cmd, annotation)
 			} else {
-				fmt.Printf("    - %s\n", cmd)
+				fmt.Fprintf(w, "    - %s\n", cmd)
 			}
 			if strings.Contains(annotation, "NOT FOUND") {
 				hasNotFound = true
@@ -385,18 +397,18 @@ func displayHookList(hooks *types.HooksConfig, templateDir string) {
 	}
 
 	if hasNotFound {
-		fmt.Println()
-		fmt.Println("WARNING: some hook interpreters were not found on your system.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "WARNING: some hook interpreters were not found on your system.")
 	}
 }
 
-// PrintHookResults prints the output of hook execution results to stdout.
-func PrintHookResults(results []HookResult) {
+// PrintHookResults prints the output of hook execution results to the given writer.
+func PrintHookResults(results []HookResult, w io.Writer) {
 	for _, result := range results {
 		if result.Output != "" {
-			fmt.Print(result.Output)
+			fmt.Fprint(w, result.Output)
 			if !strings.HasSuffix(result.Output, "\n") {
-				fmt.Println()
+				fmt.Fprintln(w)
 			}
 		}
 	}
@@ -404,16 +416,16 @@ func PrintHookResults(results []HookResult) {
 
 // RunPreScaffoldHooks executes pre-scaffold hooks and returns an error if any fail.
 // Pre-scaffold hooks run in the template directory before any files are created.
-func RunPreScaffoldHooks(runner HookRunner, hooks *types.HooksConfig, templateDir string, env []string) error {
+func RunPreScaffoldHooks(runner HookRunner, hooks *types.HooksConfig, templateDir string, env []string, w io.Writer) error {
 	if hooks == nil || len(hooks.PreScaffold) == 0 {
 		return nil
 	}
 
-	fmt.Printf("Running pre-scaffold hooks...\n")
+	fmt.Fprintln(w, "Running pre-scaffold hooks...")
 
 	results, err := runner.Run(HookPhasePre, hooks.PreScaffold, templateDir, env)
 
-	PrintHookResults(results)
+	PrintHookResults(results, w)
 
 	return err
 }
@@ -421,21 +433,21 @@ func RunPreScaffoldHooks(runner HookRunner, hooks *types.HooksConfig, templateDi
 // RunPostScaffoldHooks executes post-scaffold hooks.
 // Post-scaffold hooks run in the output directory after all files are created.
 // Failures are logged as warnings but don't stop the scaffold process.
-func RunPostScaffoldHooks(runner HookRunner, hooks *types.HooksConfig, outputDir string, env []string) {
+func RunPostScaffoldHooks(runner HookRunner, hooks *types.HooksConfig, outputDir string, env []string, w io.Writer) {
 	if hooks == nil || len(hooks.PostScaffold) == 0 {
 		return
 	}
 
-	fmt.Printf("Running post-scaffold hooks...\n")
+	fmt.Fprintln(w, "Running post-scaffold hooks...")
 
 	results, err := runner.Run(HookPhasePost, hooks.PostScaffold, outputDir, env)
 
-	PrintHookResults(results)
+	PrintHookResults(results, w)
 
 	if err != nil {
 		// Post-scaffold failures are warnings, not errors
-		fmt.Printf("Warning: post-scaffold hook failed: %v\n", err)
-		fmt.Printf("Note: Scaffold completed successfully, but some post-scaffold tasks may not have run.\n")
+		fmt.Fprintf(w, "Warning: post-scaffold hook failed: %v\n", err)
+		fmt.Fprintln(w, "Note: Scaffold completed successfully, but some post-scaffold tasks may not have run.")
 	}
 }
 

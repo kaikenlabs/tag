@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/kaikenlabs/tag/internal/convert"
@@ -17,6 +16,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
+	"github.com/kaikenlabs/tag/internal/validate"
 )
 
 const (
@@ -433,43 +433,13 @@ func (l *Library) TemplatePath(name string) (string, error) {
 
 // deriveName extracts a template name from a reference string.
 func deriveName(ref string) string {
-	// Try to parse as a remote reference to get the repo name
-	parsed, err := remote.Parse(ref)
-	if err == nil && parsed.Repo != "" {
-		name := parsed.Repo
-		// Strip common cookiecutter- prefix
-		name = strings.TrimPrefix(name, "cookiecutter-")
-		return name
-	}
-
-	// Fallback: use base name of the path
-	base := filepath.Base(ref)
-	base = strings.TrimPrefix(base, "cookiecutter-")
-	base = strings.TrimSuffix(base, ".git")
-	return base
+	return remote.DeriveName(ref)
 }
 
 // validateName checks that a template name is valid for use as a directory name.
 func validateName(name string) error {
-	if name == "" {
-		return ErrInvalidName
-	}
-	if len(name) > maxNameLen {
-		return fmt.Errorf("%w: exceeds maximum length of %d", ErrInvalidName, maxNameLen)
-	}
-	if strings.ContainsAny(name, "/\\") {
-		return fmt.Errorf("%w: contains path separator", ErrInvalidName)
-	}
-	if name == "." || name == ".." {
-		return fmt.Errorf("%w: reserved name", ErrInvalidName)
-	}
-	if strings.HasPrefix(name, ".") {
-		return fmt.Errorf("%w: name cannot start with a dot", ErrInvalidName)
-	}
-	for _, r := range name {
-		if r < 0x20 || r == 0x7F {
-			return fmt.Errorf("%w: contains control character", ErrInvalidName)
-		}
+	if err := validate.TemplateName(name); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidName, err.Error())
 	}
 	return nil
 }

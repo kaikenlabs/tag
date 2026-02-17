@@ -30,22 +30,14 @@ const (
 	ActionInject Action = "Inject"
 )
 
-// InjectClause is an alias for types.InjectClause.
-type InjectClause = types.InjectClause
-
-const (
-	InjectBefore = types.InjectBefore
-	InjectAfter  = types.InjectAfter
-)
-
 // Metadata represents the parsed metadata from a template's --- block.
 type Metadata struct {
-	To            string            // Output file path
-	Action        Action            // File operation: Create, Append, or Inject
-	InjectClause  InjectClause      // Before or After (for inject action)
-	InjectMatcher string            // The marker string to match for injection
-	Notes         string            // Optional notes to display after generation
-	Extra         map[string]string // Additional key-value pairs from metadata
+	To            string             // Output file path
+	Action        Action             // File operation: Create, Append, or Inject
+	InjectClause  types.InjectClause // Before or After (for inject action)
+	InjectMatcher string             // The marker string to match for injection
+	Notes         string             // Optional notes to display after generation
+	Extra         map[string]string  // Additional key-value pairs from metadata
 }
 
 // Known metadata field names.
@@ -169,11 +161,11 @@ func ParseMetadata(rendered string) (*Metadata, error) {
 			}
 
 		case fieldAfter:
-			meta.InjectClause = InjectAfter
+			meta.InjectClause = types.InjectAfter
 			meta.InjectMatcher = value
 
 		case fieldBefore:
-			meta.InjectClause = InjectBefore
+			meta.InjectClause = types.InjectBefore
 			meta.InjectMatcher = value
 
 		case fieldNotes:

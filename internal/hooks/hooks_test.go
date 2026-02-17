@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -583,7 +584,7 @@ func TestUT_ConfirmHooks_AcceptHooksFlag_SkipsPrompt(t *testing.T) {
 	}
 	confirmer := &MockConfirmer{}
 
-	allowed, err := ConfirmHooks(h, true, false, confirmer, "")
+	allowed, err := ConfirmHooks(h, true, false, confirmer, "", io.Discard)
 
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -596,7 +597,7 @@ func TestUT_ConfirmHooks_NoInputFlag_SkipsHooks(t *testing.T) {
 	}
 	confirmer := &MockConfirmer{}
 
-	allowed, err := ConfirmHooks(h, false, true, confirmer, "")
+	allowed, err := ConfirmHooks(h, false, true, confirmer, "", io.Discard)
 
 	require.NoError(t, err)
 	assert.False(t, allowed)
@@ -610,7 +611,7 @@ func TestUT_ConfirmHooks_InteractiveConfirmed(t *testing.T) {
 	}
 	confirmer := &MockConfirmer{ConfirmResult: true}
 
-	allowed, err := ConfirmHooks(h, false, false, confirmer, "")
+	allowed, err := ConfirmHooks(h, false, false, confirmer, "", io.Discard)
 
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -623,7 +624,7 @@ func TestUT_ConfirmHooks_InteractiveDenied(t *testing.T) {
 	}
 	confirmer := &MockConfirmer{ConfirmResult: false}
 
-	allowed, err := ConfirmHooks(h, false, false, confirmer, "")
+	allowed, err := ConfirmHooks(h, false, false, confirmer, "", io.Discard)
 
 	require.NoError(t, err)
 	assert.False(t, allowed)
@@ -633,7 +634,7 @@ func TestUT_ConfirmHooks_InteractiveDenied(t *testing.T) {
 func TestUT_ConfirmHooks_NilHooks_ReturnsFalse(t *testing.T) {
 	confirmer := &MockConfirmer{}
 
-	allowed, err := ConfirmHooks(nil, false, false, confirmer, "")
+	allowed, err := ConfirmHooks(nil, false, false, confirmer, "", io.Discard)
 
 	require.NoError(t, err)
 	assert.False(t, allowed)
@@ -644,7 +645,7 @@ func TestUT_ConfirmHooks_EmptyHooks_ReturnsFalse(t *testing.T) {
 	h := &types.HooksConfig{}
 	confirmer := &MockConfirmer{}
 
-	allowed, err := ConfirmHooks(h, false, false, confirmer, "")
+	allowed, err := ConfirmHooks(h, false, false, confirmer, "", io.Discard)
 
 	require.NoError(t, err)
 	assert.False(t, allowed)
@@ -658,7 +659,7 @@ func TestUT_ConfirmHooks_AcceptHooksOverridesInteractive(t *testing.T) {
 	confirmer := &MockConfirmer{}
 
 	// AcceptHooks=true should run even in interactive mode (no prompt)
-	allowed, err := ConfirmHooks(h, true, false, confirmer, "")
+	allowed, err := ConfirmHooks(h, true, false, confirmer, "", io.Discard)
 
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -673,7 +674,7 @@ func TestUT_ConfirmHooks_PromptError(t *testing.T) {
 		ConfirmErr: assert.AnError,
 	}
 
-	_, err := ConfirmHooks(h, false, false, confirmer, "")
+	_, err := ConfirmHooks(h, false, false, confirmer, "", io.Discard)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to confirm hooks")

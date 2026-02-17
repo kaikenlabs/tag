@@ -129,9 +129,10 @@ func printGeneratorLine(w io.Writer, g generatorInfo) {
 	}
 }
 
-// scanGenerators scans a directory for generator subdirectories.
-// Directories starting with _ are skipped (reserved: _shared, _bundles).
-func scanGenerators(dir string) []generatorInfo {
+// scanDirEntries scans a directory for subdirectories, returning generatorInfo for each.
+// Directories starting with _ or . are skipped (reserved: _shared, _bundles).
+// When readDescription is true, it reads tag.template.json for a description field.
+func scanDirEntries(dir string, readDescription bool) []generatorInfo {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -143,19 +144,19 @@ func scanGenerators(dir string) []generatorInfo {
 			continue
 		}
 		name := entry.Name()
-		// Skip reserved directories (prefixed with _ or .)
 		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
 			continue
 		}
 
 		info := generatorInfo{Name: name}
 
-		// Try to read description from tag.template.json
-		configPath := filepath.Join(dir, name, types.TemplateConfigFile)
-		data, err := os.ReadFile(configPath)
-		if err == nil {
-			if tc, parseErr := scaffold.ParseTemplateConfig(data); parseErr == nil {
-				info.Description = tc.Description
+		if readDescription {
+			configPath := filepath.Join(dir, name, types.TemplateConfigFile)
+			data, readErr := os.ReadFile(configPath)
+			if readErr == nil {
+				if tc, parseErr := scaffold.ParseTemplateConfig(data); parseErr == nil {
+					info.Description = tc.Description
+				}
 			}
 		}
 
@@ -164,28 +165,12 @@ func scanGenerators(dir string) []generatorInfo {
 	return result
 }
 
+// scanGenerators scans a directory for generator subdirectories with descriptions.
+func scanGenerators(dir string) []generatorInfo {
+	return scanDirEntries(dir, true)
+}
+
 // scanBundles scans a bundles directory for bundle definitions.
 func scanBundles(dir string) []generatorInfo {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-
-	var result []generatorInfo
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
-			continue
-		}
-
-		info := generatorInfo{Name: name}
-
-		// Bundle JSON exists but we use directory name for display consistency
-
-		result = append(result, info)
-	}
-	return result
+	return scanDirEntries(dir, false)
 }

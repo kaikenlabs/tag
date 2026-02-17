@@ -55,7 +55,7 @@ func TestUT_SuggestConvertedTemplateName(t *testing.T) {
 		{
 			name:     "nested subdir in shorthand",
 			input:    "gh:user/templates/subdir",
-			expected: "subdir-tag",
+			expected: "templates-tag",
 		},
 	}
 

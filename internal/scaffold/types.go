@@ -3,6 +3,7 @@ package scaffold
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/kaikenlabs/tag/internal/types"
 )
@@ -16,9 +17,6 @@ type TemplateConfig struct {
 	RawVars     map[string]any         `json:"vars"`
 	Hooks       *types.HooksConfig     `json:"hooks,omitempty"`
 }
-
-// HooksConfig is an alias for types.HooksConfig.
-type HooksConfig = types.HooksConfig
 
 // VariableType represents the type of a template variable.
 type VariableType string
@@ -168,25 +166,7 @@ func (v VariableDef) IsDerived() bool {
 // containsTemplateExpression checks if a string contains Jinja2-style
 // template expressions that reference variables.
 func containsTemplateExpression(s string) bool {
-	// Look for {{ vars. patterns
-	// Also handles whitespace variations like {{vars.
-	for i := range len(s) - 2 {
-		if s[i] == '{' && s[i+1] == '{' {
-			rest := s[i+2:]
-			// Skip whitespace
-			j := 0
-			for j < len(rest) && (rest[j] == ' ' || rest[j] == '\t') {
-				j++
-			}
-			if j < len(rest) {
-				remaining := rest[j:]
-				if len(remaining) >= 5 && remaining[:5] == "vars." {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	return strings.Contains(s, "{{") && strings.Contains(s, "vars.")
 }
 
 // GetPrompt returns the prompt message for the variable.
