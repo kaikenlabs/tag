@@ -43,13 +43,30 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 		after = src[idx:]
 	case types.InjectAfter:
 		end := idx + len(inject.Matcher)
+		// Advance past the newline following the marker so injected
+		// content starts on the next line, not appended to the marker line.
+		if end < len(src) && src[end] == '\n' {
+			end++
+		} else if end+1 < len(src) && src[end] == '\r' && src[end+1] == '\n' {
+			end += 2
+		}
 		before = src[:end]
 		after = src[end:]
 	}
 
+	data := string(dataInjection)
+
+	// Ensure injected content is separated from the marker by a newline.
+	// For InjectBefore: data must end with a newline so the marker stays on its own line.
+	// For InjectAfter: data must start on the line after the marker (handled above by
+	// advancing past the marker's trailing newline).
+	if inject.Clause == types.InjectBefore && len(data) > 0 && data[len(data)-1] != '\n' {
+		data += "\n"
+	}
+
 	var result strings.Builder
 	result.WriteString(before)
-	result.Write(dataInjection)
+	result.WriteString(data)
 	result.WriteString(after)
 	return []byte(result.String()), nil
 }

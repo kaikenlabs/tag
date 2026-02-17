@@ -1,8 +1,8 @@
 package main
 
 func main() {
-	// init	AuthSetup()
-
+	// init
+	AuthSetup()
 }
 
 // AuthCleanup runs auth cleanup tasks.
