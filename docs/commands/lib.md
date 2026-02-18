@@ -12,7 +12,7 @@ Alias: `tag library`
 
 ## Description
 
-The `lib` command manages a persistent local library of project templates. Templates added to the library are stored locally and can be used with `tag run` for quick scaffolding.
+The `lib` command manages a persistent local library of project templates. Templates added to the library are stored locally and can be used with `tag scaffold` for quick scaffolding (including the interactive picker when `tag scaffold` is run with no arguments).
 
 Cookiecutter templates are auto-detected and converted to TAG format when added.
 
@@ -120,40 +120,6 @@ tag lib update
 
 ---
 
-### `tag lib inspect`
-
-Show detailed information about a template.
-
-```bash
-tag lib inspect <name>
-```
-
-**Example output:**
-
-```
-Name:        go-api
-Source:       gh:user/go-api-template
-Path:         /Users/you/.local/share/tag/templates/go-api
-Added:        2026-01-15 10:30:00
-Updated:      2026-02-10 14:22:00
-Version:      v1.2.0
-Description:  Go REST API template
-
-Variables:
-  author               (string)
-  license              (choice: [MIT Apache-2.0 GPL-3.0])
-  port                 = 8080
-  project_name         (string)
-  use_docker           (boolean)
-
-Hooks:
-  post_scaffold:
-    - go mod tidy
-    - git init
-```
-
----
-
 ### `tag lib edit`
 
 Open a template in your editor for local customization.
@@ -186,6 +152,16 @@ tag lib edit go-api --editor "code --wait"
 tag lib edit go-api --editor vim
 ```
 
+## Inspecting Templates
+
+To view detailed information about a library template (variables, hooks, metadata), use `tag template info`:
+
+```bash
+tag template info go-api
+```
+
+See [tag template info](template.md#tag-template-info) for details.
+
 ## Storage
 
 Templates are stored in the XDG data directory:
@@ -205,9 +181,9 @@ tag lib add gh:company/react-frontend --as react
 # 2. List available templates
 tag lib ls
 
-# 3. Scaffold new projects
-tag run go-service my-api
-tag run react my-dashboard
+# 3. Scaffold new projects (by name or interactive picker)
+tag scaffold go-service my-api
+tag scaffold    # interactive picker
 
 # 4. Generators from the template are available in scaffolded projects
 cd my-api
@@ -220,6 +196,6 @@ tag lib update
 
 ## See Also
 
-- [tag run](run.md) - Scaffold from a library template
 - [tag scaffold](scaffold.md) - Scaffold from any template source
+- [Template Command](template.md) - Template management (new, init, info, list)
 - [Remote References](../reference/remote-refs.md) - Template source formats

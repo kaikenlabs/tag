@@ -34,6 +34,9 @@ tag scaffold ./my-local-template
 
 # With a project name
 tag scaffold gh:user/go-api my-awesome-api
+
+# Interactive picker (choose from library templates)
+tag scaffold
 ```
 
 TAG will:
@@ -49,10 +52,10 @@ For adding code to existing projects, use generators:
 
 ```bash
 # Initialize TAG in your project
-tag init
+tag template init
 
 # Create a new generator
-tag new handler
+tag template new generator handler
 
 # Edit your generator templates in .tag/handler/
 # Then run:
@@ -63,10 +66,10 @@ If your project was scaffolded from a library template (recorded in `.tagconfig.
 
 ```bash
 # Create a generator in the source library template
-tag new --lib handler
+tag template new generator handler --lib
 
 # Create a bundle in the source library template
-tag new-bundle --lib crud
+tag template new bundle crud --lib
 ```
 
 ## Core Concepts
@@ -118,6 +121,7 @@ See [Template Syntax](templates/syntax.md) for the complete syntax guide.
 
 - [Scaffold Command Reference](commands/scaffold.md) - All flags and options for project scaffolding
 - [Template Library](commands/lib.md) - Install and manage templates locally
-- [Run Command](commands/run.md) - Scaffold from library templates
+- [Template Commands](commands/template.md) - Template management (init, new, info, list)
+- [Version Command](commands/version.md) - Check for updates
 - [Creating Templates](templates/authoring.md) - How to create your own templates
 - [Filter Reference](templates/filters.md) - Available template filters

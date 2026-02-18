@@ -1,18 +1,17 @@
-# tag new / tag new-bundle
+# tag template new
 
 Create new generators and bundles for code generation.
 
 ## Synopsis
 
 ```bash
-tag new <generator-name> [flags]
-tag new-bundle <bundle-name> [flags]
-tag nb <bundle-name> [flags]          # alias
+tag template new generator <generator-name> [flags]
+tag template new bundle <bundle-name> [flags]
 ```
 
 ## Description
 
-The `new` command creates a new generator template file. The `new-bundle` command (alias `nb`) creates a new bundle definition file.
+The `tag template new generator` command creates a new generator template file. The `tag template new bundle` command creates a new bundle definition file.
 
 Generators are the building blocks of code generation in TAG. Each generator is a template file with YAML frontmatter that specifies where and how to write output. Bundles group multiple generators to run them together.
 
@@ -26,16 +25,16 @@ Generators are the building blocks of code generation in TAG. Each generator is 
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--package` | `-k` | `mypackage` | Package name for the generated Go file (`tag new` only) |
+| `--package` | `-k` | `mypackage` | Package name for the generated Go file (`generator` only) |
 | `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
 
-## tag new
+## tag template new generator
 
 Creates a generator file at `.tag/<name>/<name>.go` with a starter template including all available frontmatter options.
 
 ### Generated File
 
-Running `tag new handler -k api` creates `.tag/handler/handler.go`:
+Running `tag template new generator handler -k api` creates `.tag/handler/handler.go`:
 
 ```
 ---
@@ -127,13 +126,13 @@ The `to` field and the template body have access to these variables:
 | `n.lower_case` | `string` | Name in lowercase |
 | `n.upper_case` | `string` | Name in UPPERCASE |
 
-## tag new-bundle
+## tag template new bundle
 
 Creates a bundle definition file at `.tag/_bundles/<name>/<name>.json`.
 
 ### Generated File
 
-Running `tag new-bundle scaffold` creates `.tag/_bundles/scaffold/scaffold.json`:
+Running `tag template new bundle scaffold` creates `.tag/_bundles/scaffold/scaffold.json`:
 
 ```json
 {"name":"scaffold","generators":[{"name":"myGenerator"}]}
@@ -156,14 +155,14 @@ Edit this file to list the generators the bundle should run.
 
 ## --lib Flag
 
-Both commands support `--lib` / `-l` to create generators or bundles inside a library template instead of the local project. This requires a `.tagconfig.json` with a `template` section pointing to an installed library template.
+Both subcommands support `--lib` / `-l` to create generators or bundles inside a library template instead of the local project. This requires a `.tagconfig.json` with a `template` section pointing to an installed library template.
 
 ```bash
 # Create generator in the library template
-tag new handler --lib
+tag template new generator handler --lib
 
 # Create bundle in the library template
-tag new-bundle crud --lib
+tag template new bundle crud --lib
 ```
 
 The library template is resolved from `cfg.Template.Name` in `.tagconfig.json`, and the generator/bundle is created in that template's `.tag/` directory within the library.
@@ -172,24 +171,24 @@ The library template is resolved from `cfg.Template.Name` in `.tagconfig.json`, 
 
 ```bash
 # Create a basic generator
-tag new handler
+tag template new generator handler
 
 # Create a generator with a custom package
-tag new handler -k handlers
+tag template new generator handler -k handlers
 
 # Create a generator in a library template
-tag new handler --lib
+tag template new generator handler --lib
 
 # Create a bundle
-tag new-bundle feature
-tag nb feature          # same thing
+tag template new bundle feature
 
 # Create a bundle in a library template
-tag nb crud --lib
+tag template new bundle crud --lib
 ```
 
 ## See Also
 
+- [Template Command](template.md) - Template management overview
 - [Generate Command](generate.md) - Running generators and bundles
 - [Template Authoring](../templates/authoring.md) - Creating scaffold templates
 - [Filter Reference](../templates/filters.md) - Available template filters

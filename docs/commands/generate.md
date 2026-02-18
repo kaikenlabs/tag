@@ -5,17 +5,19 @@ Run a generator or bundle to add code to an existing project.
 ## Synopsis
 
 ```bash
-tag generate <generator|bundle> <name> [args] [flags]
+tag generate <generator-or-bundle> <name> [args] [flags]
 tag generate list
 ```
 
 ## Description
 
-The `generate` command runs a generator (or bundle of generators) to add files to your existing project. Unlike `scaffold` which creates new projects, `generate` is for incremental code generation within an existing codebase.
+The `generate` command runs a generator or bundle to add files to your existing project. Unlike `scaffold` which creates new projects, `generate` is for incremental code generation within an existing codebase.
+
+TAG automatically determines whether the given name refers to a generator or a bundle — no flag is needed.
 
 ### Generator Resolution
 
-Generators are resolved using a **library-first, local-fallback** strategy:
+Generators and bundles are resolved using a **library-first, local-fallback** strategy:
 
 1. **Library template**: If the project was scaffolded from a library template (recorded in `.tagconfig.json`), generators from that template's `.tag/` directory are checked first.
 2. **Local project**: Generators in the project's `.tag/` directory (configured via `TAG_PATH`) are used as a fallback.
@@ -26,6 +28,16 @@ Generators can:
 - Append to existing files
 - Inject content before/after markers in files
 
+### Auto-Resolution (Generators vs Bundles)
+
+When you run `tag generate <name>`, TAG resolves the name automatically:
+
+1. Check if `<name>` matches a **bundle** in `_bundles/`
+2. Check if `<name>` matches a **generator** in `.tag/`
+3. If both exist, the **generator** takes precedence
+
+This replaces the former `--bundle` flag, which has been removed.
+
 ### Scaffold Variables
 
 When a project was scaffolded from a template, the scaffold-time variables (e.g., `project_name`, `use_docker`) are automatically available in generator templates via the `vars.*` namespace. Generator `--meta` values override scaffold variables on name collision.
@@ -34,7 +46,7 @@ When a project was scaffolded from a template, the scaffold-time variables (e.g.
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `generator` or `bundle` | Yes | Name of the generator or bundle to run |
+| `generator-or-bundle` | Yes | Name of the generator or bundle to run (auto-resolved) |
 | `name` | Yes | Name to pass to the template (e.g., `User`, `OrderService`) |
 | `args` | No | Additional arguments accessible as `.Args` in templates |
 
@@ -42,7 +54,6 @@ When a project was scaffolded from a template, the scaffold-time variables (e.g.
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--bundle` | `-b` | Run a bundle instead of a single generator |
 | `--meta <key=value>` | `-m` | Pass metadata to templates (repeatable) |
 | `--no-hooks` | | Skip execution of pre and post hooks |
 | `--dry-run` | `-d` | Preview output without writing files |
@@ -51,8 +62,8 @@ When a project was scaffolded from a template, the scaffold-time variables (e.g.
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--path` | `-tp` | `.tag` | Templates directory path |
-| `--shared` | `-sp` | `_shared` | Shared templates directory name |
+| `--path` | | `.tag` | Templates directory path |
+| `--shared` | | `_shared` | Shared templates directory name |
 
 ## Subcommands
 
@@ -64,6 +75,8 @@ List all available generators and bundles for the current project.
 tag generate list
 tag generate ls    # alias
 ```
+
+This is equivalent to `tag template list` — both show the same output.
 
 Output shows generators grouped by source (template library vs local project) and bundles. Each generator's description is read from its `tag.template.json` file (if present).
 
@@ -110,11 +123,11 @@ tag generate handler User -m package=api -m version=v1
 ### Running Bundles
 
 ```bash
-# Run a bundle (collection of generators)
-tag generate -b scaffold User
+# Run a bundle (auto-resolved, no flag needed)
+tag generate scaffold User
 
 # Bundle with arguments
-tag generate -b crud UserProfile "name:string"
+tag generate crud UserProfile "name:string"
 ```
 
 ### Dry Run Mode
@@ -185,7 +198,7 @@ func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
 
 ## Configuration
 
-Generator behavior is configured via `.tagconfig.json` in your project root. This file is created automatically by `tag init` or `tag scaffold`/`tag run`.
+Generator behavior is configured via `.tagconfig.json` in your project root. This file is created automatically by `tag template init` or `tag scaffold`.
 
 ### Scaffolded Project
 
@@ -222,7 +235,7 @@ The `template` section tells `tag generate` where to find generators in the libr
 
 ### Locally Initialized Project
 
-When created via `tag init`, the config contains only `env` and `hooks` (no template origin):
+When created via `tag template init`, the config contains only `env` and `hooks` (no template origin):
 
 ```json
 {
@@ -318,6 +331,6 @@ notes: "Remember to register the handler in routes.go"
 
 ## See Also
 
-- [New Command](new.md) - Creating generators and bundles
+- [Template Command](template.md) - Template management (new, init, info, list)
 - [Template Authoring](../templates/authoring.md) - Creating generators
 - [Hooks Guide](../templates/hooks.md) - Pre and post hooks
