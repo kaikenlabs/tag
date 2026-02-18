@@ -55,6 +55,7 @@ tag template new generator <name> [flags]
 |------|-------|---------|-------------|
 | `--package` | `-k` | `mypackage` | Package name for the generated Go file |
 | `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
+| `--in-bundle` | `-B` | | Create generator inside a bundle directory (for self-contained bundles) |
 
 **Examples:**
 
@@ -67,6 +68,9 @@ tag template new generator handler -k api
 
 # Create in a library template
 tag template new generator handler --lib
+
+# Create inside a self-contained bundle
+tag template new generator handler --in-bundle my-bundle
 ```
 
 See [tag template new](new.md) for full details.
@@ -84,12 +88,16 @@ tag template new bundle <name> [flags]
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
+| `--self-contained` | `-s` | `false` | Create bundle with `self_contained: true` (generators inside the bundle) |
 
 **Examples:**
 
 ```bash
 # Create a bundle locally
 tag template new bundle feature
+
+# Create a self-contained bundle
+tag template new bundle examples --self-contained
 
 # Create in a library template
 tag template new bundle crud --lib

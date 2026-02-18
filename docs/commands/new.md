@@ -23,10 +23,20 @@ Generators are the building blocks of code generation in TAG. Each generator is 
 
 ## Flags
 
+### Generator flags
+
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--package` | `-k` | `mypackage` | Package name for the generated Go file (`generator` only) |
+| `--package` | `-k` | `mypackage` | Package name for the generated Go file |
 | `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
+| `--in-bundle` | `-B` | | Create generator inside a bundle directory (for self-contained bundles) |
+
+### Bundle flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
+| `--self-contained` | `-s` | `false` | Create bundle with `self_contained: true` (generators stored inside the bundle) |
 
 ## tag template new generator
 
@@ -153,6 +163,23 @@ Edit this file to list the generators the bundle should run.
 }
 ```
 
+### Self-Contained Bundles
+
+Use `--self-contained` to create a bundle where generators live inside the bundle directory instead of the project's `.tag/` root:
+
+```bash
+# Create a self-contained bundle
+tag template new bundle examples --self-contained
+
+# Add generators inside the bundle
+tag template new generator hello --in-bundle examples
+tag template new generator greet --in-bundle examples
+```
+
+This creates generators at `.tag/_bundles/examples/hello/` and `.tag/_bundles/examples/greet/` instead of `.tag/hello/`. Self-contained bundles are distributable and don't depend on project-level generators.
+
+See [Self-Contained Bundles](../../TAG_REFERENCE.md#self-contained-bundles) in the TAG Reference for details.
+
 ## --lib Flag
 
 Both subcommands support `--lib` / `-l` to create generators or bundles inside a library template instead of the local project. This requires a `.tagconfig.json` with a `template` section pointing to an installed library template.
@@ -179,8 +206,14 @@ tag template new generator handler -k handlers
 # Create a generator in a library template
 tag template new generator handler --lib
 
+# Create a generator inside a self-contained bundle
+tag template new generator handler --in-bundle my-bundle
+
 # Create a bundle
 tag template new bundle feature
+
+# Create a self-contained bundle
+tag template new bundle examples --self-contained
 
 # Create a bundle in a library template
 tag template new bundle crud --lib
