@@ -9,9 +9,12 @@ Place `tag.template.json` in the root of your template directory:
 ```
 my-template/
 ├── tag.template.json    ← Configuration file
+├── .tagignore           ← Optional: exclude files from output (gitignore syntax)
 ├── __project_name__/
 │   └── ...
 ```
+
+Both `tag.template.json` and `.tagignore` are automatically excluded from scaffold output. See [Template Authoring](../templates/authoring.md#excluding-files-with-tagignore) for `.tagignore` documentation.
 
 ## Schema Reference
 

@@ -37,6 +37,7 @@ TAG is a Go-based CLI tool for template-driven code generation and project scaff
 - Variable namespace: `{{ vars.* }}`
 - Path placeholders: `{{ vars.name }}` and `{{ vars.name | filter }}` in file/directory names
 - Template config: `tag.template.json` with JSON Schema validation
+- `.tagignore`: Exclude template-authoring files from scaffold output (gitignore syntax)
 - Replay system: Auto-save inputs for reproducible scaffolding
 - Hooks: Pre and post scaffold command execution
 - Cookiecutter support: Auto-detection and conversion when scaffolding Cookiecutter templates

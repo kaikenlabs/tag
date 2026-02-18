@@ -16,6 +16,7 @@ If you are an AI coding assistant, or you are looking for a quick reference, ple
 - **Interactive Prompts** - Guided variable input with defaults and choices
 - **Replay System** - Save and reuse scaffold inputs for reproducibility
 - **Hooks** - Run commands before and after scaffolding
+- **`.tagignore`** - Exclude template-authoring files from scaffold output using gitignore-style patterns
 - **Single Binary** - Pure Go, no external dependencies
 
 ## Quick Start

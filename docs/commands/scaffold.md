@@ -247,6 +247,19 @@ Enter value for package_display_name [My Package]: Awesome Library
 
 This ensures users only need to provide "input" values, while computed values are derived automatically.
 
+## File Exclusion (.tagignore)
+
+Templates can include a `.tagignore` file at the template root to exclude files and directories from scaffold output using gitignore-style patterns. This is useful for excluding template-authoring tools (IDE configs, AI assistant files) that shouldn't appear in generated projects.
+
+```
+# Example .tagignore
+.serena/
+CLAUDE.md
+*.log
+```
+
+The `.tagignore` file itself is always excluded from output. See [Template Authoring](../templates/authoring.md#excluding-files-with-tagignore) for full documentation.
+
 ## Hook Security
 
 For security, hooks defined in remote templates are **disabled by default**. A malicious remote template could use hooks to execute arbitrary commands on your machine.

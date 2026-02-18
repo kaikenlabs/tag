@@ -9,6 +9,7 @@ A TAG template is a directory with the following structure:
 ```
 my-template/
 ├── tag.template.json                    # Template configuration (required)
+├── .tagignore                           # Optional: exclude files from output
 ├── {{ vars.project_name }}/             # Project files with path placeholders
 │   ├── cmd/
 │   │   └── main.go.tmpl                 # Processed as Jinja2 template
@@ -255,6 +256,42 @@ my-template/
 ```
 
 This becomes `.tag/` in the generated project, allowing users to run `tag generate` commands.
+
+## Excluding Files with .tagignore
+
+Place a `.tagignore` file in your template root to exclude files and directories from scaffold output. This uses standard gitignore syntax and is ideal for keeping template-authoring tools out of generated projects.
+
+```
+# AI coding assistant configs
+.serena/
+CLAUDE.md
+.mcp.json
+
+# Editor settings
+.vscode/
+.idea/
+
+# Build artifacts
+*.log
+tmp/
+```
+
+### Pattern syntax
+
+| Pattern | Matches |
+|---------|---------|
+| `*.log` | All `.log` files at any depth |
+| `temp/` | The `temp` directory and everything inside it |
+| `**/*.tmp` | `.tmp` files in any nested directory |
+| `!important.log` | Re-includes `important.log` after a `*.log` exclusion |
+| `# comment` | Comment (ignored) |
+
+### Behavior
+
+- `.tagignore` itself is always excluded from output (like `tag.template.json`)
+- Matched directories are pruned entirely — their contents are not traversed
+- An empty or missing `.tagignore` has no effect
+- Patterns follow [gitignore rules](https://git-scm.com/docs/gitignore): patterns without `/` match at any depth; patterns with `/` anchor to the template root
 
 ## Hooks
 
