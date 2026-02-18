@@ -3,6 +3,7 @@ package scaffold
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -81,6 +82,9 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 
 		// Skip TAG-internal files and directories
 		if isSkippedEntry(relPath, d.Name()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -319,7 +323,7 @@ func isSkippedEntry(relPath, name string) bool {
 func loadIgnorePatterns(templateRoot string) (gitignore.Matcher, error) {
 	f, err := os.Open(filepath.Join(templateRoot, types.TagIgnoreFile))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("open %s: %w", types.TagIgnoreFile, err)

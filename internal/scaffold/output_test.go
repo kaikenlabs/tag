@@ -980,6 +980,53 @@ func TestUT_Write_LargeBinaryFileStreaming(t *testing.T) {
 	assert.Equal(t, binaryContent, outputContent)
 }
 
+// --- isSkippedEntry ---
+
+func TestUT_IsSkippedEntry(t *testing.T) {
+	tests := []struct {
+		name    string
+		relPath string
+		entName string
+		want    bool
+	}{
+		// Root-only files (should be skipped)
+		{"tag.template.json at root", "tag.template.json", "tag.template.json", true},
+		{"_meta.json at root", "_meta.json", "_meta.json", true},
+		{".tagignore at root", ".tagignore", ".tagignore", true},
+
+		// Same files in subdirectories (should NOT be skipped)
+		{"tag.template.json in subdir", "sub/tag.template.json", "tag.template.json", false},
+		{"_meta.json in subdir", "sub/_meta.json", "_meta.json", false},
+		{".tagignore in subdir", "sub/.tagignore", ".tagignore", false},
+
+		// _generators directory tree
+		{"_generators root", "_generators", "_generators", true},
+		{"nested in _generators", "_generators/handler/handler.go", "handler.go", true},
+		{"_generators deep nested", "_generators/a/b/c.go", "c.go", true},
+		{"_generatorsx no match", "_generatorsx", "_generatorsx", false},
+		{"_generators- no match", "_generators-old", "_generators-old", false},
+
+		// .tag directory tree
+		{".tag root", ".tag", ".tag", true},
+		{"nested in .tag", ".tag/service/service.go", "service.go", true},
+		{".tag deep nested", ".tag/a/b/c.go", "c.go", true},
+		{".tagx no match", ".tagx", ".tagx", false},
+		{".tag-old no match", ".tag-old", ".tag-old", false},
+
+		// Regular files (should NOT be skipped)
+		{"regular file at root", "main.go", "main.go", false},
+		{"regular file in subdir", "cmd/server/main.go", "main.go", false},
+		{"README at root", "README.md", "README.md", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSkippedEntry(tt.relPath, tt.entName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // --- .tagignore ---
 
 func TestUT_Write_SkipsTagIgnoreFile(t *testing.T) {
