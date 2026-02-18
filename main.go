@@ -52,27 +52,24 @@ func main() {
 			&cli.BoolFlag{
 				Name:    flags.DryRunFlag,
 				Aliases: []string{"d"},
-				Usage:   "dry run, only displays output",
+				Usage:   "Dry run mode (applies to: generate, convert)",
 			},
 			&cli.StringFlag{
 				Name:    flags.PathFlag,
 				Value:   ".tag",
 				Usage:   "Creates the templates directory path at the root of the project.",
-				Aliases: []string{"tp"},
 				EnvVars: []string{"TAG_PATH"},
 			},
 			&cli.StringFlag{
 				Name:    flags.SharedPathFlag,
 				Value:   "_shared",
 				Usage:   "Shared template directory name",
-				Aliases: []string{"sp"},
 				EnvVars: []string{"TAG_SHARED_PATH"},
 			},
 			&cli.StringFlag{
 				Name:    flags.BundlePathFlag,
 				Value:   "_bundles",
 				Usage:   "Bundles directory name",
-				Aliases: []string{"bp"},
 				EnvVars: []string{"TAG_BUNDLE_PATH"},
 			},
 		},
