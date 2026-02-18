@@ -1,13 +1,17 @@
 package scaffold
 
 import (
+	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/template"
@@ -44,6 +48,12 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 	// Build template context
 	ctx := buildTemplateContext(vars)
 
+	// Load .tagignore patterns (nil matcher if file absent or empty)
+	ignoreMatcher, err := loadIgnorePatterns(templateRoot)
+	if err != nil {
+		return fmt.Errorf("load ignore patterns: %w", err)
+	}
+
 	// Walk the template directory
 	return filepath.WalkDir(templateRoot, func(srcPath string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -70,25 +80,23 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 			return nil
 		}
 
-		// Skip tag.template.json
-		if d.Name() == types.TemplateConfigFile && filepath.Dir(relPath) == "." {
+		// Skip TAG-internal files and directories
+		if isSkippedEntry(relPath, d.Name()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
-		// Skip _generators directory (legacy convention for template-bundled generators)
-		// Match exact directory name, not prefix (e.g., don't skip "_generators-old")
-		if relPath == types.GeneratorsDir || strings.HasPrefix(relPath, types.GeneratorsDir+string(filepath.Separator)) {
-			return nil
-		}
-
-		// Skip .tag directory (generators stay in the library, not copied to output)
-		if relPath == types.TemplatesDir || strings.HasPrefix(relPath, types.TemplatesDir+string(filepath.Separator)) {
-			return nil
-		}
-
-		// Skip _meta.json at root (remote cache artifact)
-		if d.Name() == types.CacheMetaFile && filepath.Dir(relPath) == "." {
-			return nil
+		// Apply .tagignore patterns
+		if ignoreMatcher != nil {
+			pathComponents := strings.Split(relPath, string(filepath.Separator))
+			if ignoreMatcher.Match(pathComponents, d.IsDir()) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 		}
 
 		// Process path placeholders
@@ -282,6 +290,63 @@ func buildTemplateContext(vars map[string]any) template.Context {
 // This prevents path traversal attacks where placeholders could escape the output dir.
 func validatePathWithinDir(path, baseDir string) error {
 	return fileutil.ValidatePathContainment(baseDir, path)
+}
+
+// isSkippedEntry returns true for TAG-internal files/directories that should
+// never appear in scaffold output: tag.template.json, .tagignore, _meta.json
+// (all at root), and _generators/ and .tag/ directories at any depth.
+func isSkippedEntry(relPath, name string) bool {
+	atRoot := filepath.Dir(relPath) == "."
+
+	// Root-only files
+	if atRoot && (name == types.TemplateConfigFile || name == types.CacheMetaFile || name == types.TagIgnoreFile) {
+		return true
+	}
+
+	// _generators directory tree
+	if relPath == types.GeneratorsDir || strings.HasPrefix(relPath, types.GeneratorsDir+string(filepath.Separator)) {
+		return true
+	}
+
+	// .tag directory tree
+	if relPath == types.TemplatesDir || strings.HasPrefix(relPath, types.TemplatesDir+string(filepath.Separator)) {
+		return true
+	}
+
+	return false
+}
+
+// loadIgnorePatterns reads a .tagignore file from the template root and returns
+// a gitignore-style matcher. Returns nil, nil if the file does not exist or is empty.
+//
+//nolint:nilnil // nil matcher signals "no ignore file" — callers nil-check before use
+func loadIgnorePatterns(templateRoot string) (gitignore.Matcher, error) {
+	f, err := os.Open(filepath.Join(templateRoot, types.TagIgnoreFile))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("open %s: %w", types.TagIgnoreFile, err)
+	}
+	defer f.Close()
+
+	var patterns []gitignore.Pattern
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		patterns = append(patterns, gitignore.ParsePattern(line, nil))
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read %s: %w", types.TagIgnoreFile, err)
+	}
+
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+	return gitignore.NewMatcher(patterns), nil
 }
 
 // sanitizeFileMode removes dangerous permission bits (setuid, setgid, sticky).

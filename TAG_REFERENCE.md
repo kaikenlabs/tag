@@ -383,6 +383,7 @@ A scaffold template is a directory that creates entire projects.
 ```
 my-template/
 ├── tag.template.json                    # Template configuration (required)
+├── .tagignore                           # Optional: exclude files from output (gitignore syntax)
 ├── {{ vars.project_name | snake }}/     # Templated directory names
 │   ├── main.go                          # Regular files (rendered as templates)
 │   ├── {{ vars.name | snake }}_test.go  # Templated file names
@@ -514,6 +515,25 @@ Directory and file names can contain template expressions:
 ```
 
 These are rendered using the collected variables before files are written.
+
+### .tagignore
+
+A `.tagignore` file in the template root excludes files and directories from scaffold output using gitignore-style patterns. This is useful for excluding template-authoring tools (IDE configs, AI assistant files, etc.) that shouldn't appear in generated projects.
+
+```
+# .tagignore — exclude authoring tools from output
+.serena/
+CLAUDE.md
+.mcp.json
+*.log
+docs/internal/
+```
+
+Rules:
+- Standard gitignore syntax (globs, `**/`, negation with `!`, `#` comments)
+- `.tagignore` itself is always excluded from output (like `tag.template.json`)
+- Directories matching a pattern are pruned entirely (children are not traversed)
+- Missing or empty `.tagignore` has no effect — all files are included as usual
 
 ### Bundled generators
 

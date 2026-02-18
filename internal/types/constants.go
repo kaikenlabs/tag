@@ -31,6 +31,9 @@ const (
 
 	// TemplateHowto is the optional how-to documentation file included in templates.
 	TemplateHowto = "HOWTO.md"
+
+	// TagIgnoreFile is the name of the gitignore-style exclusion file for templates.
+	TagIgnoreFile = ".tagignore"
 )
 
 // InjectClause represents where to inject content relative to a marker.

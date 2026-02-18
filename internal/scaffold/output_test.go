@@ -980,6 +980,239 @@ func TestUT_Write_LargeBinaryFileStreaming(t *testing.T) {
 	assert.Equal(t, binaryContent, outputContent)
 }
 
+// --- isSkippedEntry ---
+
+func TestUT_IsSkippedEntry(t *testing.T) {
+	tests := []struct {
+		name    string
+		relPath string
+		entName string
+		want    bool
+	}{
+		// Root-only files (should be skipped)
+		{"tag.template.json at root", "tag.template.json", "tag.template.json", true},
+		{"_meta.json at root", "_meta.json", "_meta.json", true},
+		{".tagignore at root", ".tagignore", ".tagignore", true},
+
+		// Same files in subdirectories (should NOT be skipped)
+		{"tag.template.json in subdir", "sub/tag.template.json", "tag.template.json", false},
+		{"_meta.json in subdir", "sub/_meta.json", "_meta.json", false},
+		{".tagignore in subdir", "sub/.tagignore", ".tagignore", false},
+
+		// _generators directory tree
+		{"_generators root", "_generators", "_generators", true},
+		{"nested in _generators", "_generators/handler/handler.go", "handler.go", true},
+		{"_generators deep nested", "_generators/a/b/c.go", "c.go", true},
+		{"_generatorsx no match", "_generatorsx", "_generatorsx", false},
+		{"_generators- no match", "_generators-old", "_generators-old", false},
+
+		// .tag directory tree
+		{".tag root", ".tag", ".tag", true},
+		{"nested in .tag", ".tag/service/service.go", "service.go", true},
+		{".tag deep nested", ".tag/a/b/c.go", "c.go", true},
+		{".tagx no match", ".tagx", ".tagx", false},
+		{".tag-old no match", ".tag-old", ".tag-old", false},
+
+		// Regular files (should NOT be skipped)
+		{"regular file at root", "main.go", "main.go", false},
+		{"regular file in subdir", "cmd/server/main.go", "main.go", false},
+		{"README at root", "README.md", "README.md", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSkippedEntry(tt.relPath, tt.entName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// --- .tagignore ---
+
+func TestUT_Write_SkipsTagIgnoreFile(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create .tagignore (should itself be skipped)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte("*.log\n"), 0o644))
+	// Create a normal file
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	// .tagignore should NOT exist in output
+	_, err = os.Stat(filepath.Join(outputDir, ".tagignore"))
+	assert.True(t, os.IsNotExist(err))
+
+	// Normal file should exist
+	_, err = os.Stat(filepath.Join(outputDir, "keep.txt"))
+	assert.NoError(t, err)
+}
+
+func TestUT_Write_TagIgnoreExcludesFiles(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte("*.log\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "app.log"), []byte("log"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
+	assert.True(t, os.IsNotExist(err), "*.log pattern should exclude app.log")
+
+	_, err = os.Stat(filepath.Join(outputDir, "keep.txt"))
+	assert.NoError(t, err)
+}
+
+func TestUT_Write_TagIgnoreExcludesDirectory(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte("temp/\n"), 0o644))
+	tempDir := filepath.Join(templateDir, "temp")
+	require.NoError(t, os.MkdirAll(tempDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "data.txt"), []byte("tmp"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outputDir, "temp"))
+	assert.True(t, os.IsNotExist(err), "temp/ pattern should exclude directory")
+
+	_, err = os.Stat(filepath.Join(outputDir, "temp", "data.txt"))
+	assert.True(t, os.IsNotExist(err), "files inside ignored dir should be excluded")
+
+	_, err = os.Stat(filepath.Join(outputDir, "keep.txt"))
+	assert.NoError(t, err)
+}
+
+func TestUT_Write_TagIgnoreGlobPattern(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte("**/*.tmp\n"), 0o644))
+	nested := filepath.Join(templateDir, "sub", "deep")
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "file.tmp"), []byte("tmp"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "file.txt"), []byte("kept"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outputDir, "sub", "deep", "file.tmp"))
+	assert.True(t, os.IsNotExist(err), "**/*.tmp should exclude nested .tmp files")
+
+	_, err = os.Stat(filepath.Join(outputDir, "sub", "deep", "file.txt"))
+	assert.NoError(t, err)
+}
+
+func TestUT_Write_TagIgnoreNegation(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte("*.log\n!keep.log\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "app.log"), []byte("excluded"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.log"), []byte("kept"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
+	assert.True(t, os.IsNotExist(err), "*.log should exclude app.log")
+
+	_, err = os.Stat(filepath.Join(outputDir, "keep.log"))
+	assert.NoError(t, err, "!keep.log negation should re-include keep.log")
+}
+
+func TestUT_Write_TagIgnoreCommentsAndBlanks(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	ignoreContent := "# This is a comment\n\n*.log\n  # indented comment\n  \n"
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte(ignoreContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "app.log"), []byte("excluded"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
+	assert.True(t, os.IsNotExist(err), "*.log should still work with comments/blanks in file")
+
+	_, err = os.Stat(filepath.Join(outputDir, "keep.txt"))
+	assert.NoError(t, err)
+}
+
+func TestUT_Write_TagIgnoreMissing(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// No .tagignore file — all files should be copied normally
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "file.txt"), []byte("content"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "file.log"), []byte("log"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outputDir, "file.txt"))
+	assert.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outputDir, "file.log"))
+	assert.NoError(t, err)
+}
+
+func TestUT_Write_TagIgnoreEmpty(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Empty .tagignore — all files should be copied normally
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "file.txt"), []byte("content"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "file.log"), []byte("log"), 0o644))
+
+	vars := map[string]any{}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	// .tagignore itself should not be in output
+	_, err = os.Stat(filepath.Join(outputDir, ".tagignore"))
+	assert.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(outputDir, "file.txt"))
+	assert.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outputDir, "file.log"))
+	assert.NoError(t, err)
+}
+
 // --- test helpers ---
 
 // testDirEntry wraps os.FileInfo to implement fs.DirEntry for tests.

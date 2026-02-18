@@ -643,7 +643,68 @@ tag scaffold go-api my-service
 
 ---
 
-## Recipe 11: Replay and Non-Interactive Scaffolding
+## Recipe 11: Excluding Authoring Files with .tagignore
+
+When developing templates you often have tool-specific files (AI assistant configs, editor settings, internal docs) that should never appear in scaffolded projects. Use `.tagignore` to exclude them.
+
+### Create a .tagignore
+
+Place a `.tagignore` file in your template root:
+
+```
+# AI coding assistants
+.serena/
+CLAUDE.md
+.mcp.json
+.cursor/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Development artifacts
+*.log
+tmp/
+
+# Internal docs (not for end users)
+docs/internal/
+```
+
+### How it works
+
+`.tagignore` uses standard gitignore syntax:
+
+| Pattern | Effect |
+|---------|--------|
+| `*.log` | Exclude all `.log` files at any depth |
+| `temp/` | Exclude the `temp` directory and all its contents |
+| `**/*.tmp` | Exclude `.tmp` files in any nested directory |
+| `!keep.log` | Re-include `keep.log` even if `*.log` would exclude it |
+| `# comment` | Ignored (comment line) |
+
+The `.tagignore` file itself is always excluded from output, just like `tag.template.json`.
+
+### Example template layout
+
+```
+my-template/
+├── tag.template.json
+├── .tagignore               ← Excludes .serena/, CLAUDE.md, etc.
+├── .serena/                 ← NOT copied to output
+├── CLAUDE.md                ← NOT copied to output
+├── {{ vars.project_name }}/
+│   ├── main.go
+│   └── README.md
+└── _generators/
+    └── handler/
+        └── handler.go
+```
+
+After scaffolding, the output contains only the project files — no authoring artifacts.
+
+---
+
+## Recipe 12: Replay and Non-Interactive Scaffolding
 
 ### Save and replay inputs
 
