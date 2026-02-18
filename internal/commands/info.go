@@ -210,3 +210,11 @@ func renderDocFile(w io.Writer, templateDir, filename, label string) {
 	}
 	fmt.Fprint(w, rendered)
 }
+
+// joinOptions formats choice options for display.
+func joinOptions(opts []string) string {
+	if len(opts) <= 3 {
+		return fmt.Sprintf("%v", opts)
+	}
+	return fmt.Sprintf("%v +%d more", opts[:3], len(opts)-3)
+}

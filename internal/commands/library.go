@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/google/shlex"
@@ -16,8 +14,6 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/library"
-	"github.com/kaikenlabs/tag/internal/scaffold"
-	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/xdg"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
@@ -30,7 +26,7 @@ func LibCommand() *cli.Command {
 		Usage:   "Manage the template library",
 		Description: `Install, list, and manage project templates in a persistent library.
 
-Templates added to the library are stored locally and can be used with 'tag run'.
+Templates added to the library are stored locally and can be used with 'tag scaffold'.
 Cookiecutter templates are auto-detected and converted to TAG format on add.
 
 EXAMPLES:
@@ -53,7 +49,6 @@ EXAMPLES:
 			libListCommand(),
 			libRemoveCommand(),
 			libUpdateCommand(),
-			libInspectCommand(),
 			libEditCommand(),
 		},
 	}
@@ -267,124 +262,6 @@ func updateAllTemplates(c *cli.Context, lib *library.Library) error {
 	}
 
 	return nil
-}
-
-func libInspectCommand() *cli.Command {
-	return &cli.Command{
-		Name:         "inspect",
-		Usage:        "Show detailed information about a template",
-		ArgsUsage:    "<name>",
-		BashComplete: completeLibraryTemplateNames,
-		Action: func(c *cli.Context) error {
-			if c.NArg() < 1 {
-				return app.Errorf("template name is required\n\nUsage: tag lib inspect <name>")
-			}
-
-			lib, err := newLocalLibrary()
-			if err != nil {
-				return app.Errorf("failed to initialize library: %w", err)
-			}
-
-			name := c.Args().Get(0)
-			entry, err := lib.Get(name)
-			if err != nil {
-				return asAppError(err)
-			}
-
-			templateDir, err := lib.TemplatePath(name)
-			if err != nil {
-				return asAppError(err)
-			}
-
-			printInspect(entry, templateDir)
-			return nil
-		},
-	}
-}
-
-func printInspect(entry *library.Entry, templateDir string) {
-	fmt.Printf("Name:        %s\n", entry.Name)
-	fmt.Printf("Source:       %s\n", entry.Source)
-	fmt.Printf("Path:         %s\n", templateDir)
-	fmt.Printf("Added:        %s\n", entry.AddedAt.Format("2006-01-02 15:04:05"))
-	fmt.Printf("Updated:      %s\n", entry.UpdatedAt.Format("2006-01-02 15:04:05"))
-
-	if entry.Version != "" {
-		fmt.Printf("Version:      %s\n", entry.Version)
-	}
-	if entry.Description != "" {
-		fmt.Printf("Description:  %s\n", entry.Description)
-	}
-	if entry.ConvertedFrom != "" {
-		fmt.Printf("Converted:    from %s\n", entry.ConvertedFrom)
-	}
-
-	// Read and display template config using typed parser
-	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Warning: could not read %s: %v\n", types.TemplateConfigFile, err)
-		}
-		return
-	}
-
-	tmplConfig, err := scaffold.ParseTemplateConfig(data)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not parse %s: %v\n", types.TemplateConfigFile, err)
-		return
-	}
-
-	if len(tmplConfig.Vars) > 0 {
-		fmt.Println()
-		fmt.Println("Variables:")
-		names := make([]string, 0, len(tmplConfig.Vars))
-		for name := range tmplConfig.Vars {
-			names = append(names, name)
-		}
-		slices.Sort(names)
-		for _, name := range names {
-			v := tmplConfig.Vars[name]
-			switch {
-			case v.Type == scaffold.VarTypeChoice:
-				fmt.Printf("  %-20s (choice: %s)\n", name, joinOptions(v.Options))
-			case v.Type != "" && v.Type != scaffold.VarTypeString:
-				fmt.Printf("  %-20s (%s)\n", name, v.Type)
-			case v.Default != nil:
-				fmt.Printf("  %-20s = %v\n", name, v.Default)
-			default:
-				fmt.Printf("  %-20s (string)\n", name)
-			}
-		}
-	}
-
-	if tmplConfig.Hooks != nil {
-		hasHooks := len(tmplConfig.Hooks.PreScaffold) > 0 || len(tmplConfig.Hooks.PostScaffold) > 0
-		if hasHooks {
-			fmt.Println()
-			fmt.Println("Hooks:")
-			if len(tmplConfig.Hooks.PreScaffold) > 0 {
-				fmt.Println("  pre_scaffold:")
-				for _, cmd := range tmplConfig.Hooks.PreScaffold {
-					fmt.Printf("    - %s\n", cmd)
-				}
-			}
-			if len(tmplConfig.Hooks.PostScaffold) > 0 {
-				fmt.Println("  post_scaffold:")
-				for _, cmd := range tmplConfig.Hooks.PostScaffold {
-					fmt.Printf("    - %s\n", cmd)
-				}
-			}
-		}
-	}
-}
-
-// joinOptions formats choice options for display.
-func joinOptions(opts []string) string {
-	if len(opts) <= 3 {
-		return fmt.Sprintf("%v", opts)
-	}
-	return fmt.Sprintf("%v +%d more", opts[:3], len(opts)-3)
 }
 
 // asAppError wraps library errors as CommandErrors without adding redundant context.
