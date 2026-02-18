@@ -34,7 +34,7 @@ func GenerateCommand(cfg *config.Config) *cli.Command {
 			generateListCommand(cfg),
 		},
 		Args:      true,
-		ArgsUsage: "<bundle-or-generator> <name> <args>",
+		ArgsUsage: "<bundle-or-generator> <name> [args]",
 		Action: func(c *cli.Context) error {
 			return generateAction(c, cfg)
 		},
@@ -46,12 +46,6 @@ func GenerateCommand(cfg *config.Config) *cli.Command {
 			completeGeneratorNames(cfg)
 		},
 		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "bundle",
-				Aliases: []string{"b"},
-				Value:   false,
-				Usage:   "Runs a bundle instead of a generator",
-			},
 			&cli.StringSliceFlag{
 				Name:    "meta",
 				Usage:   "Specifies metadata to include into the generators",
@@ -94,22 +88,22 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 		args = c.Args().Get(2)
 	}
 
-	if c.Bool("bundle") {
-		return generateBundle(c, cfg, generatorOrBundleName, targetName, args)
+	target, err := resolveGenerateTarget(cfg, generatorOrBundleName, c.Path(flags.BundlePathFlag))
+	if err != nil {
+		return err
 	}
-	return generateTemplate(c, cfg, generatorOrBundleName, targetName, args)
+
+	if target.IsBundle {
+		return generateBundle(c, cfg, generatorOrBundleName, targetName, args, target.BundlePath)
+	}
+	return generateTemplate(c, cfg, generatorOrBundleName, targetName, args, target.GenDir, target.SharedDir)
 }
 
-func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
+func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args, bundlePath string) error {
 	if !c.Bool("no-hooks") {
 		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen); err != nil {
 			return err
 		}
-	}
-
-	bundlePath, err := resolveBundlePath(cfg, generatorName, c.Path(flags.BundlePathFlag))
-	if err != nil {
-		return err
 	}
 
 	data, err := os.ReadFile(bundlePath)
@@ -175,17 +169,11 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	return nil
 }
 
-func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args string) error {
+func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args, dirPath, sharedPath string) error {
 	if !c.Bool("no-hooks") {
 		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen); err != nil {
 			return err
 		}
-	}
-
-	// Resolve generator paths using library-first, local-fallback resolution
-	dirPath, sharedPath, err := resolveGeneratorPaths(cfg, generatorName)
-	if err != nil {
-		return err
 	}
 
 	slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
