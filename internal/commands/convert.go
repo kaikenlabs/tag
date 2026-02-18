@@ -53,7 +53,7 @@ EXAMPLES:
   tag convert cookiecutter gh:user/cookiecutter-django -o ./django-tag
 
   # Preview conversion without writing files
-  tag convert cookiecutter ./cookiecutter-myproject -d
+  tag convert cookiecutter ./cookiecutter-myproject --dry-run
 
   # Force overwrite existing output
   tag convert cookiecutter ./cookiecutter-myproject -o ./output --force`,

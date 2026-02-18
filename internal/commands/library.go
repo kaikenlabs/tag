@@ -138,7 +138,7 @@ func printAddResult(result *library.AddResult) {
 	}
 
 	fmt.Println()
-	fmt.Printf("Run with: tag run %s\n", result.Name)
+	fmt.Printf("Run with: tag scaffold %s\n", result.Name)
 }
 
 func libListCommand() *cli.Command {

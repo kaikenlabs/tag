@@ -89,7 +89,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 		}
 		bundleDir := filepath.Join(basePath, bundleSubPath, bundleName)
 		if _, statErr := os.Stat(bundleDir); statErr != nil {
-			return app.Errorf("bundle directory %q does not exist; create it first with 'tag new-bundle %s'",
+			return app.Errorf("bundle directory %q does not exist; create it first with 'tag template new bundle %s'",
 				bundleDir, bundleName)
 		}
 		basePath = bundleDir

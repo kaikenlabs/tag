@@ -79,35 +79,35 @@ func scaffoldAction(c *cli.Context) error {
 
 	// No args → try library picker
 	if len(positional) < 1 {
-		return scaffoldFromLibrary(c, positional)
+		lib, err := newLocalLibrary()
+		if err != nil {
+			return app.Errorf("failed to initialize library: %w", err)
+		}
+
+		templateName, err := resolveTemplateName(c, lib, positional)
+		if err != nil {
+			return err
+		}
+
+		entry, err := lib.Get(templateName)
+		if err != nil {
+			return asAppError(err)
+		}
+
+		return scaffoldFromLibrary(c, lib, entry, positional)
 	}
 
 	return scaffoldFromRef(c, positional)
 }
 
-// scaffoldFromLibrary handles the no-args case: interactive library picker or error.
-func scaffoldFromLibrary(c *cli.Context, positional []string) error {
-	lib, err := newLocalLibrary()
-	if err != nil {
-		return app.Errorf("failed to initialize library: %w", err)
-	}
-
-	templateName, err := resolveTemplateName(c, lib, positional)
-	if err != nil {
-		return err
-	}
-
+// scaffoldFromLibrary scaffolds a project from an installed library template.
+func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.Entry, positional []string) error {
 	projectName := ""
 	if len(positional) >= 2 {
 		projectName = positional[1]
 	}
 
-	entry, err := lib.Get(templateName)
-	if err != nil {
-		return asAppError(err)
-	}
-
-	templateDir, err := lib.TemplatePath(templateName)
+	templateDir, err := lib.TemplatePath(entry.Name)
 	if err != nil {
 		return asAppError(err)
 	}
@@ -119,7 +119,7 @@ func scaffoldFromLibrary(c *cli.Context, positional []string) error {
 
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
 	opts.TemplateRef = entry.Source
-	opts.TemplateName = templateName
+	opts.TemplateName = entry.Name
 	opts.IsRemote = false
 
 	s, err := scaffold.NewScaffold(opts)
@@ -130,7 +130,7 @@ func scaffoldFromLibrary(c *cli.Context, positional []string) error {
 	if err := s.Run(opts); err != nil {
 		var ccErr *scaffold.CookiecutterDetectedError
 		if errors.As(err, &ccErr) {
-			return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", templateName, templateName)
+			return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", entry.Name, entry.Name)
 		}
 		return app.Errorf("scaffolding failed: %w", err)
 	}
@@ -146,12 +146,14 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 		projectName = positional[1]
 	}
 
-	// Check if the reference is a library template name first
-	lib, libErr := newLocalLibrary()
-	if libErr == nil {
-		if _, getErr := lib.Get(templateRef); getErr == nil {
-			// It's a library template — use the library path
-			return scaffoldFromLibrary(c, positional)
+	// Check if the reference is a library template name first.
+	// Only do this for bare names — not paths, URLs, or remote shorthands.
+	if looksLikeBareName(templateRef) {
+		lib, libErr := newLocalLibrary()
+		if libErr == nil {
+			if entry, getErr := lib.Get(templateRef); getErr == nil {
+				return scaffoldFromLibrary(c, lib, entry, positional)
+			}
 		}
 	}
 
@@ -206,6 +208,20 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	}
 
 	return nil
+}
+
+// looksLikeBareName returns true if ref is a simple name (no path separators,
+// no URL scheme, no remote shorthand prefix like "gh:"). Library template names
+// are validated to be bare identifiers, so this distinguishes them from paths
+// and remote references.
+func looksLikeBareName(ref string) bool {
+	if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") || strings.HasPrefix(ref, "/") {
+		return false
+	}
+	if strings.Contains(ref, "://") || strings.Contains(ref, ":") {
+		return false
+	}
+	return true
 }
 
 // resolveTemplateName determines the template name from positional args or interactive picker.
@@ -406,7 +422,7 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 
 	// Skip if the template is already in the library.
 	if _, getErr := lib.Get(name); getErr == nil {
-		fmt.Printf("\nTemplate %q already in library. Run with: tag run %s\n", name, name)
+		fmt.Printf("\nTemplate %q already in library. Run with: tag scaffold %s\n", name, name)
 		return
 	}
 
@@ -421,7 +437,7 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 		return
 	}
 
-	fmt.Printf("\nTemplate added to library as %q. Run with: tag run %s\n", result.Name, result.Name)
+	fmt.Printf("\nTemplate added to library as %q. Run with: tag scaffold %s\n", result.Name, result.Name)
 }
 
 // deriveTemplateName extracts a library-compatible template name from a remote reference.

@@ -153,6 +153,35 @@ func TestUT_VersionAction_PrintsVersionWithoutCheck(t *testing.T) {
 	require.NoError(t, app.Run([]string{"app", "version"}))
 }
 
+func TestUT_VersionAction_WithCheck_PrintsVersionAndCheckResult(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://github.com/kaikenlabs/tag/releases/tag/v2.0.0", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	app := &cli.App{
+		Commands: []*cli.Command{
+			{
+				Name: "version",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "check"},
+				},
+				Action: func(c *cli.Context) error {
+					var buf bytes.Buffer
+					err := versionAction(c, &buf, "v1.0.0", srv.URL)
+					require.NoError(t, err)
+
+					output := buf.String()
+					assert.Contains(t, output, "tag version v1.0.0")
+					assert.Contains(t, output, "Update available")
+					return nil
+				},
+			},
+		},
+	}
+	require.NoError(t, app.Run([]string{"app", "version", "--check"}))
+}
+
 func TestUT_IsDevBuild(t *testing.T) {
 	tests := []struct {
 		version string

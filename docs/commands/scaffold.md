@@ -290,6 +290,24 @@ tag scaffold   # picker
 | "missing required variable" | Required variable has no value | Provide value via `--meta` or prompts |
 | "This appears to be a Cookiecutter template" | Cookiecutter template in non-interactive mode | Use `tag convert cookiecutter` first |
 
+## Migration from Previous Versions
+
+The following commands have been restructured:
+
+| Old Command | New Command |
+|-------------|-------------|
+| `tag run <template>` | `tag scaffold <template>` |
+| `tag run` (picker) | `tag scaffold` (picker) |
+| `tag init` | `tag template init` |
+| `tag new <name>` | `tag template new generator <name>` |
+| `tag new-bundle <name>` (alias: `nb`) | `tag template new bundle <name>` |
+| `tag info <template>` | `tag template info <template>` |
+| `tag version-check` | `tag version --check` |
+| `tag generate --bundle <name>` | `tag generate <name>` (auto-resolved) |
+| `tag lib inspect <name>` | `tag template info <name>` |
+
+Removed flag aliases: `-tp` (use `--path`), `-sp` (use `--shared-path`), `-bp` (use `--bundle-path`).
+
 ## See Also
 
 - [tag lib](lib.md) - Manage the template library

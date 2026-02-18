@@ -236,7 +236,7 @@ func TestUT_NewAction_BundleFlag_BundleNotFound(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not exist")
-	assert.Contains(t, err.Error(), "tag new-bundle nonexistent")
+	assert.Contains(t, err.Error(), "tag template new bundle nonexistent")
 }
 
 func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {

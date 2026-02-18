@@ -55,7 +55,7 @@ Examples:
 
 func infoAction(c *cli.Context) error {
 	if c.NArg() < 1 {
-		return app.Errorf("template reference is required\n\nUsage: tag info <template>")
+		return app.Errorf("template reference is required\n\nUsage: tag template info <template>")
 	}
 
 	ref := c.Args().Get(0)
