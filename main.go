@@ -47,7 +47,7 @@ func main() {
 			commands.LibCommand(),
 			commands.ConvertCommand(),
 			commands.RunCommand(),
-			commands.VersionCheckCommand(Version),
+			commands.VersionCommand(Version),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{

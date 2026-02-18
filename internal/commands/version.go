@@ -21,20 +21,39 @@ const (
 	httpTimeout       = 5 * time.Second
 )
 
-// VersionCheckCommand returns the version-check command definition.
-func VersionCheckCommand(version string) *cli.Command {
+// VersionCommand returns the version command definition.
+func VersionCommand(version string) *cli.Command {
 	return &cli.Command{
-		Name:  "version-check",
-		Usage: "Check if a newer version of TAG is available",
-		Description: `Checks the latest release on GitHub and compares it to the
-currently installed version. Requires network access.
+		Name:  "version",
+		Usage: "Print the current version, optionally check for updates",
+		Description: `Prints the currently installed version of TAG.
+
+With --check, also queries GitHub for the latest release and reports
+whether an update is available. Requires network access.
 
 Examples:
-  tag version-check`,
+  tag version
+  tag version --check`,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "check",
+				Usage: "Check if a newer version is available",
+			},
+		},
 		Action: func(c *cli.Context) error {
-			return versionCheckAction(c.Context, os.Stdout, version, defaultGitHubRepo)
+			return versionAction(c, os.Stdout, version, defaultGitHubRepo)
 		},
 	}
+}
+
+func versionAction(c *cli.Context, w io.Writer, currentVersion, repoURL string) error {
+	fmt.Fprintf(w, "tag version %s\n", currentVersion)
+
+	if !c.Bool("check") {
+		return nil
+	}
+
+	return versionCheckAction(c.Context, w, currentVersion, repoURL)
 }
 
 func versionCheckAction(ctx context.Context, w io.Writer, currentVersion, repoURL string) error {

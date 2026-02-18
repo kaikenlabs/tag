@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 )
 
 func TestUT_FetchLatestVersion_RedirectSuccess(t *testing.T) {
@@ -127,6 +128,29 @@ func TestUT_VersionCheckAction_DevBuild(t *testing.T) {
 			assert.Contains(t, buf.String(), "Development build, version check skipped.")
 		})
 	}
+}
+
+func TestUT_VersionAction_PrintsVersionWithoutCheck(t *testing.T) {
+	app := &cli.App{
+		Commands: []*cli.Command{
+			{
+				Name: "version",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "check"},
+				},
+				Action: func(c *cli.Context) error {
+					var buf bytes.Buffer
+					err := versionAction(c, &buf, "v1.2.3", "http://should-not-be-called")
+					require.NoError(t, err)
+					assert.Contains(t, buf.String(), "tag version v1.2.3")
+					assert.NotContains(t, buf.String(), "up to date")
+					assert.NotContains(t, buf.String(), "Update available")
+					return nil
+				},
+			},
+		},
+	}
+	require.NoError(t, app.Run([]string{"app", "version"}))
 }
 
 func TestUT_IsDevBuild(t *testing.T) {
