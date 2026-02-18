@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/manifoldco/promptui"
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
@@ -20,11 +22,11 @@ func ScaffoldCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "scaffold",
 		Usage:     "Create a new project from a template",
-		ArgsUsage: "<template> [project-name]",
-		Description: `Scaffold a new project from a local or remote template.
+		ArgsUsage: "[template] [project-name]",
+		Description: `Scaffold a new project from a local, remote, or library template.
 
-The template must contain a tag.template.json file that defines
-the template configuration and variables.
+With no arguments and a TTY, shows an interactive picker for installed
+library templates (equivalent to the former 'tag run').
 
 TEMPLATE FORMATS:
   Local:    ./my-template, /path/to/template
@@ -34,8 +36,15 @@ TEMPLATE FORMATS:
   Git URL:  https://github.com/user/repo.git
   Zip URL:  https://example.com/template.zip
   Local Zip: ./template.zip
+  Library:  <template-name> (installed via 'tag lib add')
 
 Examples:
+  # Pick a library template interactively
+  tag scaffold
+
+  # Scaffold from an installed library template
+  tag scaffold go-api my-service
+
   # Scaffold from a local template
   tag scaffold ./my-template
 
@@ -44,12 +53,6 @@ Examples:
 
   # Scaffold a specific version
   tag scaffold gh:user/awesome-template@v1.0.0
-
-  # Scaffold from a subdirectory
-  tag scaffold gh:user/templates/go-api
-
-  # Scaffold with a project name
-  tag scaffold gh:user/template my-awesome-project
 
   # Scaffold with variable overrides
   tag scaffold gh:user/template -m author="John Doe" -m license=MIT
@@ -61,12 +64,10 @@ Examples:
   tag scaffold gh:user/template --no-input
 
   # Replay with saved values from previous scaffold
-  tag scaffold gh:user/template another-api --replay
-
-  # Scaffold without saving replay data
-  tag scaffold gh:user/template test-project --no-save`,
-		Flags:  scaffoldFlags(),
-		Action: scaffoldAction,
+  tag scaffold gh:user/template another-api --replay`,
+		Flags:        scaffoldFlags(),
+		Action:       scaffoldAction,
+		BashComplete: completeLibraryTemplateNames,
 	}
 }
 
@@ -76,15 +77,82 @@ func scaffoldAction(c *cli.Context) error {
 		return app.Errorf("invalid flags: %w", err)
 	}
 
-	// Validate arguments
+	// No args → try library picker
 	if len(positional) < 1 {
-		return app.Errorf("template path is required\n\nUsage: tag scaffold <template> [project-name]")
+		return scaffoldFromLibrary(c, positional)
 	}
 
+	return scaffoldFromRef(c, positional)
+}
+
+// scaffoldFromLibrary handles the no-args case: interactive library picker or error.
+func scaffoldFromLibrary(c *cli.Context, positional []string) error {
+	lib, err := newLocalLibrary()
+	if err != nil {
+		return app.Errorf("failed to initialize library: %w", err)
+	}
+
+	templateName, err := resolveTemplateName(c, lib, positional)
+	if err != nil {
+		return err
+	}
+
+	projectName := ""
+	if len(positional) >= 2 {
+		projectName = positional[1]
+	}
+
+	entry, err := lib.Get(templateName)
+	if err != nil {
+		return asAppError(err)
+	}
+
+	templateDir, err := lib.TemplatePath(templateName)
+	if err != nil {
+		return asAppError(err)
+	}
+
+	meta, err := parse.ParseKeyValues(c.StringSlice("meta"), true)
+	if err != nil {
+		return app.Errorf("invalid meta flag: %w", err)
+	}
+
+	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
+	opts.TemplateRef = entry.Source
+	opts.TemplateName = templateName
+	opts.IsRemote = false
+
+	s, err := scaffold.NewScaffold(opts)
+	if err != nil {
+		return app.Errorf("failed to initialize scaffold: %w", err)
+	}
+
+	if err := s.Run(opts); err != nil {
+		var ccErr *scaffold.CookiecutterDetectedError
+		if errors.As(err, &ccErr) {
+			return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", templateName, templateName)
+		}
+		return app.Errorf("scaffolding failed: %w", err)
+	}
+
+	return nil
+}
+
+// scaffoldFromRef handles the case where a template reference is provided.
+func scaffoldFromRef(c *cli.Context, positional []string) error {
 	templateRef := positional[0]
 	projectName := ""
 	if len(positional) >= 2 {
 		projectName = positional[1]
+	}
+
+	// Check if the reference is a library template name first
+	lib, libErr := newLocalLibrary()
+	if libErr == nil {
+		if _, getErr := lib.Get(templateRef); getErr == nil {
+			// It's a library template — use the library path
+			return scaffoldFromLibrary(c, positional)
+		}
 	}
 
 	// Resolve template reference (handles both local and remote)
@@ -112,7 +180,7 @@ func scaffoldAction(c *cli.Context) error {
 
 	// Build options
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
-	opts.TemplateRef = templateRef // Original reference for replay ID generation
+	opts.TemplateRef = templateRef
 	opts.IsRemote = isRemote
 	if isRemote {
 		opts.TemplateName = deriveTemplateName(templateRef)
@@ -125,7 +193,6 @@ func scaffoldAction(c *cli.Context) error {
 	}
 
 	if err := s.Run(opts); err != nil {
-		// Check if this is a Cookiecutter template detection
 		var ccErr *scaffold.CookiecutterDetectedError
 		if errors.As(err, &ccErr) {
 			return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts)
@@ -133,12 +200,79 @@ func scaffoldAction(c *cli.Context) error {
 		return app.Errorf("scaffolding failed: %w", err)
 	}
 
-	// Auto-add remote templates to the library for future use with `tag run`
+	// Auto-add remote templates to the library for future use
 	if isRemote {
 		addToLibrary(c, templateRef, templateDir)
 	}
 
 	return nil
+}
+
+// resolveTemplateName determines the template name from positional args or interactive picker.
+func resolveTemplateName(c *cli.Context, lib *library.Library, positional []string) (string, error) {
+	switch {
+	case len(positional) >= 1:
+		return positional[0], nil
+	case scaffold.IsTTY() && !c.Bool("no-input"):
+		return pickTemplate(lib)
+	default:
+		return "", app.Errorf("template argument required\n\nUsage: tag scaffold <template> [project-name]")
+	}
+}
+
+// pickTemplate shows an interactive template picker.
+func pickTemplate(lib *library.Library) (string, error) {
+	entries, err := lib.List()
+	if err != nil {
+		return "", err
+	}
+
+	if len(entries) == 0 {
+		return "", app.Errorf("no templates installed; add one with: tag lib add <ref>")
+	}
+
+	type displayEntry struct {
+		Name    string
+		Display string
+	}
+
+	items := make([]displayEntry, len(entries))
+	for i, e := range entries {
+		display := e.Name
+		if e.Description != "" {
+			display += " - " + e.Description
+		}
+		display += " (" + e.Source + ")"
+		items[i] = displayEntry{Name: e.Name, Display: display}
+	}
+
+	prompt := promptui.Select{
+		Label: "Select a template",
+		Items: items,
+		Size:  10,
+		Templates: &promptui.SelectTemplates{
+			Label:    "{{ . }}",
+			Active:   "> {{ .Display }}",
+			Inactive: "  {{ .Display }}",
+			Selected: "* {{ .Name }}",
+		},
+		Searcher: func(input string, index int) bool {
+			return strings.Contains(
+				strings.ToLower(items[index].Display),
+				strings.ToLower(input),
+			)
+		},
+	}
+
+	idx, _, err := prompt.Run()
+	if err != nil {
+		if errors.Is(err, promptui.ErrInterrupt) {
+			return "", errors.New("selection cancelled")
+		}
+		return "", err
+	}
+
+	return items[idx].Name, nil
 }
 
 // scaffoldFlags returns the full set of flags for the scaffold command.

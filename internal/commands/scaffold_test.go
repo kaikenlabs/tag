@@ -134,5 +134,5 @@ func TestUT_ScaffoldAction_MissingArguments(t *testing.T) {
 	err := scaffoldAction(ctx)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "template path is required")
+	assert.Contains(t, err.Error(), "template argument required")
 }

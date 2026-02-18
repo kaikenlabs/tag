@@ -46,7 +46,6 @@ func main() {
 			commands.TemplateCommand(cfg),
 			commands.LibCommand(),
 			commands.ConvertCommand(),
-			commands.RunCommand(),
 			commands.VersionCommand(Version),
 		},
 		Flags: []cli.Flag{
