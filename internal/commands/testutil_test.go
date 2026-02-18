@@ -81,7 +81,6 @@ func createTestCLIContext(t *testing.T, args []string, flagValues map[string]any
 			&cli.StringFlag{Name: flags.PathFlag, Value: ".tag"},
 			&cli.StringFlag{Name: flags.SharedPathFlag, Value: "_shared"},
 			&cli.StringFlag{Name: flags.BundlePathFlag, Value: "_bundles"},
-			&cli.BoolFlag{Name: "bundle"},
 			&cli.StringSliceFlag{Name: flags.MetaFlag},
 			&cli.StringFlag{Name: "package", Value: "mypackage"},
 			&cli.BoolFlag{Name: flags.LibFlag},

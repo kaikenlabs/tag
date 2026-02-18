@@ -16,9 +16,10 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
-func NewCommand(cfg *config.Config) *cli.Command {
+func templateNewGeneratorCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
-		Name:      "new",
+		Name:      "generator",
+		Aliases:   []string{"gen"},
 		Usage:     "creates a new generator with the specified " + chalk.Yellow("generator-name"),
 		Args:      true,
 		ArgsUsage: "<generator-name>",
@@ -88,7 +89,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 		}
 		bundleDir := filepath.Join(basePath, bundleSubPath, bundleName)
 		if _, statErr := os.Stat(bundleDir); statErr != nil {
-			return app.Errorf("bundle directory %q does not exist; create it first with 'tag new-bundle %s'",
+			return app.Errorf("bundle directory %q does not exist; create it first with 'tag template new bundle %s'",
 				bundleDir, bundleName)
 		}
 		basePath = bundleDir

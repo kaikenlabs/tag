@@ -9,7 +9,7 @@ Create a bundle that generates model, repository, service, and handler files plu
 ### Step 1: Initialize
 
 ```bash
-tag init
+tag template init
 ```
 
 ### Step 2: Create generators
@@ -347,7 +347,7 @@ func {{ name | pascal }}Handler(w http.ResponseWriter, r *http.Request) {
 tag lib add ./go-service-template
 
 # Scaffold
-tag run go-service my-api
+tag scaffold go-service my-api
 
 # Later, add endpoints using the bundled generator
 cd my-api
@@ -362,8 +362,8 @@ You can add generators to any project, even one not created by TAG.
 
 ```bash
 # In your project root
-tag init                      # Creates .tag/ directory
-tag new service               # Creates .tag/service/service.go
+tag template init                      # Creates .tag/ directory
+tag template new generator service      # Creates .tag/service/service.go
 
 # Edit the generator
 # Then use it
@@ -376,7 +376,7 @@ If your project was scaffolded from a library template, generators can target th
 
 ```bash
 # Create a generator in the library template
-tag new endpoint --lib
+tag template new generator endpoint --lib
 
 # This creates the generator inside the library template's .tag/ directory,
 # making it available to all projects scaffolded from that template.
@@ -520,7 +520,7 @@ tag scaffold gh:user/cookiecutter-django my-project
 
 ```bash
 # Convert and keep the TAG version
-tag convert cookiecutter ./cookiecutter-template -d ./tag-template
+tag convert cookiecutter ./cookiecutter-template -o ./tag-template
 
 # Or add directly to library (auto-converts)
 tag lib add gh:user/cookiecutter-flask --as flask
@@ -543,7 +543,7 @@ Create a distributable bundle where generators live inside the bundle directory 
 ### Step 1: Create the bundle
 
 ```bash
-tag new-bundle examples --self-contained
+tag template new bundle examples --self-contained
 ```
 
 This creates `.tag/_bundles/examples/examples.json` with `"self_contained": true`.
@@ -551,8 +551,8 @@ This creates `.tag/_bundles/examples/examples.json` with `"self_contained": true
 ### Step 2: Add generators inside the bundle
 
 ```bash
-tag new hello --in-bundle examples -k mypackage
-tag new greet --in-bundle examples -k mypackage
+tag template new generator hello --in-bundle examples -k mypackage
+tag template new generator greet --in-bundle examples -k mypackage
 ```
 
 This creates generators at `.tag/_bundles/examples/hello/hello.go` and `.tag/_bundles/examples/greet/greet.go` instead of the usual `.tag/hello/`.
@@ -568,7 +568,7 @@ Place shared template fragments here. When running a self-contained bundle, `{% 
 ### Step 4: Use it
 
 ```bash
-tag generate --bundle examples world
+tag generate examples world
 ```
 
 Runs all generators in the bundle with `name="world"`.
@@ -584,43 +584,43 @@ Runs all generators in the bundle with `name="world"`.
 
 ```bash
 # Create a self-contained bundle in a library template
-tag new-bundle examples --self-contained --lib
+tag template new bundle examples --self-contained --lib
 
 # Add generators to it
-tag new hello --in-bundle examples --lib
+tag template new generator hello --in-bundle examples --lib
 ```
 
 ---
 
-## Recipe 10: Previewing Templates with `tag info`
+## Recipe 10: Previewing Templates with `tag template info`
 
 Inspect any template before scaffolding — see its variables, hooks, and documentation.
 
 ### Local template
 
 ```bash
-tag info ./my-template
+tag template info ./my-template
 ```
 
 ### Library template (by name)
 
 ```bash
-tag info go-api
+tag template info go-api
 ```
 
 ### Remote template
 
 ```bash
 # Preview a GitHub template
-tag info gh:user/awesome-template
+tag template info gh:user/awesome-template
 
 # Force refresh of a cached remote template
-tag info gh:user/awesome-template --update
+tag template info gh:user/awesome-template --update
 ```
 
 ### What you'll see
 
-`tag info` displays (in order):
+`tag template info` displays (in order):
 
 1. **Metadata** — Name, version, description from `tag.template.json`
 2. **Variables** — Sorted list with types, defaults, and choice options
@@ -635,10 +635,10 @@ tag info gh:user/awesome-template --update
 tag lib ls
 
 # 2. Inspect before using
-tag info go-api
+tag template info go-api
 
 # 3. Scaffold with confidence
-tag run go-api my-service
+tag scaffold go-api my-service
 ```
 
 ---

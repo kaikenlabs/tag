@@ -19,16 +19,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 TAG is a Go-based CLI tool for template-driven code generation and project scaffolding.
 
 **Commands**:
-- `tag init` - Initialize tag directory structure (`.tag/_shared`, `.tag/_bundles`)
-- `tag new <name>` - Create a new generator template (`--lib` to target the library template from `.tagconfig.json`)
-- `tag new-bundle <name>` (alias: `nb`) - Create a new bundle (`--lib` to target the library template from `.tagconfig.json`)
-- `tag generate <bundle-or-generator> <name>` - Run generators/bundles within existing projects
-- `tag scaffold <template> [project-name]` - Create new projects from local or remote templates
+- `tag generate <name> <entity>` - Run generators/bundles (auto-resolved) within existing projects
+- `tag generate list` - List available generators and bundles
+- `tag scaffold [template] [project-name]` - Create new projects (no args + TTY = picker)
+- `tag template init` - Initialize tag directory structure (`.tag/_shared`, `.tag/_bundles`)
+- `tag template new generator <name>` - Create a new generator template (`--lib` for library)
+- `tag template new bundle <name>` - Create a new bundle (`--lib` for library)
+- `tag template info <template>` - Show template metadata, variables, hooks, and docs
+- `tag template list` - List available generators and bundles
+- `tag lib add|list|remove|update|edit` - Template library management
 - `tag convert cookiecutter <source>` - Convert Cookiecutter templates to TAG format
-- `tag lib install|list|resolve` - Template library management
-- `tag run <generator>` - Run template-bundled generators
-- `tag info <template>` - Show template metadata, variables, hooks, and docs
-- `tag version-check` - Check if a newer version is available
+- `tag version [--check]` - Print version, optionally check for updates
 
 **Key Features**:
 - Template engine: Gonja (Jinja2-compatible)
@@ -99,18 +100,18 @@ make tools              # Install golangci-lint, gofumpt, gotest, gosec, govulnc
 main.go                         CLI entry point (urfave/cli/v2)
     │
     ├── internal/commands/      Command handlers
+    │       ├── template.go         - Template namespace (init, new, info, list)
     │       ├── init.go             - Initialize tag directory structure
     │       ├── new.go              - Create new generator template
     │       ├── bundle.go           - Create new bundle
+    │       ├── info.go             - Template info display
     │       ├── generate.go         - Code generation command + execution
     │       ├── generate_list.go    - Generator/bundle discovery and display
-    │       ├── generate_resolve.go - Generator/bundle path resolution
-    │       ├── scaffold.go         - Project scaffolding command
+    │       ├── generate_resolve.go - Generator/bundle path resolution + auto-resolve
+    │       ├── scaffold.go         - Project scaffolding + library picker
     │       ├── convert.go          - Cookiecutter conversion command
     │       ├── library.go          - Template library commands
-    │       ├── run.go              - Run command (template-bundled generators)
-    │       ├── info.go             - Template info display
-    │       ├── version_check.go    - Version update checker
+    │       ├── version.go          - Version display and update checker
     │       ├── completion.go       - Shell completion command
     │       ├── completion_helpers.go - Completion helper functions
     │       ├── flags.go            - Shared CLI flag definitions

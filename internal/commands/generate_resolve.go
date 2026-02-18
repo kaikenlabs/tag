@@ -163,3 +163,36 @@ func resolveBundleFromLibrary(cfg *config.Config, bundleFile string) (string, er
 	}
 	return "", nil
 }
+
+// generateTarget holds the resolved paths for a generator or bundle.
+type generateTarget struct {
+	IsBundle   bool
+	GenDir     string // generator directory (when !IsBundle)
+	SharedDir  string // shared templates dir (when !IsBundle)
+	BundlePath string // bundle JSON path (when IsBundle)
+}
+
+// resolveGenerateTarget tries to resolve a name as a generator first, then as
+// a bundle. If both exist, the generator wins and an info log is emitted. If
+// neither exists, the generator error is returned (more common case).
+func resolveGenerateTarget(cfg *config.Config, name, bundleSubDir string) (*generateTarget, error) {
+	genDir, sharedDir, genErr := resolveGeneratorPaths(cfg, name)
+	bundlePath, bundleErr := resolveBundlePath(cfg, name, bundleSubDir)
+
+	genFound := genErr == nil
+	bundleFound := bundleErr == nil
+
+	switch {
+	case genFound && bundleFound:
+		slog.Info("found both generator and bundle, using generator", "name", name)
+		return &generateTarget{GenDir: genDir, SharedDir: sharedDir}, nil
+	case genFound:
+		return &generateTarget{GenDir: genDir, SharedDir: sharedDir}, nil
+	case bundleFound:
+		return &generateTarget{IsBundle: true, BundlePath: bundlePath}, nil
+	default:
+		// Return the generator error — it's the more common case and has
+		// better diagnostics (GeneratorNotFoundError).
+		return nil, genErr
+	}
+}

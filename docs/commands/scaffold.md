@@ -5,18 +5,29 @@ Create a new project from a template.
 ## Synopsis
 
 ```bash
-tag scaffold <template> [project-name] [flags]
+tag scaffold [template] [project-name] [flags]
 ```
 
 ## Description
 
 The `scaffold` command creates a new project from a local or remote template. It reads the template's `tag.template.json` configuration file to determine available variables and prompts you interactively (unless `--no-input` is specified).
 
+### Interactive Template Picker
+
+When no template argument is given and the terminal is interactive, TAG shows a fuzzy picker to select from templates installed in the local library. This replaces the former `tag run` command.
+
+```bash
+# No args — shows interactive fuzzy picker for library templates
+tag scaffold
+```
+
+When a template name is given without a path prefix or remote shorthand, TAG first checks the library for a matching template before treating it as a local path.
+
 ## Arguments
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `template` | Yes | Local path or remote reference to the template |
+| `template` | No | Local path, remote reference, or library template name (picker if omitted) |
 | `project-name` | No | Override the `project_name` variable |
 
 ## Flags
@@ -39,6 +50,7 @@ TAG supports various template sources:
 
 | Format | Example |
 |--------|---------|
+| Library template | `go-api` (name only, resolved from library) |
 | Local directory | `./my-template`, `/path/to/template` |
 | GitHub | `gh:user/repo`, `gh:user/repo@v1.0.0`, `gh:user/repo/subdir` |
 | GitLab | `gl:user/repo`, `gl:user/repo@v1.0.0` |
@@ -51,6 +63,23 @@ TAG supports various template sources:
 See [Remote References](../reference/remote-refs.md) for detailed format documentation.
 
 ## Examples
+
+### Interactive Picker (Library Templates)
+
+```bash
+# No args — shows interactive fuzzy picker
+tag scaffold
+```
+
+### Scaffold from Library Template
+
+```bash
+# Scaffold using a library template by name
+tag scaffold go-api my-service
+
+# With variable overrides
+tag scaffold go-api my-service -m author="Jane Doe" -m license=MIT
+```
 
 ### Basic Usage
 
@@ -116,6 +145,9 @@ tag scaffold gh:user/template --no-input
 
 # Combine with --values for automated scaffolding
 tag scaffold gh:user/template --values config.json --no-input
+
+# Library template in CI/CD
+tag scaffold go-api my-service --no-input --accept-hooks -m author="CI Bot"
 ```
 
 ### Replay Previous Inputs
@@ -232,20 +264,54 @@ tag scaffold gh:trusted-org/template --accept-hooks
 
 Local templates always run hooks, since you control the template source.
 
+## Library Management
+
+Templates must be added to the library before the interactive picker or name-based resolution can find them. See [tag lib](lib.md) for managing the library.
+
+```bash
+# Add a template to the library
+tag lib add gh:user/go-api-template
+
+# List installed templates
+tag lib ls
+
+# Then scaffold (by name or picker)
+tag scaffold go-api-template my-project
+tag scaffold   # picker
+```
+
 ## Error Handling
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "template path is required" | Missing template argument | Provide a template path or reference |
+| "template path is required" | Missing template argument in non-interactive mode | Provide a template path or reference |
 | "failed to resolve template" | Invalid reference or network error | Check the template reference format |
 | "output directory already exists" | Target directory exists | Use `--force` or choose a different output |
 | "missing required variable" | Required variable has no value | Provide value via `--meta` or prompts |
 | "This appears to be a Cookiecutter template" | Cookiecutter template in non-interactive mode | Use `tag convert cookiecutter` first |
 
+## Migration from Previous Versions
+
+The following commands have been restructured:
+
+| Old Command | New Command |
+|-------------|-------------|
+| `tag run <template>` | `tag scaffold <template>` |
+| `tag run` (picker) | `tag scaffold` (picker) |
+| `tag init` | `tag template init` |
+| `tag new <name>` | `tag template new generator <name>` |
+| `tag new-bundle <name>` (alias: `nb`) | `tag template new bundle <name>` |
+| `tag info <template>` | `tag template info <template>` |
+| `tag version-check` | `tag version --check` |
+| `tag generate --bundle <name>` | `tag generate <name>` (auto-resolved) |
+| `tag lib inspect <name>` | `tag template info <name>` |
+
+Removed flag aliases: `-tp` (use `--path`), `-sp` (use `--shared-path`), `-bp` (use `--bundle-path`).
+
 ## See Also
 
-- [tag run](run.md) - Scaffold from a library template
 - [tag lib](lib.md) - Manage the template library
+- [Template Command](template.md) - Template management (new, init, info, list)
 - [Template Authoring](../templates/authoring.md) - How to create templates
 - [Remote References](../reference/remote-refs.md) - Template source formats
 - [tag.template.json Reference](../reference/tag.template.json.md) - Configuration format

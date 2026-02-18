@@ -5,7 +5,7 @@ Convert a Cookiecutter template to TAG format.
 ## Synopsis
 
 ```bash
-tag convert cookiecutter <source> [destination] [flags]
+tag convert cookiecutter <source> [flags]
 ```
 
 ## Description
@@ -26,15 +26,15 @@ The conversion process:
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `source` | Yes | Path or remote reference to the Cookiecutter template |
-| `destination` | No | Output directory (default: `<source-name>-tag`) |
 
 ## Flags
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--output <path>` | `-o` | Output directory (alternative to destination argument) |
-| `--dry-run` | | Preview conversion without writing files |
+| `--output <path>` | `-o` | Output directory (default: `<source-name>-tag`) |
 | `--force` | `-f` | Overwrite output directory if it exists |
+
+Use the global `--dry-run` / `-d` flag to preview conversion without writing files.
 
 ## Examples
 
@@ -42,17 +42,17 @@ The conversion process:
 
 ```bash
 # Convert a local Cookiecutter template
-tag convert cookiecutter ./cookiecutter-myproject ./myproject-tag
+tag convert cookiecutter ./cookiecutter-myproject -o ./myproject-tag
 
 # Convert a remote template
-tag convert cookiecutter gh:user/cookiecutter-django ./django-tag
+tag convert cookiecutter gh:user/cookiecutter-django -o ./django-tag
 ```
 
 ### Preview Mode
 
 ```bash
 # See what would be converted without writing files
-tag convert cookiecutter ./cookiecutter-myproject --dry-run
+tag convert cookiecutter ./cookiecutter-myproject -d
 ```
 
 ### Force Overwrite
@@ -65,7 +65,7 @@ tag convert cookiecutter ./cookiecutter-myproject --force
 ### Using Output Flag
 
 ```bash
-# Alternative to destination argument
+# Specify output directory
 tag convert cookiecutter ./cookiecutter-myproject -o ./output-dir
 ```
 

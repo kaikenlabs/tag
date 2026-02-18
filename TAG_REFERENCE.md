@@ -6,9 +6,9 @@ A comprehensive reference for AI coding assistants to use TAG proficiently.
 
 TAG is a CLI tool for two complementary workflows:
 
-1. **Scaffolding** (`tag scaffold` / `tag run`) — Create entire projects from templates. Templates define directory structures, files, variables, and hooks. Think "cookiecutter" but with Jinja2-compatible syntax via Gonja.
+1. **Scaffolding** (`tag scaffold`) — Create entire projects from templates. Templates define directory structures, files, variables, and hooks. Think "cookiecutter" but with Jinja2-compatible syntax via Gonja. With no args, shows an interactive picker for library templates.
 
-2. **Code Generation** (`tag generate`) — Generate code within existing projects using generators. A generator is a single template file with frontmatter metadata that can create, inject into, or append to files. Generators live in `.tag/` inside your project.
+2. **Code Generation** (`tag generate`) — Generate code within existing projects using generators or bundles (auto-resolved). A generator is a single template file with frontmatter metadata that can create, inject into, or append to files. Generators live in `.tag/` inside your project.
 
 **Mental model**: Scaffold creates the project. Generators evolve it.
 
@@ -16,29 +16,30 @@ TAG is a CLI tool for two complementary workflows:
 
 ```
 Need to preview a template before using it?
-  → tag info <template> (works with local, remote, and library templates)
+  → tag template info <template> (works with local, remote, and library templates)
 
 Need to create a new project from scratch?
-  → tag scaffold (remote/local template)
-  → tag run (library template)
+  → tag scaffold <template> (remote/local/library template)
+  → tag scaffold (no args = interactive library picker)
 
 Need to generate code in an existing project?
   Single file operation?
     → Write a generator, run with: tag generate <name> <arg>
   Multiple related files?
     → Write a bundle (groups generators), run with: tag generate <bundle> <arg>
+    (generators and bundles are auto-resolved — no --bundle flag needed)
 
 Need to create a reusable project template?
   → Create a directory with tag.template.json + template files
 
 Need to convert a Cookiecutter template?
-  → tag convert cookiecutter <source> -d <dest>
+  → tag convert cookiecutter <source> -o <dest>
   → Or just scaffold it directly: tag scaffold <cookiecutter-repo> (auto-detects)
 ```
 
 ## Project Structure
 
-After running `tag init` in a project, you get:
+After running `tag template init` in a project, you get:
 
 ```
 my-project/
@@ -252,14 +253,14 @@ Key differences from regular bundles:
 
 ```bash
 # Create the bundle with self_contained flag
-tag new-bundle examples --self-contained
+tag template new bundle examples --self-contained
 
 # Add generators inside the bundle
-tag new hello --in-bundle examples
-tag new greet --in-bundle examples
+tag template new generator hello --in-bundle examples
+tag template new generator greet --in-bundle examples
 
 # Run it
-tag generate --bundle examples myName
+tag generate examples myName
 ```
 
 ### When to use bundles vs single generators
@@ -598,13 +599,13 @@ tag lib add gh:user/template --force           # overwrite existing
 tag lib ls
 
 # Use a library template
-tag run go-api-template my-project
+tag scaffold go-api-template my-project
 
 # Interactive picker (no args = fuzzy search)
-tag run
+tag scaffold
 
 # Manage
-tag lib inspect my-template     # show details + variables
+tag template info my-template   # show details + variables
 tag lib edit my-template        # open in editor
 tag lib update my-template      # re-fetch from source
 tag lib update                  # update all
@@ -619,38 +620,39 @@ Cookiecutter templates are **auto-detected and converted** when added to the lib
 
 | Command | Description |
 |---------|-------------|
-| `tag init` | Initialize `.tag/` directory structure |
-| `tag new <name>` | Create a new generator (`--in-bundle`, `--lib`) |
-| `tag new-bundle <name>` (alias: `nb`) | Create a new bundle (`--self-contained`, `--lib`) |
-| `tag generate <gen-or-bundle> <name>` | Run a generator or bundle |
-| `tag info <template>` | Show template info without scaffolding |
-| `tag scaffold <ref> [project-name]` | Create project from template |
-| `tag run [template] [project-name]` | Scaffold from library template |
-| `tag convert cookiecutter <src> -d <dst>` | Convert Cookiecutter template |
+| `tag scaffold [template] [project-name]` | Create project from template (no args = picker) |
+| `tag generate <gen-or-bundle> <name>` | Run a generator or bundle (auto-resolved) |
+| `tag generate list` | List available generators and bundles |
+| `tag template init` | Initialize `.tag/` directory structure |
+| `tag template new generator <name>` | Create a new generator (`--in-bundle`, `--lib`) |
+| `tag template new bundle <name>` | Create a new bundle (`--self-contained`, `--lib`) |
+| `tag template info <template>` | Show template info without scaffolding |
+| `tag template list` | List available generators and bundles |
+| `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template |
 | `tag lib add <ref>` | Install template to library |
 | `tag lib ls` | List installed templates |
 | `tag lib rm <name>` | Remove template from library |
 | `tag lib update [name]` | Update template(s) from source |
-| `tag lib inspect <name>` | Show template details |
 | `tag lib edit <name>` | Open template in editor |
+| `tag version [--check]` | Print version, check for updates |
 
 ### Common flags
 
 | Flag | Commands | Description |
 |------|----------|-------------|
-| `-m key=value` / `--meta` | scaffold, run, generate | Set variable values |
-| `--values <file>` | scaffold, run | Load variables from JSON file |
-| `--no-input` | scaffold, run | Skip interactive prompts |
-| `--replay` | scaffold, run | Reuse previously saved inputs |
-| `--no-save` | scaffold, run | Don't save inputs for replay |
-| `-o <dir>` / `--output` | scaffold, run | Output directory |
-| `--force` | scaffold, run | Overwrite existing output |
-| `--accept-hooks` | scaffold, run | Run hooks without prompting |
-| `-l` / `--lib` | new, new-bundle | Target library template |
-| `-B` / `--in-bundle` | new | Create generator inside a bundle directory |
-| `-s` / `--self-contained` | new-bundle | Create bundle with `self_contained: true` |
-| `--update` / `-u` | scaffold, info | Force refresh of cached remote templates |
-| `--dry-run` | generate | Preview without writing files |
+| `-m key=value` / `--meta` | scaffold, generate | Set variable values |
+| `--values <file>` | scaffold | Load variables from JSON file |
+| `--no-input` | scaffold | Skip interactive prompts |
+| `--replay` | scaffold | Reuse previously saved inputs |
+| `--no-save` | scaffold | Don't save inputs for replay |
+| `-o <dir>` / `--output` | scaffold | Output directory |
+| `--force` | scaffold | Overwrite existing output |
+| `--accept-hooks` | scaffold | Run hooks without prompting |
+| `-l` / `--lib` | template new generator/bundle | Target library template |
+| `-B` / `--in-bundle` | template new generator | Create generator inside a bundle directory |
+| `-s` / `--self-contained` | template new bundle | Create bundle with `self_contained: true` |
+| `--update` / `-u` | scaffold, template info | Force refresh of cached remote templates |
+| `--dry-run` / `-d` | generate, convert | Preview without writing files |
 
 ## Pitfalls & Gotchas
 

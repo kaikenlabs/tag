@@ -264,13 +264,12 @@ func TestUT_GenerateBundle_BundleNotFound(t *testing.T) {
 	ctx := createTestCLIContext(t, []string{"nonexistent", "myName"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	err := generateAction(ctx, cfg)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot open bundle file")
+	assert.Contains(t, err.Error(), `generator "nonexistent" not found`)
 }
 
 func TestUT_GenerateBundle_InvalidJSON(t *testing.T) {
@@ -283,7 +282,6 @@ func TestUT_GenerateBundle_InvalidJSON(t *testing.T) {
 	ctx := createTestCLIContext(t, []string{"mybundle", "myName"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	err := generateAction(ctx, cfg)
@@ -313,7 +311,6 @@ Hello {{ .Name }}`
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	var generateCalls int
@@ -356,7 +353,6 @@ Hello {{ .Name }}`
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	var generateCalls int
@@ -524,7 +520,6 @@ Hello {{ .Name }}`
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	var capturedDirPath, capturedSharedPath string
@@ -565,7 +560,6 @@ func TestUT_GenerateBundle_SelfContained_GeneratorNotFound(t *testing.T) {
 	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	err := generateAction(ctx, cfg)
@@ -605,7 +599,6 @@ Hello {{ .Name }}`
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	var capturedSharedPath string
@@ -644,7 +637,6 @@ func TestUT_GenerateBundle_SelfContained_PathTraversal(t *testing.T) {
 	ctx := createTestCLIContext(t, []string{"evil", "target"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	err := generateAction(ctx, cfg)
@@ -851,7 +843,6 @@ Hello {{ .Name }}`
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 		flags.BundlePathFlag: "_bundles",
-		"bundle":             true,
 	})
 
 	var capturedData engine.Data

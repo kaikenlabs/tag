@@ -194,6 +194,6 @@ type Options struct {
 	IsRemote             bool              // Whether the template source is remote
 	AllowRecursiveRender bool              // Allow recursive template rendering in variable values (--allow-recursive-render flag)
 	IsTTY                bool              // Whether stdin is a TTY (set automatically if not provided)
-	TemplateName         string            // Library name (set by tag run)
+	TemplateName         string            // Library name (set by tag scaffold)
 	TemplateVersion      string            // From tag.template.json (set after config load)
 }

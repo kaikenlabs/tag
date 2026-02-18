@@ -17,7 +17,7 @@ import (
 )
 
 // InfoCommand returns the info command definition.
-func InfoCommand() *cli.Command {
+func templateInfoCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "info",
 		Usage:     "Show information about a template without scaffolding",
@@ -31,16 +31,16 @@ Library templates are resolved first by name, then as remote/local references.
 
 Examples:
   # Info for a local template
-  tag info ./my-template
+  tag template info ./my-template
 
   # Info for an installed library template
-  tag info go-api
+  tag template info go-api
 
   # Info for a remote template
-  tag info gh:user/awesome-template
+  tag template info gh:user/awesome-template
 
   # Force refresh of cached remote template
-  tag info gh:user/awesome-template --update`,
+  tag template info gh:user/awesome-template --update`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "update",
@@ -55,7 +55,7 @@ Examples:
 
 func infoAction(c *cli.Context) error {
 	if c.NArg() < 1 {
-		return app.Errorf("template reference is required\n\nUsage: tag info <template>")
+		return app.Errorf("template reference is required\n\nUsage: tag template info <template>")
 	}
 
 	ref := c.Args().Get(0)
@@ -209,4 +209,12 @@ func renderDocFile(w io.Writer, templateDir, filename, label string) {
 		return
 	}
 	fmt.Fprint(w, rendered)
+}
+
+// joinOptions formats choice options for display.
+func joinOptions(opts []string) string {
+	if len(opts) <= 3 {
+		return fmt.Sprintf("%v", opts)
+	}
+	return fmt.Sprintf("%v +%d more", opts[:3], len(opts)-3)
 }

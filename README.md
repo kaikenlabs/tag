@@ -50,10 +50,10 @@ tag scaffold gh:user/go-api my-new-api
 
 ```bash
 # Initialize TAG in your project
-tag init
+tag template init
 
 # Create a generator
-tag new handler
+tag template new generator handler
 
 # Generate code
 tag generate handler UserAuth
@@ -180,7 +180,7 @@ TAG can automatically detect and convert Cookiecutter templates when scaffolding
 tag scaffold ./my-cookiecutter-template
 
 # Or convert explicitly
-tag convert cookiecutter gh:user/cookiecutter-django ./django-tag
+tag convert cookiecutter gh:user/cookiecutter-django -o ./django-tag
 ```
 
 The converter:
@@ -224,21 +224,26 @@ tag completion fish | source
 
 | Command | Description |
 |---------|-------------|
-| `tag scaffold <template>` | Create project from template |
-| `tag generate <generator> <name>` | Run a generator |
+| `tag scaffold [template] [project]` | Create project from template (no args = picker) |
+| `tag generate <generator> <name>` | Run a generator or bundle (auto-resolved) |
+| `tag template init` | Initialize TAG in a project |
+| `tag template new generator <name>` | Create a new generator |
+| `tag template new bundle <name>` | Create a new bundle |
+| `tag template info <template>` | Show template metadata |
+| `tag template list` | List available generators and bundles |
+| `tag lib add\|list\|remove\|update\|edit` | Manage the template library |
 | `tag convert cookiecutter <source>` | Convert Cookiecutter template |
-| `tag init` | Initialize TAG in a project |
-| `tag new <name> [--lib]` | Create a new generator |
-| `tag new-bundle <name> [--lib]` | Create a new bundle |
+| `tag version [--check]` | Print version, optionally check for updates |
 | `tag completion <shell>` | Output shell completion script |
 
 ## Global Flags
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--dry-run` | `-d` | false | Preview without writing |
-| `--path` | `-tp` | `.tag` | Templates directory |
-| `--shared` | `-sp` | `_shared` | Shared templates directory |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dry-run` / `-d` | false | Dry run mode (applies to: generate, convert) |
+| `--path` | `.tag` | Templates directory |
+| `--shared-path` | `_shared` | Shared templates directory |
+| `--bundle-path` | `_bundles` | Bundles directory |
 
 ## Development
 

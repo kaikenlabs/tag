@@ -7,6 +7,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -26,7 +27,7 @@ func convertCookiecutterCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "cookiecutter",
 		Usage:     "Convert a Cookiecutter template to TAG format",
-		ArgsUsage: "<source> [destination]",
+		ArgsUsage: "<source>",
 		Description: `Convert a Cookiecutter template to TAG format.
 
 This command converts cookiecutter.json to tag.template.json and renames
@@ -37,7 +38,6 @@ but the tool will analyze and report any potential incompatibilities.
 
 ARGUMENTS:
   source       Path or remote reference to Cookiecutter template
-  destination  Output directory (default: <source-name>-tag)
 
 REMOTE FORMATS:
   GitHub:      gh:user/cookiecutter-project
@@ -47,10 +47,10 @@ REMOTE FORMATS:
 
 EXAMPLES:
   # Convert a local Cookiecutter template
-  tag convert cookiecutter ./cookiecutter-myproject ./myproject-tag
+  tag convert cookiecutter ./cookiecutter-myproject -o ./myproject-tag
 
   # Convert a remote template
-  tag convert cookiecutter gh:user/cookiecutter-django ./django-tag
+  tag convert cookiecutter gh:user/cookiecutter-django -o ./django-tag
 
   # Preview conversion without writing files
   tag convert cookiecutter ./cookiecutter-myproject --dry-run
@@ -62,10 +62,6 @@ EXAMPLES:
 				Name:    "output",
 				Aliases: []string{"o"},
 				Usage:   "Output directory (default: <source-name>-tag)",
-			},
-			&cli.BoolFlag{
-				Name:  "dry-run",
-				Usage: "Preview conversion without writing files",
 			},
 			&cli.BoolFlag{
 				Name:    "force",
@@ -80,16 +76,11 @@ EXAMPLES:
 func convertCookiecutterAction(c *cli.Context) error {
 	// Validate arguments
 	if c.NArg() < 1 {
-		return app.Errorf("source template is required\n\nUsage: tag convert cookiecutter <source> [destination]")
+		return app.Errorf("source template is required\n\nUsage: tag convert cookiecutter <source>")
 	}
 
 	source := c.Args().Get(0)
-	destination := c.Args().Get(1)
-
-	// Use --output flag if destination not provided as argument
-	if destination == "" {
-		destination = c.String("output")
-	}
+	destination := c.String("output")
 
 	// Create converter
 	converter, err := convert.NewConverter()
@@ -101,7 +92,7 @@ func convertCookiecutterAction(c *cli.Context) error {
 	opts := convert.Options{
 		Source:      source,
 		Destination: destination,
-		DryRun:      c.Bool("dry-run"),
+		DryRun:      c.Bool(flags.DryRunFlag),
 		Force:       c.Bool("force"),
 	}
 

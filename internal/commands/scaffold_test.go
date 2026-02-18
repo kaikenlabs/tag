@@ -128,11 +128,86 @@ func TestUT_DeriveTemplateName(t *testing.T) {
 	}
 }
 
+func TestUT_LooksLikeBareName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		// Bare names → true
+		{"go-api", true},
+		{"my-template", true},
+		{"flask", true},
+
+		// Local paths → false
+		{"./my-template", false},
+		{"../templates/foo", false},
+		{"/absolute/path", false},
+
+		// Remote shorthands → false
+		{"gh:user/repo", false},
+		{"gl:org/template", false},
+		{"bb:team/project", false},
+
+		// URLs → false
+		{"https://github.com/user/repo.git", false},
+		{"http://example.com/template.zip", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.want, looksLikeBareName(tt.input))
+		})
+	}
+}
+
 func TestUT_ScaffoldAction_MissingArguments(t *testing.T) {
 	ctx := createTestCLIContext(t, []string{}, nil)
 
 	err := scaffoldAction(ctx)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "template path is required")
+	assert.Contains(t, err.Error(), "template argument required")
+}
+
+func TestUT_ScaffoldFromRef_LibraryNameResolvesToLibrary(t *testing.T) {
+	// setupFakeLibrary mutates package-level var — do NOT use t.Parallel()
+	setupFakeLibrary(t, "my-template")
+
+	ctx := createTestCLIContext(t, []string{"my-template"}, nil)
+
+	// scaffoldFromRef should detect "my-template" as a library name and
+	// attempt to scaffold from the library. It will fail because the
+	// library template directory has no tag.template.json, but the error
+	// should come from scaffolding (not from the remote resolver).
+	err := scaffoldFromRef(ctx, []string{"my-template"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "scaffolding failed")
+	assert.NotContains(t, err.Error(), "failed to resolve template")
+}
+
+func TestUT_ScaffoldFromRef_RemoteRefSkipsLibrary(t *testing.T) {
+	// setupFakeLibrary mutates package-level var — do NOT use t.Parallel()
+	setupFakeLibrary(t, "my-template")
+
+	ctx := createTestCLIContext(t, []string{"gh:user/my-template"}, nil)
+
+	// A remote shorthand should NOT match the library, even if a library
+	// entry with the same base name exists. It should go to the remote
+	// resolver and fail with a resolver error (not a scaffold init error).
+	err := scaffoldFromRef(ctx, []string{"gh:user/my-template"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve template")
+}
+
+func TestUT_ScaffoldFromRef_LocalPathSkipsLibrary(t *testing.T) {
+	// setupFakeLibrary mutates package-level var — do NOT use t.Parallel()
+	setupFakeLibrary(t, "my-template")
+
+	ctx := createTestCLIContext(t, []string{"./my-template"}, nil)
+
+	// A local path should NOT match the library. It should go to the
+	// remote/local resolver.
+	err := scaffoldFromRef(ctx, []string{"./my-template"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve template")
 }
