@@ -241,10 +241,10 @@ func TestUT_NewAction_BundleFlag_BundleNotFound(t *testing.T) {
 
 func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {
 	cfg := createTestConfig(t, ".tag")
-	cmd := NewCommand(cfg)
+	cmd := templateNewGeneratorCommand(cfg)
 
 	require.NotNil(t, cmd)
-	assert.Equal(t, "new", cmd.Name)
+	assert.Equal(t, "generator", cmd.Name)
 	assert.NotEmpty(t, cmd.Usage)
 	assert.NotNil(t, cmd.Action)
 	assert.True(t, cmd.Args)

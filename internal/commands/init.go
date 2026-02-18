@@ -15,7 +15,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/config"
 )
 
-func InitCommand() *cli.Command {
+func templateInitCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "init",
 		Usage:  fmt.Sprintf("initialises %s's configuration and directory", chalk.Yellow("tag")),

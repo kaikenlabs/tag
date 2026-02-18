@@ -17,7 +17,7 @@ import (
 )
 
 // InfoCommand returns the info command definition.
-func InfoCommand() *cli.Command {
+func templateInfoCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "info",
 		Usage:     "Show information about a template without scaffolding",
@@ -31,16 +31,16 @@ Library templates are resolved first by name, then as remote/local references.
 
 Examples:
   # Info for a local template
-  tag info ./my-template
+  tag template info ./my-template
 
   # Info for an installed library template
-  tag info go-api
+  tag template info go-api
 
   # Info for a remote template
-  tag info gh:user/awesome-template
+  tag template info gh:user/awesome-template
 
   # Force refresh of cached remote template
-  tag info gh:user/awesome-template --update`,
+  tag template info gh:user/awesome-template --update`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "update",

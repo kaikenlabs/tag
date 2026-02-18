@@ -141,7 +141,7 @@ func TestUT_InitAction_CustomPaths(t *testing.T) {
 }
 
 func TestUT_InitCommand_ReturnsValidCommand(t *testing.T) {
-	cmd := InitCommand()
+	cmd := templateInitCommand()
 
 	require.NotNil(t, cmd)
 	assert.Equal(t, "init", cmd.Name)

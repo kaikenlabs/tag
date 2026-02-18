@@ -41,15 +41,12 @@ func main() {
 		Name:                 AppName,
 		EnableBashCompletion: true,
 		Commands: []*cli.Command{
-			commands.InitCommand(),
-			commands.NewCommand(cfg),
-			commands.BundleCommand(cfg),
 			commands.GenerateCommand(cfg),
 			commands.ScaffoldCommand(),
-			commands.ConvertCommand(),
+			commands.TemplateCommand(cfg),
 			commands.LibCommand(),
+			commands.ConvertCommand(),
 			commands.RunCommand(),
-			commands.InfoCommand(),
 			commands.VersionCheckCommand(Version),
 		},
 		Flags: []cli.Flag{

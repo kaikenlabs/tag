@@ -16,9 +16,10 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
-func NewCommand(cfg *config.Config) *cli.Command {
+func templateNewGeneratorCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
-		Name:      "new",
+		Name:      "generator",
+		Aliases:   []string{"gen"},
 		Usage:     "creates a new generator with the specified " + chalk.Yellow("generator-name"),
 		Args:      true,
 		ArgsUsage: "<generator-name>",

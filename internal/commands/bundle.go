@@ -18,10 +18,9 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
-func BundleCommand(cfg *config.Config) *cli.Command {
+func templateNewBundleCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
-		Name:      "new-bundle",
-		Aliases:   []string{"nb"},
+		Name:      "bundle",
 		Usage:     "creates a new bundle with the specified " + chalk.Yellow("bundle-name"),
 		Args:      true,
 		ArgsUsage: "<bundle-name>",

@@ -150,10 +150,10 @@ func TestUT_BundleAction_LibFlag_NoTemplateOrigin(t *testing.T) {
 
 func TestUT_BundleCommand_ReturnsValidCommand(t *testing.T) {
 	cfg := createTestConfig(t, ".tag")
-	cmd := BundleCommand(cfg)
+	cmd := templateNewBundleCommand(cfg)
 
 	require.NotNil(t, cmd)
-	assert.Equal(t, "new-bundle", cmd.Name)
+	assert.Equal(t, "bundle", cmd.Name)
 	assert.NotEmpty(t, cmd.Usage)
 	assert.NotNil(t, cmd.Action)
 	assert.True(t, cmd.Args)
