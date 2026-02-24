@@ -249,6 +249,65 @@ func TestUT_CaseCamel_SymbolEdgeCases(t *testing.T) {
 	}
 }
 
+func TestUT_CasePast(t *testing.T) {
+	tests := []struct {
+		name string
+		str  string
+		want string
+	}{
+		// PascalCase
+		{name: "PascalCase regular", str: "OrderCancel", want: "OrderCancelled"},
+		{name: "PascalCase ends in e", str: "OrderCreate", want: "OrderCreated"},
+		{name: "PascalCase default ed", str: "OrderProcess", want: "OrderProcessed"},
+		{name: "PascalCase irregular", str: "OrderSend", want: "OrderSent"},
+		{name: "PascalCase consonant+y", str: "FileCopy", want: "FileCopied"},
+		{name: "PascalCase ic ending", str: "JobPanic", want: "JobPanicked"},
+		{name: "PascalCase unchanged", str: "ValueSet", want: "ValueSet"},
+		{name: "PascalCase with acronym", str: "HTTPServerStart", want: "HTTPServerStarted"},
+		// camelCase
+		{name: "camelCase regular", str: "orderCancel", want: "orderCancelled"},
+		{name: "camelCase irregular", str: "orderRun", want: "orderRan"},
+		{name: "camelCase ends in e", str: "orderCreate", want: "orderCreated"},
+		// snake_case
+		{name: "snake_case regular", str: "order_cancel", want: "order_cancelled"},
+		{name: "snake_case irregular", str: "order_send", want: "order_sent"},
+		{name: "snake_case ends in e", str: "order_create", want: "order_created"},
+		// kebab-case
+		{name: "kebab-case regular", str: "order-cancel", want: "order-cancelled"},
+		{name: "kebab-case irregular", str: "order-build", want: "order-built"},
+		// Single word
+		{name: "single word regular", str: "cancel", want: "cancelled"},
+		{name: "single word irregular", str: "run", want: "ran"},
+		{name: "single word ends in e", str: "create", want: "created"},
+		{name: "single word consonant+y", str: "copy", want: "copied"},
+		{name: "single word vowel+y", str: "play", want: "played"},
+		{name: "single word default", str: "process", want: "processed"},
+		{name: "single word already past", str: "created", want: "created"},
+		// Edge cases
+		{name: "empty string", str: "", want: ""},
+		// Double consonant whitelist
+		{name: "stop", str: "stop", want: "stopped"},
+		{name: "commit", str: "commit", want: "committed"},
+		{name: "submit", str: "submit", want: "submitted"},
+		{name: "drop", str: "drop", want: "dropped"},
+		{name: "ship", str: "ship", want: "shipped"},
+		{name: "plan", str: "plan", want: "planned"},
+		{name: "log", str: "log", want: "logged"},
+		{name: "wrap", str: "wrap", want: "wrapped"},
+		{name: "occur", str: "occur", want: "occurred"},
+		// Should NOT double
+		{name: "open", str: "open", want: "opened"},
+		{name: "render", str: "render", want: "rendered"},
+		{name: "filter", str: "filter", want: "filtered"},
+		{name: "target", str: "target", want: "targeted"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, CasePast(tt.str))
+		})
+	}
+}
+
 func TestUT_CaseKebab_SymbolEdgeCases(t *testing.T) {
 	tests := []struct {
 		name string

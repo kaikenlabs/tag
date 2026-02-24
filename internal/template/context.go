@@ -15,6 +15,7 @@ func computeNameOptions(name string) map[string]any {
 		"kebab_case":  formats.CaseKebab(name),
 		"lower_case":  strings.ToLower(name),
 		"upper_case":  strings.ToUpper(name),
+		"past":        formats.CasePast(name),
 	}
 }
 

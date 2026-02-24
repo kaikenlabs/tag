@@ -10,6 +10,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
 
 	"github.com/urfave/cli/v2"
@@ -151,12 +152,18 @@ func scanDirEntries(dir string, readDescription bool) []generatorInfo {
 		info := generatorInfo{Name: name}
 
 		if readDescription {
+			// Try tag.template.json first.
 			configPath := filepath.Join(dir, name, types.TemplateConfigFile)
 			data, readErr := os.ReadFile(configPath)
 			if readErr == nil {
 				if tc, parseErr := scaffold.ParseTemplateConfig(data); parseErr == nil {
 					info.Description = tc.Description
 				}
+			}
+
+			// Fall back to frontmatter "desc" field from the first template file.
+			if info.Description == "" {
+				info.Description = readFrontmatterDesc(filepath.Join(dir, name))
 			}
 		}
 
@@ -173,4 +180,40 @@ func scanGenerators(dir string) []generatorInfo {
 // scanBundles scans a bundles directory for bundle definitions.
 func scanBundles(dir string) []generatorInfo {
 	return scanDirEntries(dir, false)
+}
+
+// readFrontmatterDesc reads the first template file in a generator directory
+// and returns the "desc" field from its frontmatter, if present.
+func readFrontmatterDesc(genDir string) string {
+	entries, err := os.ReadDir(genDir)
+	if err != nil {
+		return ""
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		data, readErr := os.ReadFile(filepath.Join(genDir, entry.Name()))
+		if readErr != nil {
+			continue
+		}
+
+		metaRaw, _, extractErr := template.ExtractMetadata(string(data))
+		if extractErr != nil || metaRaw == "" {
+			continue
+		}
+
+		meta, parseErr := template.ParseMetadata(metaRaw)
+		if parseErr != nil {
+			continue
+		}
+
+		if meta.Description != "" {
+			return meta.Description
+		}
+	}
+
+	return ""
 }

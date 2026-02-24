@@ -51,6 +51,7 @@ For convenience, these aliases are also available:
 |--------|-------|--------|-------------|
 | `plural` | `user` | `users` | Pluralize word |
 | `singular` | `users` | `user` | Singularize word |
+| `past` | `OrderCancel` | `OrderCancelled` | Convert last word to past tense |
 | `ordinalize` | `3` | `3rd` | Add ordinal suffix |
 | `titleize` | `my_project` | `My Project` | Convert to readable title |
 | `humanize` | `my_project` | `My project` | Convert to sentence form |
@@ -61,6 +62,7 @@ For convenience, these aliases are also available:
 |-------|------------|
 | `pluralize` | `plural` |
 | `singularize` | `singular` |
+| `past_tense` | `past` |
 
 ### Examples
 
@@ -71,7 +73,17 @@ For convenience, these aliases are also available:
 {{ "2"|ordinalize }}            {# 2nd #}
 {{ "user_profile"|titleize }}   {# User Profile #}
 {{ "user_profile"|humanize }}   {# User profile #}
+{{ "OrderCancel"|past }}        {# OrderCancelled #}
+{{ "order_create"|past }}       {# order_created #}
+{{ "orderRun"|past }}           {# orderRan #}
 ```
+
+The `past` filter converts the **last word** to past tense, preserving the original casing style (PascalCase, camelCase, snake_case, kebab-case). It handles:
+
+- **Regular verbs**: add `-ed` rules (create → created, process → processed)
+- **Irregular verbs**: ~50 common software-domain verbs (send → sent, build → built, run → ran)
+- **Consonant doubling**: whitelist-based (cancel → cancelled, commit → committed, stop → stopped)
+- **Special endings**: `-ic` → `-icked` (panic → panicked), consonant+`y` → `-ied` (copy → copied)
 
 ## String Operation Filters
 
@@ -253,6 +265,10 @@ Filters can be chained for powerful transformations:
 {{ vars.service|snake }}_service.go    {# user_service.go #}
 {{ vars.handler|kebab }}-handler.ts    {# user-handler.ts #}
 
+{# event name variations #}
+{{ vars.event|past|pascal }}          {# OrderCancelled #}
+{{ vars.event|past|snake }}           {# order_cancelled #}
+
 {# clean and transform #}
 {{ vars.name|trim|snake|lower }}
 ```
@@ -282,6 +298,13 @@ package {{ vars.module|snake }}
 
 ```jinja2
 {{ vars.title|kebab }}
+```
+
+### Event Names
+
+```jinja2
+type {{ vars.event|past }}Event struct {}    {# OrderCancelledEvent #}
+{{ vars.event|past|snake }}_event.go         {# order_cancelled_event.go #}
 ```
 
 ### Database Tables

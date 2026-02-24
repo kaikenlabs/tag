@@ -271,6 +271,7 @@ The `---` block at the top of every generator file controls how and where the ou
 | `before` | string | No | Marker string to inject *before* (requires `inject: true`) |
 | `after` | string | No | Marker string to inject *after* (requires `inject: true`) |
 | `append` | bool | No | Append content to the end of an existing file |
+| `desc` | string | No | Short description shown in `tag generate list` output |
 | `notes` | string | No | Message displayed after generation completes |
 
 ## Template Actions
@@ -309,6 +310,16 @@ inject: true
 before: "// END MARKER"
 ---
 ```
+
+### Description
+```
+---
+to: path/to/file.go
+desc: Generate a REST handler with CRUD operations
+---
+```
+
+The `desc` field is displayed when running `tag generate list`. If a generator has no `tag.template.json`, the description is read from the frontmatter of the first template file.
 
 ### Notes
 ```

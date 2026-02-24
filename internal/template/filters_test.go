@@ -295,6 +295,62 @@ func TestUT_FilterHumanize(t *testing.T) {
 	}
 }
 
+func TestUT_FilterPast(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"PascalCase cancel", "OrderCancel", "OrderCancelled"},
+		{"PascalCase create", "OrderCreate", "OrderCreated"},
+		{"PascalCase irregular", "OrderSend", "OrderSent"},
+		{"camelCase", "orderCancel", "orderCancelled"},
+		{"single word", "cancel", "cancelled"},
+		{"already past", "created", "created"},
+		{"empty", "", ""},
+	}
+
+	engine := MustNewEngine()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl := `{{ name|past }}`
+			ctx := NewContext(tt.input, nil)
+			result, err := engine.ExecuteToString(tmpl, ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUT_FilterPastTenseAlias(t *testing.T) {
+	engine := MustNewEngine()
+	tmpl := `{{ name|past_tense }}`
+	ctx := NewContext("OrderCancel", nil)
+	result, err := engine.ExecuteToString(tmpl, ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "OrderCancelled", result)
+}
+
+func TestUT_FilterPastChaining(t *testing.T) {
+	engine := MustNewEngine()
+
+	t.Run("past then snake", func(t *testing.T) {
+		tmpl := `{{ name|past|snake }}`
+		ctx := NewContext("OrderCancel", nil)
+		result, err := engine.ExecuteToString(tmpl, ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "order_cancelled", result)
+	})
+
+	t.Run("past then kebab", func(t *testing.T) {
+		tmpl := `{{ name|past|kebab }}`
+		ctx := NewContext("OrderCreate", nil)
+		result, err := engine.ExecuteToString(tmpl, ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "order-created", result)
+	})
+}
+
 func TestUT_FilterSplit(t *testing.T) {
 	engine := MustNewEngine()
 

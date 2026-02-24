@@ -105,6 +105,7 @@ type {{ name | pascal }}Service struct{}
 | `before` | No | Marker string — inject content BEFORE this line. Requires `inject: true`. |
 | `after` | No | Marker string — inject content AFTER this line. Requires `inject: true`. |
 | `append` | No | `true` to append to end of existing file (mutually exclusive with `inject`). |
+| `desc` | No | Short description shown in `tag generate list` output. |
 | `notes` | No | Message displayed after generation (e.g., "Remember to register the route"). |
 
 Any unrecognized `key: value` pairs become extra metadata accessible via `{{ vars.key }}` in the body.
@@ -187,6 +188,9 @@ package {{ vars.package }}
 | `{{ n.title }}` | `{{ name \| title }}` | `User_Service` |
 | `{{ n.plural }}` | `{{ name \| plural }}` | `user_services` |
 | `{{ n.singular }}` | `{{ name \| singular }}` | `user_service` |
+| `{{ n.past }}` | `{{ name \| past }}` | `user_serviced` |
+
+> **Note**: The `past` filter converts the last word to past tense. It handles irregular verbs (run → ran), consonant doubling (cancel → cancelled), and preserves casing style.
 
 ## Anatomy of a Bundle
 
@@ -301,6 +305,7 @@ Aliases: `snake_case`, `pascal_case`, `camel_case`, `kebab_case`
 |--------|-------|--------|
 | `plural` / `pluralize` | `service` | `services` |
 | `singular` / `singularize` | `services` | `service` |
+| `past` / `past_tense` | `OrderCancel` | `OrderCancelled` |
 | `humanize` | `user_service` | `User service` |
 | `titleize` | `user_service` | `User Service` |
 | `ordinalize` | `3` | `3rd` |
