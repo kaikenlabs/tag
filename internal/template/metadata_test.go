@@ -242,6 +242,28 @@ func TestUT_ParseMetadata_CustomFields(t *testing.T) {
 	assert.Equal(t, "value", got.Extra["another"])
 }
 
+func TestUT_ParseMetadata_DescField(t *testing.T) {
+	rendered := "to: output/file.go\ndesc: Generate a service layer"
+
+	got, err := ParseMetadata(rendered)
+
+	require.NoError(t, err)
+	assert.Equal(t, "output/file.go", got.To)
+	assert.Equal(t, "Generate a service layer", got.Description)
+	// desc should NOT appear in Extra
+	assert.Empty(t, got.Extra["desc"])
+}
+
+func TestUT_ParseMetadata_DescFieldWithNotes(t *testing.T) {
+	rendered := "to: output/file.go\ndesc: My generator\nnotes: Remember to register"
+
+	got, err := ParseMetadata(rendered)
+
+	require.NoError(t, err)
+	assert.Equal(t, "My generator", got.Description)
+	assert.Equal(t, "Remember to register", got.Notes)
+}
+
 func TestUT_ParseMetadata_ValueWithColons(t *testing.T) {
 	// Value containing colons (e.g., URL or time)
 	rendered := "to: output/file.go\nurl: https://example.com:8080/path"

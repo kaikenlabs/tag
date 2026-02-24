@@ -37,6 +37,7 @@ type Metadata struct {
 	InjectClause  types.InjectClause // Before or After (for inject action)
 	InjectMatcher string             // The marker string to match for injection
 	Notes         string             // Optional notes to display after generation
+	Description   string             // Optional description for generator listing
 	Extra         map[string]string  // Additional key-value pairs from metadata
 }
 
@@ -48,6 +49,7 @@ const (
 	fieldAfter  = "after"
 	fieldBefore = "before"
 	fieldNotes  = "notes"
+	fieldDesc   = "desc"
 )
 
 // Token constants for metadata parsing.
@@ -170,6 +172,9 @@ func ParseMetadata(rendered string) (*Metadata, error) {
 
 		case fieldNotes:
 			meta.Notes = value
+
+		case fieldDesc:
+			meta.Description = value
 
 		default:
 			// Store as extra metadata

@@ -971,6 +971,80 @@ func TestUT_ScanBundles_SkipsReserved(t *testing.T) {
 	assert.Equal(t, "feature", result[0].Name)
 }
 
+func TestUT_ScanGenerators_FrontmatterDescFallback(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a generator with a template file containing desc in frontmatter
+	genDir := filepath.Join(tmpDir, "service")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+
+	tmplContent := "---\nto: internal/{{ name | snake }}.go\ndesc: Generate a service layer\n---\npackage services\n"
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "service.go"), []byte(tmplContent), 0o644))
+
+	result := scanGenerators(tmpDir)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "service", result[0].Name)
+	assert.Equal(t, "Generate a service layer", result[0].Description)
+}
+
+func TestUT_ScanGenerators_TagTemplateJSONTakesPrecedence(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a generator with both tag.template.json and frontmatter desc
+	genDir := filepath.Join(tmpDir, "handler")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+
+	configJSON := `{"description": "From config"}`
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "tag.template.json"), []byte(configJSON), 0o644))
+
+	tmplContent := "---\nto: internal/{{ name | snake }}.go\ndesc: From frontmatter\n---\npackage handler\n"
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "handler.go"), []byte(tmplContent), 0o644))
+
+	result := scanGenerators(tmpDir)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "handler", result[0].Name)
+	assert.Equal(t, "From config", result[0].Description, "tag.template.json should take precedence")
+}
+
+func TestUT_ScanGenerators_NoDescriptionAnywhere(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a generator with a template file but no desc
+	genDir := filepath.Join(tmpDir, "model")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+
+	tmplContent := "---\nto: internal/{{ name | snake }}.go\n---\npackage models\n"
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "model.go"), []byte(tmplContent), 0o644))
+
+	result := scanGenerators(tmpDir)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "model", result[0].Name)
+	assert.Empty(t, result[0].Description)
+}
+
+func TestUT_GenerateList_FrontmatterDescShown(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	genDir := filepath.Join(tmpDir, "service")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+
+	tmplContent := "---\nto: internal/{{ name | snake }}.go\ndesc: Generate a service layer\n---\npackage services\n"
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "service.go"), []byte(tmplContent), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+
+	var buf bytes.Buffer
+	err := generateList(cfg, &buf)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "service")
+	assert.Contains(t, output, "Generate a service layer")
+}
+
 func TestUT_GeneratorNotFoundError_WithTemplate(t *testing.T) {
 	err := &GeneratorNotFoundError{
 		Generator: "component",

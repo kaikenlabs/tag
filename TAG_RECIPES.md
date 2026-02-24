@@ -19,6 +19,7 @@ tag template init
 ```
 ---
 to: internal/models/{{ name | snake }}.go
+desc: Create a database model struct
 ---
 package models
 
@@ -37,6 +38,7 @@ type {{ name | pascal }} struct {
 ```
 ---
 to: internal/repository/{{ name | snake }}_repository.go
+desc: Create a repository with FindByID
 ---
 package repository
 
@@ -71,6 +73,7 @@ func (r *{{ name | pascal }}Repository) FindByID(ctx context.Context, id int64) 
 ```
 ---
 to: internal/handler/{{ name | snake }}_handler.go
+desc: Create an HTTP handler
 ---
 package handler
 
@@ -102,6 +105,7 @@ func (h *{{ name | pascal }}Handler) Get(w http.ResponseWriter, r *http.Request)
 to: internal/router/router.go
 inject: true
 after: "// ROUTES"
+desc: Inject route registration
 ---
 	{{ name | camel }}Handler := handler.New{{ name | pascal }}Handler({{ name | camel }}Repo)
 	r.Get("/{{ name | kebab | plural }}", {{ name | camel }}Handler.Get)
