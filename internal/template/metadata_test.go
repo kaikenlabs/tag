@@ -264,6 +264,36 @@ func TestUT_ParseMetadata_DescFieldWithNotes(t *testing.T) {
 	assert.Equal(t, "Remember to register", got.Notes)
 }
 
+func TestUT_ParseMetadata_DescFieldUnquoted(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantDesc string
+	}{
+		{"double quotes", "to: output/file.go\ndesc: \"Generate a service layer\"", "Generate a service layer"},
+		{"single quotes", "to: output/file.go\ndesc: 'Generate a service layer'", "Generate a service layer"},
+		{"no quotes", "to: output/file.go\ndesc: Generate a service layer", "Generate a service layer"},
+		{"mismatched quotes preserved", "to: output/file.go\ndesc: \"Generate a service layer'", "\"Generate a service layer'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseMetadata(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantDesc, got.Description)
+		})
+	}
+}
+
+func TestUT_ParseMetadata_NotesFieldUnquoted(t *testing.T) {
+	rendered := "to: output/file.go\nnotes: \"Remember to register\""
+
+	got, err := ParseMetadata(rendered)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Remember to register", got.Notes)
+}
+
 func TestUT_ParseMetadata_ValueWithColons(t *testing.T) {
 	// Value containing colons (e.g., URL or time)
 	rendered := "to: output/file.go\nurl: https://example.com:8080/path"
