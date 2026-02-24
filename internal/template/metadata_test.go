@@ -273,6 +273,8 @@ func TestUT_ParseMetadata_DescFieldUnquoted(t *testing.T) {
 		{"double quotes", "to: output/file.go\ndesc: \"Generate a service layer\"", "Generate a service layer"},
 		{"single quotes", "to: output/file.go\ndesc: 'Generate a service layer'", "Generate a service layer"},
 		{"no quotes", "to: output/file.go\ndesc: Generate a service layer", "Generate a service layer"},
+		{"empty double quotes", "to: output/file.go\ndesc: \"\"", ""},
+		{"empty single quotes", "to: output/file.go\ndesc: ''", ""},
 		{"mismatched quotes preserved", "to: output/file.go\ndesc: \"Generate a service layer'", "\"Generate a service layer'"},
 	}
 
@@ -286,12 +288,49 @@ func TestUT_ParseMetadata_DescFieldUnquoted(t *testing.T) {
 }
 
 func TestUT_ParseMetadata_NotesFieldUnquoted(t *testing.T) {
-	rendered := "to: output/file.go\nnotes: \"Remember to register\""
+	tests := []struct {
+		name      string
+		input     string
+		wantNotes string
+	}{
+		{"double quotes", "to: output/file.go\nnotes: \"Remember to register\"", "Remember to register"},
+		{"single quotes", "to: output/file.go\nnotes: 'Remember to register'", "Remember to register"},
+		{"no quotes", "to: output/file.go\nnotes: Remember to register", "Remember to register"},
+		{"mismatched quotes preserved", "to: output/file.go\nnotes: \"Remember to register'", "\"Remember to register'"},
+	}
 
-	got, err := ParseMetadata(rendered)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseMetadata(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantNotes, got.Notes)
+		})
+	}
+}
 
-	require.NoError(t, err)
-	assert.Equal(t, "Remember to register", got.Notes)
+func TestUT_Unquote(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"double quotes", `"hello"`, "hello"},
+		{"single quotes", "'hello'", "hello"},
+		{"no quotes", "hello", "hello"},
+		{"empty double quotes", `""`, ""},
+		{"empty single quotes", "''", ""},
+		{"single char quote", `"`, `"`},
+		{"empty string", "", ""},
+		{"mismatched double-single", `"hello'`, `"hello'`},
+		{"mismatched single-double", `'hello"`, `'hello"`},
+		{"outer quotes stripped with inner escapes", `"He said \"hi\""`, `He said \"hi\"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, unquote(tt.in))
+		})
+	}
 }
 
 func TestUT_ParseMetadata_ValueWithColons(t *testing.T) {
