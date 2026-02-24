@@ -38,6 +38,7 @@ func TestUT_NewContext_ComputesNameOptions(t *testing.T) {
 	assert.Equal(t, "my-project", nMap["kebab_case"])
 	assert.Equal(t, "myproject", nMap["lower_case"])
 	assert.Equal(t, "MYPROJECT", nMap["upper_case"])
+	assert.Equal(t, "MyProjected", nMap["past"])
 }
 
 func TestUT_NewContext_NilVarsCreatesEmptyMap(t *testing.T) {
@@ -69,6 +70,15 @@ func TestUT_Context_InTemplate(t *testing.T) {
 		result, err := engine.ExecuteToString(tmpl, ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "MyProject", result)
+	})
+
+	t.Run("access n.past namespace", func(t *testing.T) {
+		tmpl := `{{ n.past }}`
+		ctx := NewContext("OrderCancel", nil)
+
+		result, err := engine.ExecuteToString(tmpl, ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "OrderCancelled", result)
 	})
 
 	t.Run("access name directly", func(t *testing.T) {

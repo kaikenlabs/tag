@@ -36,6 +36,8 @@ func RegisterFilters(filters *exec.FilterSet) error {
 		{"ordinalize", filterOrdinalize},
 		{"titleize", filterTitleize},
 		{"humanize", filterHumanize},
+		// Verb tense filters
+		{"past", filterPast},
 		// String operation filters
 		{"split", filterSplit},
 		{"join", filterJoin},
@@ -53,6 +55,7 @@ func RegisterFilters(filters *exec.FilterSet) error {
 		{"kebab_case", filterKebab},
 		{"pluralize", filterPlural},
 		{"singularize", filterSingular},
+		{"past_tense", filterPast},
 	}
 
 	for _, f := range filtersToRegister {
@@ -106,6 +109,7 @@ var (
 	filterOrdinalize = makeSimpleFilter("ordinalize", flect.Ordinalize)
 	filterTitleize   = makeSimpleFilter("titleize", flect.Titleize)
 	filterHumanize   = makeSimpleFilter("humanize", flect.Humanize)
+	filterPast       = makeSimpleFilter("past", formats.CasePast)
 )
 
 // String operation filters
