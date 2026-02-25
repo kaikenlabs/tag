@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
+	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -179,7 +181,36 @@ func scanGenerators(dir string) []generatorInfo {
 
 // scanBundles scans a bundles directory for bundle definitions.
 func scanBundles(dir string) []generatorInfo {
-	return scanDirEntries(dir, false)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var result []generatorInfo
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
+			continue
+		}
+
+		info := generatorInfo{Name: name}
+
+		// Read description from bundle manifest (<name>/<name>.json).
+		manifestPath := filepath.Join(dir, name, name+types.BundleExtension)
+		data, readErr := os.ReadFile(manifestPath)
+		if readErr == nil {
+			var bundle engine.Bundle
+			if jsonErr := json.Unmarshal(data, &bundle); jsonErr == nil {
+				info.Description = bundle.Description
+			}
+		}
+
+		result = append(result, info)
+	}
+	return result
 }
 
 // readFrontmatterDesc reads the first template file in a generator directory

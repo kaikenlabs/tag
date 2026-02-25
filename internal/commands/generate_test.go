@@ -931,6 +931,24 @@ func TestUT_GenerateList_WithBundles(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestUT_GenerateList_BundleDescriptionShown(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	// Create a generator so the list is non-empty.
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "component"), 0o750))
+
+	// Create a bundle with a description field.
+	createBundle(t, tmpDir, "feature", `{"name":"feature","description":"Scaffolds a full feature","generators":[{"name":"component"}]}`)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	var buf bytes.Buffer
+	err := generateList(cfg, &buf)
+
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "Scaffolds a full feature")
+}
+
 func TestUT_GenerateList_NoConfig(t *testing.T) {
 	err := generateList(nil, io.Discard)
 
