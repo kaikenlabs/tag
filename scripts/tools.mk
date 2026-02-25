@@ -10,6 +10,7 @@ define TOOLS
     gosec:github.com/securego/gosec/v2/cmd/gosec
     govulncheck:golang.org/x/vuln/cmd/govulncheck
     deadcode:golang.org/x/tools/cmd/deadcode
+    goimports:golang.org/x/tools/cmd/goimports
 endef
 
 # Convert the TOOLS definition into variables
