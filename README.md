@@ -4,9 +4,10 @@ A powerful code generation and project scaffolding CLI for developers.
 
 TAG combines the project bootstrapping capabilities of [Cookiecutter](https://cookiecutter.readthedocs.io/) with incremental code generation, supporting both full project scaffolding from templates and adding code to existing projects.
 
-## Mandatory for AI assistants
+## For AI Assistants
 
-Please read the [TAG skill](.skill/SKILL.md) file.
+If you're an AI coding agent working with a TAG template, read [`.skill/SKILL.md`](.skill/SKILL.md) first — it contains a decision tree, generator anatomy, CLI quick
+reference, and common pitfalls in a format optimized for LLM consumption. Detailed reference and recipes are in `.skill/reference.md` and `.skill/recipes.md`.
 
 ## Features
 
