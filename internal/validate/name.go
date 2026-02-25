@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// maxNameLen is the maximum allowed length for a template name.
-const maxNameLen = 255
+// MaxNameLen is the maximum allowed length for a template name.
+const MaxNameLen = 255
 
 // ErrInvalidName indicates a name failed validation.
 var ErrInvalidName = errors.New("invalid name")
@@ -38,8 +38,8 @@ func TemplateName(name string) error {
 	if err := PathSegmentSafe(name); err != nil {
 		return err
 	}
-	if len(name) > maxNameLen {
-		return fmt.Errorf("%w: exceeds maximum length of %d", ErrInvalidName, maxNameLen)
+	if len(name) > MaxNameLen {
+		return fmt.Errorf("%w: exceeds maximum length of %d", ErrInvalidName, MaxNameLen)
 	}
 	if strings.HasPrefix(name, ".") {
 		return fmt.Errorf("%w: name cannot start with a dot", ErrInvalidName)

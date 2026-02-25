@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/remote"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // localResolver is a test resolver that returns local paths as-is.
@@ -81,8 +83,8 @@ func TestUT_ValidateName(t *testing.T) {
 		{"newline", "a\nb", true},
 		{"tab", "a\tb", true},
 		{"delete char", "a\x7Fb", true},
-		{"max length", strings.Repeat("a", maxNameLen), false},
-		{"exceeds max length", strings.Repeat("a", maxNameLen+1), true},
+		{"max length", strings.Repeat("a", 255), false},
+		{"exceeds max length", strings.Repeat("a", 256), true},
 	}
 
 	for _, tt := range tests {
@@ -670,7 +672,7 @@ func TestUT_CopyDir_PrivatePermissions(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(src, "sub", "file.txt"), []byte("data"), 0o644))
 
 	dst := filepath.Join(t.TempDir(), "out")
-	require.NoError(t, copyDir(src, dst))
+	require.NoError(t, fileutil.CopyDir(src, dst, types.DirModePrivate))
 
 	// Verify directories have private permissions (0700)
 	info, err := os.Stat(dst)
@@ -695,7 +697,7 @@ func TestUT_CopyDir_SkipsSymlinks(t *testing.T) {
 	require.NoError(t, os.Symlink(subDir, filepath.Join(src, "linkdir")))
 
 	dst := filepath.Join(t.TempDir(), "out")
-	require.NoError(t, copyDir(src, dst))
+	require.NoError(t, fileutil.CopyDir(src, dst, types.DirModePrivate))
 
 	// Real file should be copied
 	assert.FileExists(t, filepath.Join(dst, "real.txt"))

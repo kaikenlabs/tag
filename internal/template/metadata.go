@@ -171,10 +171,10 @@ func ParseMetadata(rendered string) (*Metadata, error) {
 			meta.InjectMatcher = value
 
 		case fieldNotes:
-			meta.Notes = value
+			meta.Notes = unquote(value)
 
 		case fieldDesc:
-			meta.Description = value
+			meta.Description = unquote(value)
 
 		default:
 			// Store as extra metadata
@@ -205,6 +205,16 @@ func ParseMetadata(rendered string) (*Metadata, error) {
 	}
 
 	return meta, nil
+}
+
+// unquote strips matching surrounding double or single quotes from a string.
+func unquote(s string) string {
+	if len(s) >= 2 {
+		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
+			return s[1 : len(s)-1]
+		}
+	}
+	return s
 }
 
 // RenderAndParseMetadata renders the raw metadata using the template engine,

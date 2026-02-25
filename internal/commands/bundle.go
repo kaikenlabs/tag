@@ -82,7 +82,7 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	if err := fileutil.ValidatePathContainment(basePath, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dirPath), types.DirModeRestricted); err != nil {
 		return app.Errorf("error creating %s: %w", dirPath, err)
 	}
 

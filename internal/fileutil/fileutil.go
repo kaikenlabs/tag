@@ -3,7 +3,9 @@ package fileutil
 import (
 	"bytes"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"unicode/utf8"
 )
 
@@ -63,8 +65,59 @@ func CopyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
 
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	if _, err = io.Copy(dstFile, srcFile); err != nil {
+		dstFile.Close()
+		return err
+	}
+
+	if err = dstFile.Sync(); err != nil {
+		dstFile.Close()
+		return err
+	}
+
+	return dstFile.Close()
+}
+
+// CopyDir recursively copies a directory from src to dst.
+// Symlinks are skipped for security. A TOCTOU mitigation re-checks each file
+// with Lstat before copying to detect symlinks created between walk and copy.
+func CopyDir(src, dst string, dirMode os.FileMode) error {
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip symlinks (detected at walk time via Lstat)
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+
+		destPath := filepath.Join(dst, relPath)
+
+		if d.IsDir() {
+			return os.MkdirAll(destPath, dirMode)
+		}
+
+		if mkdirErr := os.MkdirAll(filepath.Dir(destPath), dirMode); mkdirErr != nil {
+			return mkdirErr
+		}
+
+		// TOCTOU mitigation: re-check with Lstat before copy to confirm
+		// the file hasn't been replaced with a symlink since WalkDir's Lstat.
+		info, lstatErr := os.Lstat(path)
+		if lstatErr != nil {
+			return lstatErr
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil // skip: became a symlink between walk and copy
+		}
+
+		return CopyFile(path, destPath)
+	})
 }

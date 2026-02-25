@@ -41,7 +41,7 @@ func Save(templateSource, version string, values map[string]any, secrets map[str
 	}
 
 	// Filter out secret values
-	filteredValues := filterSecrets(values, secrets)
+	filteredValues := FilterSecrets(values, secrets)
 
 	// Create replay data
 	data := ReplayData{
@@ -76,8 +76,9 @@ func Save(templateSource, version string, values map[string]any, secrets map[str
 	return nil
 }
 
-// filterSecrets returns a copy of values with secret variables removed.
-func filterSecrets(values map[string]any, secrets map[string]bool) map[string]any {
+// FilterSecrets returns a copy of values with secret variables removed.
+// Keys present in the secrets map (set to true) are excluded from the result.
+func FilterSecrets(values map[string]any, secrets map[string]bool) map[string]any {
 	if len(secrets) == 0 {
 		// No secrets to filter, return a copy of values
 		result := make(map[string]any, len(values))

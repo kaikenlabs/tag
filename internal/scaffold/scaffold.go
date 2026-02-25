@@ -20,6 +20,12 @@ import (
 // MaxConfigFileSize is the maximum allowed size for tag.template.json (10 MB).
 const MaxConfigFileSize = 10 * 1024 * 1024
 
+// dangerousPaths is the set of system paths that should never be used as scaffold output.
+var dangerousPaths = []string{
+	"/", "/usr", "/etc", "/var", "/bin", "/sbin",
+	"/lib", "/opt", "/tmp", "/home", "/root",
+}
+
 // Scaffold orchestrates the scaffolding process.
 type Scaffold struct {
 	validator  *schema.Validator
@@ -224,7 +230,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 
 	// Build hook environment — use projectRoot so TAG_OUTPUT_DIR matches the
 	// actual working directory where hooks execute (inside the wrapper when present).
-	ctx.hookEnv = hooks.BuildHookEnv(ctx.vars, ctx.templateDirAbs, ctx.projectRoot)
+	ctx.hookEnv = hooks.BuildHookEnv(ctx.vars, ctx.templateDirAbs, ctx.projectRoot, os.Stderr)
 
 	// Render and run hooks only when allowed — avoid failing on invalid hook
 	// templates when the user has opted to skip hooks.
@@ -258,7 +264,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 	}
 
 	// Generate config — filter out secret variables before writing to .tagconfig.json
-	configVars := filterSecrets(ctx.vars, ctx.config.Vars)
+	configVars := replay.FilterSecrets(ctx.vars, secretKeys(ctx.config.Vars))
 	tagConfigOpts := TagConfigOptions{
 		TemplateSource:  ctx.opts.TemplateRef,
 		TemplateName:    ctx.opts.TemplateName,
@@ -335,28 +341,20 @@ func saveReplayData(opts Options, config *TemplateConfig, vars map[string]any) {
 		return
 	}
 
-	secrets := make(map[string]bool)
-	for name, def := range config.Vars {
-		if def.Secret {
-			secrets[name] = true
-		}
-	}
-
-	if err := replay.Save(opts.TemplateRef, config.Version, vars, secrets); err != nil {
+	if err := replay.Save(opts.TemplateRef, config.Version, vars, secretKeys(config.Vars)); err != nil {
 		fmt.Printf("Warning: failed to save replay data: %v\n", err)
 	}
 }
 
-// filterSecrets returns a copy of vars with secret variables removed.
-func filterSecrets(vars map[string]any, varDefs map[string]VariableDef) map[string]any {
-	result := make(map[string]any, len(vars))
-	for k, v := range vars {
-		if def, ok := varDefs[k]; ok && def.Secret {
-			continue
+// secretKeys returns a map of variable names that are marked as secret.
+func secretKeys(varDefs map[string]VariableDef) map[string]bool {
+	secrets := make(map[string]bool)
+	for name, def := range varDefs {
+		if def.Secret {
+			secrets[name] = true
 		}
-		result[k] = v
 	}
-	return result
+	return secrets
 }
 
 // loadAndValidateConfig loads tag.template.json and validates it against the schema.
@@ -471,31 +469,20 @@ func validateSafeOutputDir(outputDir string) error {
 
 	// Reject common dangerous paths
 	homeDir, _ := os.UserHomeDir()
-	dangerousPaths := []string{
-		"/",
-		"/usr",
-		"/etc",
-		"/var",
-		"/bin",
-		"/sbin",
-		"/lib",
-		"/opt",
-		"/tmp",
-		"/home",
-		"/root",
-		homeDir, // User's home directory
-	}
+	dangerous := make([]string, 0, len(dangerousPaths)+1)
+	dangerous = append(dangerous, dangerousPaths...)
+	dangerous = append(dangerous, homeDir)
 
-	for _, dangerous := range dangerousPaths {
-		if dangerous == "" {
+	for _, dp := range dangerous {
+		if dp == "" {
 			continue
 		}
-		absDangerous, err := filepath.Abs(dangerous)
-		if err != nil {
+		absDangerous, absErr := filepath.Abs(dp)
+		if absErr != nil {
 			continue
 		}
 		if absPath == absDangerous {
-			return fmt.Errorf("cannot use %s as output directory", dangerous)
+			return fmt.Errorf("cannot use %s as output directory", dp)
 		}
 	}
 

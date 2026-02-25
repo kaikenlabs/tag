@@ -101,7 +101,7 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	if err := fileutil.ValidatePathContainment(basePath, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(dirPath), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dirPath), types.DirModeRestricted); err != nil {
 		return app.Errorf("error creating %s: %w", dirPath, err)
 	}
 
@@ -136,7 +136,7 @@ func resolveLibraryTagDir(libName string) (string, error) {
 	}
 
 	tagDir := filepath.Join(templatePath, types.TemplatesDir)
-	if err := os.MkdirAll(tagDir, 0o750); err != nil {
+	if err := os.MkdirAll(tagDir, types.DirModeRestricted); err != nil {
 		return "", app.Errorf("error creating directory %s: %w", tagDir, err)
 	}
 

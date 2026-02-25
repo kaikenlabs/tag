@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/writer"
@@ -74,7 +76,7 @@ func TestUT_Generate_CreateAction(t *testing.T) {
 		parseStringTemplate: &mockTemplate{result: "package service"},
 	}
 	parser := NewParserWithExecutor(mock, map[string]string{"svc.tmpl": "---\nto: output/service.go\n---\npackage service\n"}, nil)
-	core := NewCore(parser, fw)
+	core := NewCore(parser, fw, io.Discard)
 
 	err := core.Generate(Data{Name: "MyService"})
 
@@ -97,7 +99,7 @@ func TestUT_Generate_AppendAction(t *testing.T) {
 		parseStringTemplate: &mockTemplate{result: "appended line"},
 	}
 	parser := NewParserWithExecutor(mock, map[string]string{"a.tmpl": "---\nto: output.go\nappend: true\n---\nappended line\n"}, nil)
-	core := NewCore(parser, fw)
+	core := NewCore(parser, fw, io.Discard)
 
 	err := core.Generate(Data{Name: "test"})
 
@@ -121,7 +123,7 @@ func TestUT_Generate_InjectAction(t *testing.T) {
 		parseStringTemplate: &mockTemplate{result: "injected code"},
 	}
 	parser := NewParserWithExecutor(mock, map[string]string{"i.tmpl": "---\nto: output.go\ninject: true\nafter: // marker\n---\ninjected code\n"}, nil)
-	core := NewCore(parser, fw)
+	core := NewCore(parser, fw, io.Discard)
 
 	err := core.Generate(Data{Name: "test"})
 
@@ -144,7 +146,7 @@ func TestUT_Generate_MixedActions_Ordering(t *testing.T) {
 		"inject.tmpl": "---\nto: out.go\ninject: true\nafter: marker\n---\ninjected\n",
 		"create.tmpl": "---\nto: new.go\n---\ncreated\n",
 	}
-	core := NewCore(te, fw)
+	core := NewCore(te, fw, io.Discard)
 
 	err := core.Generate(Data{Name: "test"})
 
@@ -161,7 +163,7 @@ func TestUT_Generate_ParserError_Propagates(t *testing.T) {
 		renderMetadataErr: errors.New("parse failure"),
 	}
 	parser := NewParserWithExecutor(mock, map[string]string{"bad.tmpl": "---\nto: out.go\n---\nbody\n"}, nil)
-	core := NewCore(parser, fw)
+	core := NewCore(parser, fw, io.Discard)
 
 	err := core.Generate(Data{Name: "test"})
 
@@ -181,7 +183,7 @@ func TestUT_Generate_WriteError_Propagates(t *testing.T) {
 		parseStringTemplate: &mockTemplate{result: "content"},
 	}
 	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: output.go\n---\ncontent\n"}, nil)
-	core := NewCore(parser, fw)
+	core := NewCore(parser, fw, io.Discard)
 
 	err := core.Generate(Data{Name: "test"})
 
@@ -200,7 +202,7 @@ func TestUT_Generate_AppendError_Propagates(t *testing.T) {
 		parseStringTemplate: &mockTemplate{result: "content"},
 	}
 	parser := NewParserWithExecutor(mock, map[string]string{"a.tmpl": "---\nto: output.go\nappend: true\n---\ncontent\n"}, nil)
-	core := NewCore(parser, fw)
+	core := NewCore(parser, fw, io.Discard)
 
 	err := core.Generate(Data{Name: "test"})
 
@@ -221,7 +223,7 @@ func TestUT_Generate_InjectError_Propagates(t *testing.T) {
 		parseStringTemplate: &mockTemplate{result: "content"},
 	}
 	parser := NewParserWithExecutor(mock, map[string]string{"i.tmpl": "---\nto: output.go\ninject: true\nafter: // marker\n---\ncontent\n"}, nil)
-	core := NewCore(parser, fw)
+	core := NewCore(parser, fw, io.Discard)
 
 	err := core.Generate(Data{Name: "test"})
 
@@ -236,7 +238,7 @@ func TestUT_Generate_WithScaffoldVars(t *testing.T) {
 	te.templates = map[string]string{
 		"t.tmpl": "---\nto: output.go\n---\nproject={{ vars.project_name }}\n",
 	}
-	core := NewCore(te, fw)
+	core := NewCore(te, fw, io.Discard)
 
 	err := core.Generate(Data{
 		Name: "test",
@@ -262,7 +264,7 @@ func TestUT_Generate_WithNotes(t *testing.T) {
 		parseStringTemplate: &mockTemplate{result: "content"},
 	}
 	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: output.go\nnotes: Remember to update the config\n---\ncontent\n"}, nil)
-	core := NewCore(parser, fw)
+	core := NewCore(parser, fw, io.Discard)
 
 	// Notes trigger a fmt.Println which we don't capture here, but we verify
 	// the generate succeeds and the file is written.
@@ -272,7 +274,7 @@ func TestUT_Generate_WithNotes(t *testing.T) {
 	require.Len(t, fw.writeCalls, 1)
 }
 
-func Test_parseMeta(t *testing.T) {
+func Test_parseKeyValues(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
@@ -396,7 +398,7 @@ func Test_parseMeta(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseMeta(tt.input)
+			result, _ := parse.ParseKeyValues(tt.input, false)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,10 +18,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/validate"
 )
 
-const (
-	templatesDir = "templates"
-	maxNameLen   = 255
-)
+const templatesDir = "templates"
 
 // Resolver resolves template references to local directories.
 type Resolver interface {
@@ -255,7 +251,7 @@ func storeToDir(ctx context.Context, resolvedDir, targetDir string, opts AddOpti
 		return storeCookiecutterToDir(ctx, resolvedDir, targetDir, opts, result)
 	}
 
-	if err := copyDir(resolvedDir, targetDir); err != nil {
+	if err := fileutil.CopyDir(resolvedDir, targetDir, types.DirModePrivate); err != nil {
 		return fmt.Errorf("copy template: %w", err)
 	}
 	return nil
@@ -483,45 +479,4 @@ func secureRemoveAll(path string) error {
 	}
 
 	return os.RemoveAll(path)
-}
-
-// copyDir copies a directory tree from src to dst, skipping symlinks.
-func copyDir(src, dst string) error {
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Skip symlinks (detected at walk time via Lstat)
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-
-		destPath := filepath.Join(dst, relPath)
-
-		if d.IsDir() {
-			return os.MkdirAll(destPath, types.DirModePrivate)
-		}
-
-		if mkdirErr := os.MkdirAll(filepath.Dir(destPath), types.DirModePrivate); mkdirErr != nil {
-			return mkdirErr
-		}
-
-		// TOCTOU mitigation: re-check with Lstat before copy to confirm
-		// the file hasn't been replaced with a symlink since WalkDir's Lstat.
-		info, err := os.Lstat(path)
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return nil // skip: became a symlink between walk and copy
-		}
-
-		return fileutil.CopyFile(path, destPath)
-	})
 }
