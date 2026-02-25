@@ -23,6 +23,28 @@ func templateNewGeneratorCommand(cfg *config.Config) *cli.Command {
 		Usage:     "creates a new generator with the specified " + chalk.Yellow("generator-name"),
 		Args:      true,
 		ArgsUsage: "<generator-name>",
+		Description: `Create a new generator template file in the .tag directory.
+
+ARGUMENTS:
+  <generator-name>    Name of the generator to create
+
+FLAGS:
+  --package, -p       Package name for the generator (default: "mypackage")
+  --lib, -l           Create in the library template referenced by .tagconfig.json
+  --in-bundle, -B     Create inside a self-contained bundle directory
+
+EXAMPLES:
+  # Create a generator in the local .tag directory
+  tag template new generator my-model
+
+  # Create with a custom package name
+  tag template new generator my-model --package models
+
+  # Create in a library template
+  tag template new generator my-model --lib
+
+  # Create inside a specific bundle
+  tag template new generator my-model --in-bundle my-bundle`,
 		Action: func(c *cli.Context) error {
 			return newAction(c, cfg)
 		},
@@ -31,7 +53,7 @@ func templateNewGeneratorCommand(cfg *config.Config) *cli.Command {
 				Name:    "package",
 				Value:   "mypackage",
 				Usage:   "Specifies the package for the generator",
-				Aliases: []string{"k"},
+				Aliases: []string{"p"},
 			},
 			&cli.BoolFlag{
 				Name:    flags.LibFlag,

@@ -27,7 +27,7 @@ Generators are the building blocks of code generation in TAG. Each generator is 
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--package` | `-k` | `mypackage` | Package name for the generated Go file |
+| `--package` | `-p` | `mypackage` | Package name for the generated Go file |
 | `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
 | `--in-bundle` | `-B` | | Create generator inside a bundle directory (for self-contained bundles) |
 
@@ -44,7 +44,7 @@ Creates a generator file at `.tag/<name>/<name>.go` with a starter template incl
 
 ### Generated File
 
-Running `tag template new generator handler -k api` creates `.tag/handler/handler.go`:
+Running `tag template new generator handler -p api` creates `.tag/handler/handler.go`:
 
 ```
 ---
@@ -201,7 +201,7 @@ The library template is resolved from `cfg.Template.Name` in `.tagconfig.json`, 
 tag template new generator handler
 
 # Create a generator with a custom package
-tag template new generator handler -k handlers
+tag template new generator handler -p handlers
 
 # Create a generator in a library template
 tag template new generator handler --lib

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/manifoldco/promptui"
+	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
@@ -247,48 +247,31 @@ func pickTemplate(lib *library.Library) (string, error) {
 		return "", app.Errorf("no templates installed; add one with: tag lib add <ref>")
 	}
 
-	type displayEntry struct {
-		Name    string
-		Display string
-	}
-
-	items := make([]displayEntry, len(entries))
+	opts := make([]huh.Option[string], len(entries))
 	for i, e := range entries {
 		display := e.Name
 		if e.Description != "" {
 			display += " - " + e.Description
 		}
 		display += " (" + e.Source + ")"
-		items[i] = displayEntry{Name: e.Name, Display: display}
+		opts[i] = huh.NewOption(display, e.Name)
 	}
 
-	prompt := promptui.Select{
-		Label: "Select a template",
-		Items: items,
-		Size:  10,
-		Templates: &promptui.SelectTemplates{
-			Label:    "{{ . }}",
-			Active:   "> {{ .Display }}",
-			Inactive: "  {{ .Display }}",
-			Selected: "* {{ .Name }}",
-		},
-		Searcher: func(input string, index int) bool {
-			return strings.Contains(
-				strings.ToLower(items[index].Display),
-				strings.ToLower(input),
-			)
-		},
-	}
+	var result string
 
-	idx, _, err := prompt.Run()
-	if err != nil {
-		if errors.Is(err, promptui.ErrInterrupt) {
-			return "", errors.New("selection cancelled")
+	if err := huh.NewSelect[string]().
+		Title("Select a template").
+		Options(opts...).
+		Height(10).
+		Value(&result).
+		Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", scaffold.ErrPromptCancelled
 		}
 		return "", err
 	}
 
-	return items[idx].Name, nil
+	return result, nil
 }
 
 // scaffoldFlags returns the full set of flags for the scaffold command.

@@ -155,6 +155,7 @@ func TestUT_BundleCommand_ReturnsValidCommand(t *testing.T) {
 	require.NotNil(t, cmd)
 	assert.Equal(t, "bundle", cmd.Name)
 	assert.NotEmpty(t, cmd.Usage)
+	assert.NotEmpty(t, cmd.Description)
 	assert.NotNil(t, cmd.Action)
 	assert.True(t, cmd.Args)
 	assert.Equal(t, "<bundle-name>", cmd.ArgsUsage)

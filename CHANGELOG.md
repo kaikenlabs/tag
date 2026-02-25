@@ -134,8 +134,6 @@ The template syntax has changed significantly. Key changes:
 | `{{ if .Flag }}...{{ end }}` | `{% if flag %}...{% endif %}` |
 | `{{ range .Items }}...{{ end }}` | `{% for item in items %}...{% endfor %}` |
 
-See [Migration Guide](docs/migration/v1-to-v2.md) for complete migration instructions.
-
 ### Dependencies
 
 New dependencies added:

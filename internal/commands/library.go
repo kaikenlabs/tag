@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/google/shlex"
-	"github.com/manifoldco/promptui"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
 
@@ -414,12 +414,13 @@ func (s *editorSource) saveEditorPreference(editor string) {
 
 // promptEditorInput asks the user to type their preferred editor command.
 func promptEditorInput() (string, error) {
-	prompt := promptui.Prompt{
-		Label: "Enter your preferred editor command (e.g. code, vim, nano)",
-	}
-	result, err := prompt.Run()
-	if err != nil {
-		if errors.Is(err, promptui.ErrInterrupt) {
+	var result string
+
+	if err := huh.NewInput().
+		Title("Enter your preferred editor command (e.g. code, vim, nano)").
+		Value(&result).
+		Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
 			return "", app.Errorf("cancelled")
 		}
 		return "", app.Errorf("prompt failed: %w", err)

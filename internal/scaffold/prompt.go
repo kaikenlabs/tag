@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
-	"github.com/manifoldco/promptui"
+	"github.com/charmbracelet/huh"
 	"golang.org/x/term"
 
 	"github.com/kaikenlabs/tag/internal/formats"
@@ -25,7 +24,7 @@ type Prompter interface {
 	Number(label string, defaultValue float64) (float64, error)
 }
 
-// InteractivePrompter implements Prompter using promptui.
+// InteractivePrompter implements Prompter using charmbracelet/huh.
 type InteractivePrompter struct{}
 
 // NewInteractivePrompter creates a new interactive prompter.
@@ -33,23 +32,28 @@ func NewInteractivePrompter() *InteractivePrompter {
 	return &InteractivePrompter{}
 }
 
+// mapPromptErr translates huh errors to scaffold errors.
+func mapPromptErr(err error) error {
+	if errors.Is(err, huh.ErrUserAborted) {
+		return ErrPromptCancelled
+	}
+	return fmt.Errorf("prompt failed: %w", err)
+}
+
 // Input prompts for a string value.
 func (p *InteractivePrompter) Input(label, defaultValue string, secret bool) (string, error) {
-	prompt := promptui.Prompt{
-		Label:   label,
-		Default: defaultValue,
-	}
+	result := defaultValue
+
+	field := huh.NewInput().
+		Title(label).
+		Value(&result)
 
 	if secret {
-		prompt.Mask = '*'
+		field = field.EchoMode(huh.EchoModePassword)
 	}
 
-	result, err := prompt.Run()
-	if err != nil {
-		if errors.Is(err, promptui.ErrInterrupt) {
-			return "", ErrPromptCancelled
-		}
-		return "", fmt.Errorf("prompt failed: %w", err)
+	if err := field.Run(); err != nil {
+		return "", mapPromptErr(err)
 	}
 
 	return result, nil
@@ -66,18 +70,19 @@ func (p *InteractivePrompter) Select(label string, options []string, defaultInde
 		defaultIndex = 0
 	}
 
-	prompt := promptui.Select{
-		Label:     label,
-		Items:     options,
-		CursorPos: defaultIndex,
+	result := options[defaultIndex]
+
+	opts := make([]huh.Option[string], len(options))
+	for i, o := range options {
+		opts[i] = huh.NewOption(o, o)
 	}
 
-	_, result, err := prompt.Run()
-	if err != nil {
-		if errors.Is(err, promptui.ErrInterrupt) {
-			return "", ErrPromptCancelled
-		}
-		return "", fmt.Errorf("select prompt failed: %w", err)
+	if err := huh.NewSelect[string]().
+		Title(label).
+		Options(opts...).
+		Value(&result).
+		Run(); err != nil {
+		return "", mapPromptErr(err)
 	}
 
 	return result, nil
@@ -85,63 +90,34 @@ func (p *InteractivePrompter) Select(label string, options []string, defaultInde
 
 // Confirm prompts for a yes/no confirmation.
 func (p *InteractivePrompter) Confirm(label string, defaultValue bool) (bool, error) {
-	// Format prompt to show default clearly
-	var promptLabel string
-	if defaultValue {
-		promptLabel = label + " [Y/n]"
-	} else {
-		promptLabel = label + " [y/N]"
+	result := defaultValue
+
+	if err := huh.NewConfirm().
+		Title(label).
+		Value(&result).
+		Run(); err != nil {
+		return false, mapPromptErr(err)
 	}
 
-	prompt := promptui.Prompt{
-		Label: promptLabel,
-	}
-
-	result, err := prompt.Run()
-	if err != nil {
-		if errors.Is(err, promptui.ErrInterrupt) {
-			return false, ErrPromptCancelled
-		}
-		return false, fmt.Errorf("confirm prompt failed: %w", err)
-	}
-
-	// Empty input = use default
-	if result == "" {
-		return defaultValue, nil
-	}
-
-	// Parse explicit response
-	switch strings.ToLower(strings.TrimSpace(result)) {
-	case "y", "yes", "true", "1":
-		return true, nil
-	case "n", "no", "false", "0":
-		return false, nil
-	default:
-		// Invalid input, return default
-		return defaultValue, nil
-	}
+	return result, nil
 }
 
 // Number prompts for a numeric value.
 func (p *InteractivePrompter) Number(label string, defaultValue float64) (float64, error) {
-	prompt := promptui.Prompt{
-		Label:   label,
-		Default: formatNumber(defaultValue),
-		Validate: func(input string) error {
-			_, err := strconv.ParseFloat(input, 64)
+	result := formatNumber(defaultValue)
+
+	if err := huh.NewInput().
+		Title(label).
+		Value(&result).
+		Validate(func(s string) error {
+			_, err := strconv.ParseFloat(s, 64)
 			if err != nil {
 				return errors.New("invalid number")
 			}
 			return nil
-		},
-	}
-
-	result, err := prompt.Run()
-	if err != nil {
-		if errors.Is(err, promptui.ErrInterrupt) {
-			return 0, ErrPromptCancelled
-		}
-		return 0, fmt.Errorf("number prompt failed: %w", err)
+		}).
+		Run(); err != nil {
+		return 0, mapPromptErr(err)
 	}
 
 	return strconv.ParseFloat(result, 64)

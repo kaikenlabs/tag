@@ -24,6 +24,26 @@ func templateNewBundleCommand(cfg *config.Config) *cli.Command {
 		Usage:     "creates a new bundle with the specified " + chalk.Yellow("bundle-name"),
 		Args:      true,
 		ArgsUsage: "<bundle-name>",
+		Description: `Create a new bundle definition file in the .tag directory.
+
+A bundle groups multiple generators to run together in a single command.
+
+ARGUMENTS:
+  <bundle-name>       Name of the bundle to create
+
+FLAGS:
+  --lib, -l           Create in the library template referenced by .tagconfig.json
+  --self-contained, -s  Create a self-contained bundle (generators resolved from bundle directory)
+
+EXAMPLES:
+  # Create a bundle in the local .tag directory
+  tag template new bundle my-feature
+
+  # Create in a library template
+  tag template new bundle my-feature --lib
+
+  # Create a self-contained bundle
+  tag template new bundle my-feature --self-contained`,
 		Action: func(c *cli.Context) error {
 			return bundleAction(c, cfg)
 		},

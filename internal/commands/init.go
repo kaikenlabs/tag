@@ -18,8 +18,19 @@ import (
 
 func templateInitCommand() *cli.Command {
 	return &cli.Command{
-		Name:   "init",
-		Usage:  fmt.Sprintf("initialises %s's configuration and directory", chalk.Yellow("tag")),
+		Name:  "init",
+		Usage: fmt.Sprintf("initialises %s's configuration and directory", chalk.Yellow("tag")),
+		Description: `Initialize the TAG directory structure in the current project.
+
+Creates the .tag/ directory with _shared/ and _bundles/ subdirectories,
+and a .tagconfig.json configuration file.
+
+EXAMPLES:
+  # Initialize with default structure
+  tag template init
+
+  # Initialize with custom paths
+  tag template init --path .tag --shared-path _shared --bundle-path _bundles`,
 		Action: initAction,
 	}
 }
