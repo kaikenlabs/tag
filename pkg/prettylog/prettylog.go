@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mattn/go-isatty"
 )
 
 const (
@@ -36,10 +40,12 @@ const (
 )
 
 type Handler struct {
-	h   slog.Handler
-	b   *bytes.Buffer
-	m   *sync.Mutex
-	app string
+	h            slog.Handler
+	b            *bytes.Buffer
+	m            *sync.Mutex
+	out          io.Writer
+	app          string
+	colorEnabled bool
 }
 
 func NewHandler(appName string, opts *slog.HandlerOptions) *Handler {
@@ -54,8 +60,10 @@ func NewHandler(appName string, opts *slog.HandlerOptions) *Handler {
 			AddSource:   opts.AddSource,
 			ReplaceAttr: suppressDefaults(opts.ReplaceAttr),
 		}),
-		app: appName,
-		m:   &sync.Mutex{},
+		out:          os.Stderr,
+		app:          appName,
+		m:            &sync.Mutex{},
+		colorEnabled: shouldColorize(os.Stderr),
 	}
 }
 
@@ -64,11 +72,11 @@ func (h *Handler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *Handler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &Handler{h: h.h.WithAttrs(attrs), b: h.b, m: h.m}
+	return &Handler{h: h.h.WithAttrs(attrs), b: h.b, m: h.m, out: h.out, app: h.app, colorEnabled: h.colorEnabled}
 }
 
 func (h *Handler) WithGroup(name string) slog.Handler {
-	return &Handler{h: h.h.WithGroup(name), b: h.b, m: h.m}
+	return &Handler{h: h.h.WithGroup(name), b: h.b, m: h.m, out: h.out, app: h.app, colorEnabled: h.colorEnabled}
 }
 
 func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
@@ -76,13 +84,13 @@ func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
 
 	switch r.Level {
 	case slog.LevelDebug:
-		level = colorize(darkGray, level)
+		level = h.colorize(darkGray, level)
 	case slog.LevelInfo:
-		level = colorize(cyan, level)
+		level = h.colorize(cyan, level)
 	case slog.LevelWarn:
-		level = colorize(lightYellow, level)
+		level = h.colorize(lightYellow, level)
 	case slog.LevelError:
-		level = colorize(lightRed, level)
+		level = h.colorize(lightRed, level)
 	}
 
 	var attrs strings.Builder
@@ -98,15 +106,40 @@ func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
 		return true
 	})
 
-	fmt.Println(
-		colorize(lightGray, r.Time.Format(timeFormat)),
-		colorize(lightCyan, h.app),
+	fmt.Fprintln(h.writer(),
+		h.colorize(lightGray, r.Time.Format(timeFormat)),
+		h.colorize(lightCyan, h.app),
 		strings.ToLower(level),
-		colorize(white, r.Message),
+		h.colorize(white, r.Message),
 		attrs.String(),
 	)
 
 	return nil
+}
+
+func (h *Handler) writer() io.Writer {
+	if h.out != nil {
+		return h.out
+	}
+	return os.Stderr
+}
+
+func (h *Handler) colorize(colorCode int, v string) string {
+	if !h.colorEnabled {
+		return v
+	}
+	return fmt.Sprintf("\033[%sm%s%s", strconv.Itoa(colorCode), v, reset)
+}
+
+// shouldColorize checks if the given file supports color output.
+func shouldColorize(f *os.File) bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if f == nil {
+		return false
+	}
+	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
 }
 
 func suppressDefaults(next func([]string, slog.Attr) slog.Attr) func([]string, slog.Attr) slog.Attr {
@@ -121,10 +154,6 @@ func suppressDefaults(next func([]string, slog.Attr) slog.Attr) func([]string, s
 		}
 		return next(groups, a)
 	}
-}
-
-func colorize(colorCode int, v string) string {
-	return fmt.Sprintf("\033[%sm%s%s", strconv.Itoa(colorCode), v, reset)
 }
 
 func formatAttr(a slog.Attr) string {

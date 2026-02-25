@@ -1,8 +1,10 @@
 package prettylog
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -82,11 +84,79 @@ func TestUT_Handler_WithGroup(t *testing.T) {
 	assert.IsType(t, &Handler{}, child)
 }
 
-func TestUT_Colorize(t *testing.T) {
-	result := colorize(red, "hello")
+func TestUT_Handler_Colorize_Enabled(t *testing.T) {
+	h := &Handler{colorEnabled: true}
+	result := h.colorize(red, "hello")
 	assert.Contains(t, result, "hello")
 	assert.Contains(t, result, "\033[31m")
 	assert.Contains(t, result, reset)
+}
+
+func TestUT_Handler_Colorize_Disabled(t *testing.T) {
+	h := &Handler{colorEnabled: false}
+	result := h.colorize(red, "hello")
+	assert.Equal(t, "hello", result)
+	assert.NotContains(t, result, "\033[")
+}
+
+func TestUT_Handler_ColorDisabled_NoANSI(t *testing.T) {
+	var buf bytes.Buffer
+	h := &Handler{
+		h:            slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{ReplaceAttr: suppressDefaults(nil)}),
+		b:            &bytes.Buffer{},
+		m:            &sync.Mutex{},
+		out:          &buf,
+		app:          "test",
+		colorEnabled: false,
+	}
+
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+	err := h.Handle(context.Background(), record)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "test message")
+	assert.NotContains(t, output, "\033[")
+}
+
+func TestUT_Handler_ColorEnabled_HasANSI(t *testing.T) {
+	var buf bytes.Buffer
+	h := &Handler{
+		h:            slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{ReplaceAttr: suppressDefaults(nil)}),
+		b:            &bytes.Buffer{},
+		m:            &sync.Mutex{},
+		out:          &buf,
+		app:          "test",
+		colorEnabled: true,
+	}
+
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+	err := h.Handle(context.Background(), record)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "test message")
+	assert.Contains(t, output, "\033[")
+}
+
+func TestUT_Handler_NO_COLOR_Respected(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	var buf bytes.Buffer
+	h := &Handler{
+		h:            slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{ReplaceAttr: suppressDefaults(nil)}),
+		b:            &bytes.Buffer{},
+		m:            &sync.Mutex{},
+		out:          &buf,
+		app:          "test",
+		colorEnabled: shouldColorize(nil),
+	}
+
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+	err := h.Handle(context.Background(), record)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.NotContains(t, output, "\033[")
 }
 
 func TestUT_FormatAttr_String(t *testing.T) {
