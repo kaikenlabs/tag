@@ -1,17 +1,19 @@
 package engine
 
 import (
+	"io"
+
 	"github.com/kaikenlabs/tag/internal/writer"
 )
 
 type Core struct {
 	parser TemplateParser
 	fwr    writer.FileWriter
+	out    io.Writer
 }
 
 type Data struct {
 	Name         string
-	Args         string
 	RawMeta      []string
 	ScaffoldVars map[string]any // Variables from scaffold-time .tagconfig.json
 }

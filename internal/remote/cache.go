@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // DefaultCacheDir is the default cache directory relative to user home.
@@ -60,7 +61,7 @@ func NewFSCache(baseDir string) (*FSCache, error) {
 	}
 
 	// Create cache directory if it doesn't exist
-	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+	if err := os.MkdirAll(baseDir, types.DirMode); err != nil {
 		return nil, fmt.Errorf("cannot create cache directory: %w", err)
 	}
 
@@ -128,12 +129,12 @@ func (c *FSCache) Set(key, sourcePath string, meta *CacheMeta) (string, error) {
 	}
 
 	// Create cache directory
-	if err := os.MkdirAll(cachePath, 0o755); err != nil {
+	if err := os.MkdirAll(cachePath, types.DirMode); err != nil {
 		return "", &CacheError{Key: key, Op: "set", Message: "cannot create cache directory", Err: err}
 	}
 
 	// Copy contents from source to cache
-	if err := c.copyDir(sourcePath, cachePath); err != nil {
+	if err := fileutil.CopyDir(sourcePath, cachePath, types.DirMode); err != nil {
 		// Clean up on error
 		os.RemoveAll(cachePath)
 		return "", &CacheError{Key: key, Op: "set", Message: "copy failed", Err: err}
@@ -189,65 +190,6 @@ func (c *FSCache) writeMeta(key string, meta *CacheMeta) error {
 	}
 
 	return os.WriteFile(metaFile, data, 0o600)
-}
-
-// copyDir recursively copies a directory.
-func (c *FSCache) copyDir(src, dst string) error {
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	if !srcInfo.IsDir() {
-		return fmt.Errorf("source is not a directory: %s", src)
-	}
-
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		// Skip symlinks to prevent copying files outside the source
-		if entry.Type()&os.ModeSymlink != 0 {
-			continue
-		}
-
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		if entry.IsDir() {
-			// Create subdirectory
-			if err := os.MkdirAll(dstPath, 0o755); err != nil {
-				return err
-			}
-			// Recursively copy
-			if err := c.copyDir(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			// Copy file
-			if err := c.copyFile(srcPath, dstPath); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// copyFile copies a single file, skipping symlinks for security.
-func (c *FSCache) copyFile(src, dst string) error {
-	// Use Lstat to detect symlinks (Stat would follow them)
-	linfo, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-	if linfo.Mode()&os.ModeSymlink != 0 {
-		return nil // Skip symlinks
-	}
-
-	return fileutil.CopyFile(src, dst)
 }
 
 // Cleanup removes expired cache entries.

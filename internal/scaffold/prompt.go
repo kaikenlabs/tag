@@ -9,6 +9,8 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"golang.org/x/term"
+
+	"github.com/kaikenlabs/tag/internal/formats"
 )
 
 // Prompter defines the interface for interactive prompts.
@@ -147,7 +149,7 @@ func (p *InteractivePrompter) Number(label string, defaultValue float64) (float6
 
 // formatNumber formats a float64 for display, avoiding unnecessary decimals.
 func formatNumber(n float64) string {
-	if n == float64(int64(n)) {
+	if formats.IsWholeNumber(n) {
 		return strconv.FormatInt(int64(n), 10)
 	}
 	return fmt.Sprintf("%g", n)

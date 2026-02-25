@@ -2,6 +2,7 @@ package remote
 
 import (
 	"os"
+	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -79,18 +80,9 @@ func (p *EnvAuthProvider) GitAuth(ref *Reference) (transport.AuthMethod, error) 
 
 // isSSHURL checks if the URL is an SSH URL.
 func isSSHURL(url string) bool {
-	// Check for git@ style
-	if len(url) >= 4 && url[:4] == "git@" {
-		return true
-	}
-	// Check for git+ssh:// or ssh://
-	if len(url) >= 10 && url[:10] == "git+ssh://" {
-		return true
-	}
-	if len(url) >= 6 && url[:6] == "ssh://" {
-		return true
-	}
-	return false
+	return strings.HasPrefix(url, "git@") ||
+		strings.HasPrefix(url, "git+ssh://") ||
+		strings.HasPrefix(url, "ssh://")
 }
 
 // sshAuth returns SSH authentication from the SSH agent.

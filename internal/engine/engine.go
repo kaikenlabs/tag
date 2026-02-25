@@ -2,11 +2,14 @@ package engine
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/writer"
 )
 
@@ -55,26 +58,27 @@ func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, s
 		return nil, fmt.Errorf("cannot create writer: %w", err)
 	}
 
-	core := NewCore(parser, w)
+	core := NewCore(parser, w, os.Stdout)
 	return &core, nil
 }
 
 // NewCore creates a Core engine with injected dependencies.
 // This is the preferred constructor, enabling dependency injection for testing.
-func NewCore(parser TemplateParser, fwr writer.FileWriter) Core {
+func NewCore(parser TemplateParser, fwr writer.FileWriter, out io.Writer) Core {
 	return Core{
 		parser: parser,
 		fwr:    fwr,
+		out:    out,
 	}
 }
 
 // Generate generates code from templates using the Gonja-based engine.
 func (c *Core) Generate(data Data) error {
 	// Build input data for the parser
+	meta, _ := parse.ParseKeyValues(data.RawMeta, false)
 	input := InputData{
 		Name:         data.Name,
-		Args:         data.Args,
-		Meta:         parseMeta(data.RawMeta),
+		Meta:         meta,
 		ScaffoldVars: data.ScaffoldVars,
 	}
 
@@ -105,24 +109,17 @@ func (c *Core) Generate(data Data) error {
 			}
 			action = chalk.Yellow("modified")
 		default:
-			if err := c.fwr.WriteFile(item.To, item.Output, 0o750); err != nil {
+			if err := c.fwr.WriteFile(item.To, item.Output, types.FileMode); err != nil {
 				slog.Error("cannot write to file", "file", item.To, "error", err)
 				return err
 			}
 			action = chalk.Blue("created")
 			if item.Notes != "" {
-				message := fmt.Sprintf("%s\n%s: %s", chalk.Red("IMPORTANT"), chalk.Yellow(item.To), chalk.Green(item.Notes))
-				fmt.Println(message)
+				fmt.Fprintf(c.out, "%s\n%s: %s\n", chalk.Red("IMPORTANT"), chalk.Yellow(item.To), chalk.Green(item.Notes))
 			}
 		}
 		slog.Info(action, "file", item.To)
 	}
 
 	return nil
-}
-
-// parseMeta is a lenient parser: malformed entries are skipped with a warning.
-func parseMeta(meta []string) map[string]string {
-	result, _ := parse.ParseKeyValues(meta, false)
-	return result
 }

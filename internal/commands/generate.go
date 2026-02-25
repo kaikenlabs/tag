@@ -83,23 +83,18 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 		return app.Errorf("invalid target name: %w", err)
 	}
 
-	var args string
-	if c.Args().Len() > 2 {
-		args = c.Args().Get(2)
-	}
-
 	target, err := resolveGenerateTarget(cfg, generatorOrBundleName, c.Path(flags.BundlePathFlag))
 	if err != nil {
 		return err
 	}
 
 	if target.IsBundle {
-		return generateBundle(c, cfg, generatorOrBundleName, targetName, args, target.BundlePath)
+		return generateBundle(c, cfg, generatorOrBundleName, targetName, target.BundlePath)
 	}
-	return generateTemplate(c, cfg, generatorOrBundleName, targetName, args, target.GenDir, target.SharedDir)
+	return generateTemplate(c, cfg, generatorOrBundleName, targetName, target.GenDir, target.SharedDir)
 }
 
-func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, args, bundlePath string) error {
+func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, bundlePath string) error {
 	if !c.Bool("no-hooks") {
 		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen); err != nil {
 			return err
@@ -153,7 +148,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 			return app.Errorf("error creating engine: %w", genErr)
 		}
 
-		genData := engine.Data{Name: targetName, Args: args, RawMeta: c.StringSlice(flags.MetaFlag)}
+		genData := engine.Data{Name: targetName, RawMeta: c.StringSlice(flags.MetaFlag)}
 		if cfg.Variables != nil {
 			genData.ScaffoldVars = cfg.Variables
 		}
@@ -169,7 +164,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	return nil
 }
 
-func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, args, dirPath, sharedPath string) error {
+func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, dirPath, sharedPath string) error {
 	if !c.Bool("no-hooks") {
 		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen); err != nil {
 			return err
@@ -183,7 +178,7 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		return app.Errorf("error creating engine: %w", err)
 	}
 
-	data := engine.Data{Name: targetName, Args: args, RawMeta: c.StringSlice(flags.MetaFlag)}
+	data := engine.Data{Name: targetName, RawMeta: c.StringSlice(flags.MetaFlag)}
 	if cfg.Variables != nil {
 		data.ScaffoldVars = cfg.Variables
 	}

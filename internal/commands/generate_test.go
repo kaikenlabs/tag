@@ -122,14 +122,14 @@ func TestUT_GenerateAction_WithArgs(t *testing.T) {
 	templateContent := `---
 to: output/{{ .Name }}.txt
 ---
-Hello {{ .Name }} with {{ .Args }}`
+Hello {{ .Name }}`
 
 	createGenerator(t, tmpDir, "hello", templateContent)
 	createSharedDir(t, tmpDir)
 
 	cfg := createTestConfig(t, tmpDir)
 
-	ctx := createTestCLIContext(t, []string{"hello", "world", "extra-args"}, map[string]any{
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
 		flags.PathFlag:       tmpDir,
 		flags.SharedPathFlag: "_shared",
 	})
@@ -151,7 +151,6 @@ Hello {{ .Name }} with {{ .Args }}`
 
 	require.NoError(t, err)
 	assert.Equal(t, "world", capturedData.Name)
-	assert.Equal(t, "extra-args", capturedData.Args)
 }
 
 func TestUT_GenerateAction_WithMeta(t *testing.T) {

@@ -56,7 +56,7 @@ func TestUT_BuildHookEnv_BasicVariables(t *testing.T) {
 		"author":       "John Doe",
 	}
 
-	env := BuildHookEnv(vars, "/template", "/output")
+	env := BuildHookEnv(vars, "/template", "/output", io.Discard)
 
 	// Check TAG-specific variables
 	assertEnvContains(t, env, "TAG_TEMPLATE_DIR=/template")
@@ -72,7 +72,7 @@ func TestUT_BuildHookEnv_BooleanVariables(t *testing.T) {
 		"use_ci":     false,
 	}
 
-	env := BuildHookEnv(vars, "/template", "/output")
+	env := BuildHookEnv(vars, "/template", "/output", io.Discard)
 
 	assertEnvContains(t, env, "TAG_VAR_USE_DOCKER=true")
 	assertEnvContains(t, env, "TAG_VAR_USE_CI=false")
@@ -84,7 +84,7 @@ func TestUT_BuildHookEnv_NumberVariables(t *testing.T) {
 		"version": float64(1.5),
 	}
 
-	env := BuildHookEnv(vars, "/template", "/output")
+	env := BuildHookEnv(vars, "/template", "/output", io.Discard)
 
 	assertEnvContains(t, env, "TAG_VAR_PORT=8080")
 	assertEnvContains(t, env, "TAG_VAR_VERSION=1.5")
@@ -98,7 +98,7 @@ func TestUT_BuildHookEnv_ComplexVariables(t *testing.T) {
 		},
 	}
 
-	env := BuildHookEnv(vars, "/template", "/output")
+	env := BuildHookEnv(vars, "/template", "/output", io.Discard)
 
 	// Complex types should be JSON encoded
 	assertEnvContainsPrefix(t, env, "TAG_VAR_FEATURES=")
@@ -127,7 +127,7 @@ func TestUT_BuildHookEnv_SpecialCharactersInNames(t *testing.T) {
 		"with@special!": "special",
 	}
 
-	env := BuildHookEnv(vars, "/template", "/output")
+	env := BuildHookEnv(vars, "/template", "/output", io.Discard)
 
 	// All should be converted to uppercase with underscores
 	assertEnvContains(t, env, "TAG_VAR_PROJECT_NAME=test")
@@ -141,7 +141,7 @@ func TestUT_BuildHookEnv_SpecialCharactersInNames(t *testing.T) {
 func TestUT_BuildHookEnv_EmptyVars(t *testing.T) {
 	vars := map[string]any{}
 
-	env := BuildHookEnv(vars, "/template", "/output")
+	env := BuildHookEnv(vars, "/template", "/output", io.Discard)
 
 	// Should still have TAG_TEMPLATE_DIR and TAG_OUTPUT_DIR
 	assertEnvContains(t, env, "TAG_TEMPLATE_DIR=/template")
@@ -153,7 +153,7 @@ func TestUT_BuildHookEnv_EmptyVars(t *testing.T) {
 func TestUT_BuildHookEnv_IncludesSystemEnv(t *testing.T) {
 	vars := map[string]any{}
 
-	env := BuildHookEnv(vars, "/template", "/output")
+	env := BuildHookEnv(vars, "/template", "/output", io.Discard)
 
 	// Should include PATH from system environment
 	hasPath := false
@@ -169,23 +169,23 @@ func TestUT_BuildHookEnv_IncludesSystemEnv(t *testing.T) {
 // --- Unit Tests for sanitizeEnvValue ---
 
 func TestUT_SanitizeEnvValue_Normal(t *testing.T) {
-	result := sanitizeEnvValue("test", "hello world")
+	result := sanitizeEnvValue("test", "hello world", io.Discard)
 	assert.Equal(t, "hello world", result)
 }
 
 func TestUT_SanitizeEnvValue_StripsNewlines(t *testing.T) {
-	result := sanitizeEnvValue("test", "line1\nline2\rline3")
+	result := sanitizeEnvValue("test", "line1\nline2\rline3", io.Discard)
 	assert.Equal(t, "line1 line2 line3", result)
 }
 
 func TestUT_SanitizeEnvValue_TruncatesLongValues(t *testing.T) {
 	longValue := strings.Repeat("a", MaxEnvValueLen+100)
-	result := sanitizeEnvValue("test", longValue)
+	result := sanitizeEnvValue("test", longValue, io.Discard)
 	assert.Len(t, result, MaxEnvValueLen)
 }
 
 func TestUT_SanitizeEnvValue_EmptyString(t *testing.T) {
-	result := sanitizeEnvValue("test", "")
+	result := sanitizeEnvValue("test", "", io.Discard)
 	assert.Equal(t, "", result)
 }
 
@@ -194,7 +194,7 @@ func TestUT_BuildHookEnv_SanitizesValues(t *testing.T) {
 		"project_name": "test\ninjection",
 	}
 
-	env := BuildHookEnv(vars, "/template", "/output")
+	env := BuildHookEnv(vars, "/template", "/output", io.Discard)
 
 	// Newlines should be replaced with spaces
 	for _, e := range env {

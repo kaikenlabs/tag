@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 type Write struct {
@@ -18,7 +20,7 @@ type fileWrite struct{}
 var _ fileReadWrite = (*fileWrite)(nil)
 
 func (f *fileWrite) WriteFile(name string, data []byte, perm os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(name), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(name), types.DirModeRestricted); err != nil {
 		return err
 	}
 	return os.WriteFile(name, data, perm)

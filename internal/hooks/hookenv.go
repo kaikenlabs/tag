@@ -3,10 +3,13 @@ package hooks
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/kaikenlabs/tag/internal/formats"
 )
 
 const (
@@ -16,7 +19,7 @@ const (
 
 // BuildHookEnv creates environment variables for hook execution.
 // It merges the current environment with TAG-specific variables.
-func BuildHookEnv(vars map[string]any, templateDir, outputDir string) []string {
+func BuildHookEnv(vars map[string]any, templateDir, outputDir string, w io.Writer) []string {
 	// Start with current environment
 	env := os.Environ()
 
@@ -31,7 +34,7 @@ func BuildHookEnv(vars map[string]any, templateDir, outputDir string) []string {
 	// Add all user variables with TAG_VAR_ prefix (sanitized)
 	for name, value := range vars {
 		envKey := formatEnvKey(name)
-		envValue := sanitizeEnvValue(name, stringifyValue(value))
+		envValue := sanitizeEnvValue(name, stringifyValue(value), w)
 		env = append(env, fmt.Sprintf("%s=%s", envKey, envValue))
 	}
 
@@ -59,11 +62,11 @@ func formatEnvKey(name string) string {
 
 // sanitizeEnvValue validates and sanitizes an environment variable value.
 // It truncates overly long values and strips newlines to prevent header injection.
-func sanitizeEnvValue(name, value string) string {
+func sanitizeEnvValue(name, value string, w io.Writer) string {
 	// Truncate overly long values
 	if len(value) > MaxEnvValueLen {
 		value = value[:MaxEnvValueLen]
-		fmt.Fprintf(os.Stderr, "Warning: variable %q value truncated to %d bytes for hook environment\n", name, MaxEnvValueLen)
+		fmt.Fprintf(w, "Warning: variable %q value truncated to %d bytes for hook environment\n", name, MaxEnvValueLen)
 	}
 
 	// Strip null bytes, newlines, and carriage returns to prevent
@@ -86,8 +89,7 @@ func stringifyValue(value any) string {
 		}
 		return "false"
 	case float64:
-		// Check if it's an integer
-		if v == float64(int64(v)) {
+		if formats.IsWholeNumber(v) {
 			return strconv.FormatInt(int64(v), 10)
 		}
 		return fmt.Sprintf("%g", v)
