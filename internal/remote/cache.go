@@ -189,7 +189,7 @@ func (c *FSCache) writeMeta(key string, meta *CacheMeta) error {
 		return err
 	}
 
-	return os.WriteFile(metaFile, data, 0o600)
+	return os.WriteFile(metaFile, data, types.FileModePrivate)
 }
 
 // Cleanup removes expired cache entries.

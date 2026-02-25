@@ -5,15 +5,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // ZipFetcher fetches templates from zip files (remote or local).
 type ZipFetcher struct {
 	client      *http.Client
+	out         io.Writer
 	maxFileSize int64 // Maximum size for downloads (default 500MB)
 	maxExtract  int64 // Maximum extracted size (default 1GB)
 	maxFiles    int   // Maximum number of files to extract (default 10000)
@@ -22,7 +27,20 @@ type ZipFetcher struct {
 // NewZipFetcher creates a new Zip fetcher.
 func NewZipFetcher() *ZipFetcher {
 	return &ZipFetcher{
-		client:      http.DefaultClient,
+		client: &http.Client{
+			Timeout: 5 * time.Minute,
+			Transport: &http.Transport{
+				Proxy:                 http.ProxyFromEnvironment,
+				DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+				ForceAttemptHTTP2:     true,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 30 * time.Second,
+				IdleConnTimeout:       90 * time.Second,
+				MaxIdleConns:          10,
+				MaxIdleConnsPerHost:   5,
+			},
+		},
+		out:         os.Stderr,
 		maxFileSize: 500 * 1024 * 1024,  // 500MB
 		maxExtract:  1024 * 1024 * 1024, // 1GB
 		maxFiles:    10000,
@@ -54,6 +72,7 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 
 	if isRemote {
 		// Download to temp file
+		f.writeStatus("Downloading template...")
 		zipPath, err = f.download(ctx, ref.URL)
 		if err != nil {
 			return "", &FetchError{Ref: ref, Message: "download failed", Err: err}
@@ -85,6 +104,7 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 	}()
 
 	// Extract zip
+	f.writeStatus("Extracting template...")
 	if err := f.extract(zipPath, tmpDir); err != nil { //nolint:govet // shadow in if-init is idiomatic
 		return "", &FetchError{Ref: ref, Message: "extraction failed", Err: err}
 	}
@@ -117,6 +137,7 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 		}
 	}
 
+	f.writeStatus("") // Clear status line
 	success = true
 	return resultPath, nil
 }
@@ -189,7 +210,7 @@ func (f *ZipFetcher) extract(zipPath, destDir string) error {
 		}
 
 		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(destPath, 0o755); err != nil {
+			if err := os.MkdirAll(destPath, types.DirMode); err != nil {
 				return fmt.Errorf("create directory: %w", err)
 			}
 			continue
@@ -234,7 +255,7 @@ func (f *ZipFetcher) sanitizePath(destDir, filePath string) (string, error) {
 // The counter tracks cumulative bytes across all files and enforces the global limit.
 func (f *ZipFetcher) extractFile(file *zip.File, destPath string, counter *countingWriter) error {
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
 	}
 
@@ -308,6 +329,15 @@ func (f *ZipFetcher) unwrapSingleRoot(dir string) (string, error) {
 
 	// Multiple items or single file, return original
 	return dir, nil
+}
+
+// writeStatus writes a status message using carriage return for in-place updates.
+func (f *ZipFetcher) writeStatus(msg string) {
+	w := f.out
+	if w == nil {
+		return
+	}
+	fmt.Fprintf(w, "\r%-40s", msg)
 }
 
 // Ensure ZipFetcher implements Fetcher.

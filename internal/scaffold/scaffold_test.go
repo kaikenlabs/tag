@@ -974,3 +974,100 @@ func TestIT_Scaffold_TagConfigDefaultOutputDir(t *testing.T) {
 	outputDir := filepath.Join(tempDir, "unwrapped_proj")
 	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
 }
+
+func TestUT_ResolveOutputDir_TraversalBlocked(t *testing.T) {
+	cwd := t.TempDir()
+
+	tests := []struct {
+		name      string
+		outputDir string
+		vars      map[string]any
+		wantErr   bool
+		wantPath  string // expected suffix when no error
+	}{
+		{
+			name:      "traversal with parent refs",
+			outputDir: "../../evil",
+			vars:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "traversal with single parent ref",
+			outputDir: "../sibling",
+			vars:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "normal project name",
+			outputDir: "my-project",
+			vars:      nil,
+			wantErr:   false,
+			wantPath:  "my-project",
+		},
+		{
+			name:      "subdirectory project",
+			outputDir: "./subdir/project",
+			vars:      nil,
+			wantErr:   false,
+			wantPath:  "subdir/project",
+		},
+		{
+			name:      "absolute path outside cwd is allowed (explicit user choice)",
+			outputDir: "/tmp/outside-cwd",
+			vars:      nil,
+			wantErr:   false,
+			wantPath:  "/tmp/outside-cwd",
+		},
+		{
+			name:      "project_name from vars with traversal",
+			outputDir: "",
+			vars:      map[string]any{"project_name": "../../etc/evil"},
+			wantErr:   true,
+		},
+		{
+			name:      "project_name from vars normal",
+			outputDir: "",
+			vars:      map[string]any{"project_name": "good-project"},
+			wantErr:   false,
+			wantPath:  "good-project",
+		},
+		{
+			name:      "benign name with dots",
+			outputDir: "project..v2",
+			vars:      nil,
+			wantErr:   false,
+			wantPath:  "project..v2",
+		},
+		{
+			name:      "path normalizes to parent",
+			outputDir: "a/../../evil",
+			vars:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "cwd itself",
+			outputDir: ".",
+			vars:      nil,
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := resolveOutputDir(tt.outputDir, tt.vars, cwd)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "escapes working directory")
+				return
+			}
+			require.NoError(t, err)
+			if tt.wantPath != "" {
+				if filepath.IsAbs(tt.wantPath) {
+					assert.Equal(t, tt.wantPath, result)
+				} else {
+					assert.Equal(t, filepath.Join(cwd, tt.wantPath), result)
+				}
+			}
+		})
+	}
+}

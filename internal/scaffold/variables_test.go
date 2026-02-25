@@ -145,6 +145,34 @@ func TestUT_VariableCollector_RequiredMissing(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrRequiredVariableMissing)
 	assert.Contains(t, err.Error(), "required_var")
+	assert.Contains(t, err.Error(), "--meta required_var=<value>")
+	assert.Contains(t, err.Error(), "--values <file.json>")
+}
+
+func TestUT_VariableCollector_RequiredMissing_MultipleVars(t *testing.T) {
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Required: true},
+			"author":       {Type: VarTypeString, Required: true},
+		},
+	}
+
+	opts := Options{
+		NoInput: true,
+	}
+
+	_, err := collector.Collect(config, opts)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRequiredVariableMissing)
+	// Both vars should be listed (sorted)
+	assert.Contains(t, err.Error(), "author, project_name")
+	// Both should have hints
+	assert.Contains(t, err.Error(), "--meta author=<value>")
+	assert.Contains(t, err.Error(), "--meta project_name=<value>")
+	assert.Contains(t, err.Error(), "--values <file.json>")
 }
 
 func TestUT_VariableCollector_PromptForRequired(t *testing.T) {

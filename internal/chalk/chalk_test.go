@@ -64,3 +64,34 @@ func TestUT_ColourTerminalOutput_EmptyString(t *testing.T) {
 		assert.Equal(t, "", result)
 	}
 }
+
+func TestUT_IsTerminal_NO_COLOR_Disables(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	assert.False(t, isTerminal())
+}
+
+func TestUT_IsTerminal_NO_COLOR_AnyValue(t *testing.T) {
+	// Per no-color.org spec, any non-empty value disables color
+	for _, val := range []string{"1", "true", "0", "false", "yes"} {
+		t.Run(val, func(t *testing.T) {
+			t.Setenv("NO_COLOR", val)
+			assert.False(t, isTerminal())
+		})
+	}
+}
+
+func TestUT_IsTerminal_NO_COLOR_Empty(t *testing.T) {
+	// Empty NO_COLOR should NOT disable colors (per spec)
+	t.Setenv("NO_COLOR", "")
+	// Result depends on actual TTY status — just verify it doesn't force-disable
+	// In CI (non-TTY), this returns false anyway; in TTY it should return true.
+	// We can't assert true in CI, so just verify the code path doesn't panic.
+	_ = isTerminal()
+}
+
+func TestUT_ColourTerminalOutput_NO_COLOR(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	result := colourTerminalOutput("hello", red)
+	assert.Equal(t, "hello", result)
+	assert.NotContains(t, result, "\033[")
+}

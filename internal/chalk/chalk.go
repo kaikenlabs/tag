@@ -54,5 +54,8 @@ func colourTerminalOutput(msg string, colourCode colourCode) string {
 }
 
 func isTerminal() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
 	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 }
