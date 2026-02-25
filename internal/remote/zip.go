@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ZipFetcher fetches templates from zip files (remote or local).
@@ -22,7 +24,19 @@ type ZipFetcher struct {
 // NewZipFetcher creates a new Zip fetcher.
 func NewZipFetcher() *ZipFetcher {
 	return &ZipFetcher{
-		client:      http.DefaultClient,
+		client: &http.Client{
+			Timeout: 5 * time.Minute,
+			Transport: &http.Transport{
+				Proxy:                 http.ProxyFromEnvironment,
+				DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+				ForceAttemptHTTP2:     true,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 30 * time.Second,
+				IdleConnTimeout:       90 * time.Second,
+				MaxIdleConns:          10,
+				MaxIdleConnsPerHost:   5,
+			},
+		},
 		maxFileSize: 500 * 1024 * 1024,  // 500MB
 		maxExtract:  1024 * 1024 * 1024, // 1GB
 		maxFiles:    10000,

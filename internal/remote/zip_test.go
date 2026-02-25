@@ -67,6 +67,10 @@ func TestUT_ZipFetcher_NewZipFetcher(t *testing.T) {
 	assert.NotNil(t, fetcher)
 	assert.NotNil(t, fetcher.client)
 	assert.Equal(t, int64(500*1024*1024), fetcher.maxFileSize)
+
+	// Verify HTTP client has a timeout set (not using http.DefaultClient)
+	assert.NotZero(t, fetcher.client.Timeout, "HTTP client should have a timeout")
+	assert.NotNil(t, fetcher.client.Transport, "HTTP client should have a custom transport")
 }
 
 func TestUT_ZipFetcher_FetchWrongType(t *testing.T) {
