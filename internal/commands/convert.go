@@ -76,7 +76,7 @@ EXAMPLES:
 func convertCookiecutterAction(c *cli.Context) error {
 	// Validate arguments
 	if c.NArg() < 1 {
-		return app.Errorf("source template is required\n\nUsage: tag convert cookiecutter <source>")
+		return app.UsageErrorf("source template is required\n\nUsage: tag convert cookiecutter <source>")
 	}
 
 	source := c.Args().Get(0)

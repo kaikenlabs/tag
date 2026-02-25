@@ -30,6 +30,26 @@ func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:  "generate",
 		Usage: "Run a generator or bundle",
+		Description: `Run a generator or bundle to create or modify files in an existing project.
+
+TAG auto-resolves generators from the library template first, then falls back
+to the local .tag/ directory. Bundles run multiple generators in sequence.
+
+ARGUMENTS
+  <bundle-or-generator>  Name of the generator or bundle to run
+  <name>                 Entity name passed as {{ name }} in templates
+
+FLAGS
+  --meta, -m key=value   Override template variables (repeatable)
+  --no-hooks             Skip pre/post hooks defined in .tagconfig.json
+  --dry-run, -d          Preview changes without writing files (global flag)
+
+EXAMPLES
+  tag generate model User
+  tag generate api-endpoint users --meta package=handlers
+  tag generate crud Product --no-hooks
+  tag generate crud Product --dry-run
+  tag generate list                    # List available generators and bundles`,
 		Subcommands: []*cli.Command{
 			generateListCommand(cfg),
 		},
@@ -69,7 +89,7 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if c.Args().Len() < 2 {
-		return app.Errorf("please provide the generator/bundle and the name")
+		return app.UsageErrorf("please provide the generator/bundle and the name")
 	}
 
 	generatorOrBundleName := c.Args().Get(0)
@@ -96,7 +116,7 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 
 func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, bundlePath string) error {
 	if !c.Bool("no-hooks") {
-		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen); err != nil {
+		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables); err != nil {
 			return err
 		}
 	}
@@ -159,14 +179,14 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	}
 
 	if !c.Bool("no-hooks") {
-		return runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen)
+		return runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables)
 	}
 	return nil
 }
 
 func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, dirPath, sharedPath string) error {
 	if !c.Bool("no-hooks") {
-		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen); err != nil {
+		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables); err != nil {
 			return err
 		}
 	}
@@ -189,12 +209,12 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 	}
 
 	if !c.Bool("no-hooks") {
-		return runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen)
+		return runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables)
 	}
 	return nil
 }
 
-func runHooks(hookCmds [][]string, phase hooks.HookPhase) error {
+func runHooks(hookCmds [][]string, phase hooks.HookPhase, vars map[string]any) error {
 	if len(hookCmds) == 0 {
 		return nil
 	}
@@ -204,7 +224,12 @@ func runHooks(hookCmds [][]string, phase hooks.HookPhase) error {
 		return app.Errorf("failed to get working directory: %w", err)
 	}
 
-	results, err := hooks.RunArgvHooks(phase, hookCmds, dir, nil)
+	var env []string
+	if len(vars) > 0 {
+		env = hooks.BuildVarEnv(vars, os.Stderr)
+	}
+
+	results, err := hooks.RunArgvHooks(phase, hookCmds, dir, env)
 
 	hooks.PrintHookResults(results, os.Stdout)
 

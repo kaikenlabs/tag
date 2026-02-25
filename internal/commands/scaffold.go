@@ -232,7 +232,7 @@ func resolveTemplateName(c *cli.Context, lib *library.Library, positional []stri
 	case scaffold.IsTTY() && !c.Bool("no-input"):
 		return pickTemplate(lib)
 	default:
-		return "", app.Errorf("template argument required\n\nUsage: tag scaffold <template> [project-name]")
+		return "", app.UsageErrorf("template argument required\n\nUsage: tag scaffold <template> [project-name]")
 	}
 }
 

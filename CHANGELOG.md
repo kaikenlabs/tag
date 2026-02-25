@@ -10,10 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **BREAKING**: Template syntax (`{{ }}`, `{% %}`, `{# #}`) in user-provided variable values is no longer rendered during path processing. This prevents Server-Side Template Injection (SSTI) attacks. Derived variables (whose defaults are template expressions) are still resolved. Use `--allow-recursive-render` to restore the previous behavior if your templates rely on recursive rendering of user input.
+- **BREAKING**: `config.CreateConfigFile` no longer accepts `*cli.Context`; it takes a `CreateConfigOptions` struct instead, decoupling the config package from the CLI framework (#145)
+- Semantic exit codes: usage errors return exit code 2, not-found errors return 3, interrupted (Ctrl-C) returns 130 (#143)
 
 ### Added
 
 - `--allow-recursive-render` flag for `tag scaffold` to opt in to the previous recursive rendering behavior
+- SSTI mitigation for file content rendering — template syntax in user-provided variable values is escaped before content rendering, not just path processing (#142)
+- Semantic exit codes via `ExitCoder` interface: 0 (OK), 1 (general), 2 (usage), 3 (not found), 130 (interrupted) (#143)
+- Rich help text for `tag generate` command with arguments, flags, and examples (#144)
+- Generate hooks now receive scaffold variables as `TAG_VAR_*` environment variables and `TAG_PROJECT_NAME` (#146)
 - Unified path containment validation via `fileutil.ValidatePathContainment` with symlink resolution
 - Symlink detection in template file loading (`LoadTemplateFiles`)
 - HTTPS enforcement for remote ZIP template URLs (HTTP rejected)
@@ -21,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Fix SSTI vulnerability in file content rendering — extends existing path protection to template body output (#142)
 - Fix SSTI vulnerability in path processor recursive rendering (#71)
 - Fix TOCTOU race condition in symlink check during scaffolding (#72)
 - Add symlink detection in template loader (#74)

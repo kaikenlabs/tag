@@ -260,6 +260,17 @@ Hooks defined in `.tagconfig.json` run automatically:
 
 Generate hooks use direct argv execution (no shell interpretation), which is safer than shell-based execution. Each hook has a **5-minute timeout** and output is limited to **1 MB**.
 
+### Hook Environment Variables
+
+Generate hooks receive scaffold-time variables (from `.tagconfig.json`) as environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `TAG_PROJECT_NAME` | Value of the `project_name` variable (if set) |
+| `TAG_VAR_<NAME>` | Each scaffold variable as `TAG_VAR_` + uppercase name |
+
+This allows hooks to access project context — for example, a post-generation formatter can read `TAG_VAR_PROJECT_NAME` to determine the project name. See the [Hooks Guide](../templates/hooks.md#generate-hooks) for details.
+
 ## Frontmatter Reference
 
 The `---` block at the top of every generator file controls how and where the output is written. Lines starting with `#` are treated as comments and ignored.

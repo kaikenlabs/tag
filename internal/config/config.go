@@ -6,10 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/urfave/cli/v2"
-
 	"github.com/kaikenlabs/tag/internal/types"
-	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -71,12 +68,21 @@ func LoadConfigFile(dir string) (*Config, error) {
 	return &config, nil
 }
 
-func CreateConfigFile(c *cli.Context) error {
+// CreateConfigOptions holds the parameters for creating a config file,
+// decoupled from the CLI framework.
+type CreateConfigOptions struct {
+	TagPath    string
+	SharedPath string
+	BundlePath string
+}
+
+// CreateConfigFile writes a new .tagconfig.json with the given options.
+func CreateConfigFile(opts CreateConfigOptions) error {
 	cfg := Config{
 		Env: Env{
-			Path:       c.String(flags.PathFlag),
-			SharedPath: c.String(flags.SharedPathFlag),
-			BundlePath: c.String(flags.BundlePathFlag),
+			Path:       opts.TagPath,
+			SharedPath: opts.SharedPath,
+			BundlePath: opts.BundlePath,
 		},
 		Hooks: Hooks{
 			Pre:  [][]string{},

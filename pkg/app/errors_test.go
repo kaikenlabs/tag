@@ -95,6 +95,58 @@ func TestUT_CommandError_ErrorsAs(t *testing.T) {
 	})
 }
 
+func TestUT_CommandError_ExitCode(t *testing.T) {
+	tests := []struct {
+		name string
+		code int
+		want int
+	}{
+		{"default code (0) returns 1", 0, ExitGeneral},
+		{"explicit code 2", ExitUsage, ExitUsage},
+		{"explicit code 3", ExitNotFound, ExitNotFound},
+		{"explicit code 130", ExitInterrupted, ExitInterrupted},
+		{"custom code 42", 42, 42},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := &CommandError{Message: "test", Code: tt.code}
+			assert.Equal(t, tt.want, err.ExitCode())
+		})
+	}
+}
+
+func TestUT_UsageErrorf(t *testing.T) {
+	err := UsageErrorf("missing argument: %s", "name")
+
+	cmdErr, ok := err.(*CommandError)
+	require.True(t, ok)
+	assert.Equal(t, ExitUsage, cmdErr.ExitCode())
+	assert.Equal(t, "missing argument: name", cmdErr.Message)
+}
+
+func TestUT_NotFoundErrorf(t *testing.T) {
+	err := NotFoundErrorf("template %q not found", "foo")
+
+	cmdErr, ok := err.(*CommandError)
+	require.True(t, ok)
+	assert.Equal(t, ExitNotFound, cmdErr.ExitCode())
+	assert.Equal(t, `template "foo" not found`, cmdErr.Message)
+}
+
+func TestUT_CommandError_ImplementsExitCoder(t *testing.T) {
+	// Verify CommandError has an ExitCode() int method
+	// (compatible with cli.ExitCoder interface)
+	err := &CommandError{Message: "test", Code: ExitUsage}
+
+	type exitCoder interface {
+		ExitCode() int
+	}
+
+	var ec exitCoder = err
+	assert.Equal(t, ExitUsage, ec.ExitCode())
+}
+
 func TestUT_Errorf_FormatsMessage(t *testing.T) {
 	tests := []struct {
 		name   string

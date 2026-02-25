@@ -26,8 +26,10 @@ type OutputWriter interface {
 
 // DefaultOutputWriter implements OutputWriter.
 type DefaultOutputWriter struct {
-	engine        template.TemplateRenderer
-	pathProcessor PathProcessor
+	engine               template.TemplateRenderer
+	pathProcessor        PathProcessor
+	allowRecursiveRender bool
+	derivedVarNames      map[string]bool
 }
 
 // NewOutputWriter creates a new output writer.
@@ -38,6 +40,37 @@ func NewOutputWriter(engine template.TemplateRenderer, pathProcessor PathProcess
 	}
 }
 
+// SetAllowRecursiveRender controls whether user-provided variable values
+// containing template syntax are rendered in file content. When false (default),
+// template delimiters in non-derived variable values are escaped to prevent SSTI.
+func (w *DefaultOutputWriter) SetAllowRecursiveRender(allow bool) {
+	w.allowRecursiveRender = allow
+}
+
+// SetDerivedVarNames sets the derived variable names for SSTI protection.
+// Derived variables are always rendered through the template engine.
+func (w *DefaultOutputWriter) SetDerivedVarNames(names map[string]bool) {
+	w.derivedVarNames = names
+}
+
+// escapeNonDerivedVars returns a copy of vars where template delimiters in
+// non-derived string values are escaped with sentinel tokens, preventing SSTI.
+func (w *DefaultOutputWriter) escapeNonDerivedVars(vars map[string]any) map[string]any {
+	safe := make(map[string]any, len(vars))
+	for k, v := range vars {
+		if w.derivedVarNames[k] {
+			safe[k] = v
+			continue
+		}
+		if s, ok := v.(string); ok {
+			safe[k] = escapeTemplateSyntax(s)
+		} else {
+			safe[k] = v
+		}
+	}
+	return safe
+}
+
 // Ensure DefaultOutputWriter implements OutputWriter.
 var _ OutputWriter = (*DefaultOutputWriter)(nil)
 
@@ -45,8 +78,16 @@ var _ OutputWriter = (*DefaultOutputWriter)(nil)
 //
 //nolint:gocognit // file processing with multiple format-dependent branches
 func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[string]any) error {
-	// Build template context
-	ctx := buildTemplateContext(vars)
+	// Escape non-derived variable values to prevent SSTI in file content.
+	// When allowRecursiveRender is false (default), template delimiters in
+	// user-provided values are replaced with sentinel tokens before rendering.
+	safeVars := vars
+	if !w.allowRecursiveRender {
+		safeVars = w.escapeNonDerivedVars(vars)
+	}
+
+	// Build template context with (possibly escaped) vars
+	ctx := buildTemplateContext(safeVars)
 
 	// Load .tagignore patterns (nil matcher if file absent or empty)
 	ignoreMatcher, err := loadIgnorePatterns(templateRoot)
@@ -269,6 +310,13 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 	result, err := tmpl.Execute(ctx)
 	if err != nil {
 		return NewFileProcessingError(srcPath, "failed to execute template", err)
+	}
+
+	// Restore escaped template delimiters back to their original form.
+	// This ensures user-provided values containing {{ }} appear literally
+	// in the output rather than being executed by the template engine.
+	if !w.allowRecursiveRender {
+		result = unescapeTemplateSyntax(result)
 	}
 
 	// Write output

@@ -1213,6 +1213,157 @@ func TestUT_Write_TagIgnoreEmpty(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// --- SSTI protection ---
+
+func TestUT_Write_SSTIBlocked_TemplateSyntaxInVarIsLiteral(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Template file uses {{ vars.name }}
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templateDir, "readme.txt"),
+		[]byte("Project: {{ vars.name }}"),
+		0o644,
+	))
+
+	// User provides template syntax as variable value (SSTI attack)
+	vars := map[string]any{"name": "{{ range(999) }}x{{ endfor }}"}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "readme.txt"))
+	require.NoError(t, err)
+	// Template syntax should appear literally, NOT executed
+	assert.Equal(t, "Project: {{ range(999) }}x{{ endfor }}", string(content))
+}
+
+func TestUT_Write_SSTIBlocked_NormalVarsStillWork(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templateDir, "file.txt"),
+		[]byte("Hello {{ vars.name }}, version {{ vars.version }}"),
+		0o644,
+	))
+
+	vars := map[string]any{"name": "World", "version": "1.0"}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "Hello World, version 1.0", string(content))
+}
+
+func TestUT_Write_SSTIBlocked_StmtAndCommentSyntax(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templateDir, "file.txt"),
+		[]byte("Value: {{ vars.input }}"),
+		0o644,
+	))
+
+	// User tries {% %} and {# #} injection
+	vars := map[string]any{"input": "{% if true %}pwned{% endif %}{# comment #}"}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "Value: {% if true %}pwned{% endif %}{# comment #}", string(content))
+}
+
+func TestUT_Write_SSTIAllowRecursiveRender(t *testing.T) {
+	engine := mustNewEngine(t)
+	pathProcessor := NewPathProcessor(engine)
+	writer := NewOutputWriter(engine, pathProcessor)
+	writer.SetAllowRecursiveRender(true)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templateDir, "file.txt"),
+		[]byte("{{ vars.expr }}"),
+		0o644,
+	))
+
+	// With allowRecursiveRender=true, values are NOT escaped (no sentinel tokens
+	// appear in the output). Gonja does not re-evaluate string values, so the
+	// template syntax in the value is output literally — but without any
+	// escape/unescape round-trip.
+	vars := map[string]any{"expr": "{{ 1 + 1 }}"}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "{{ 1 + 1 }}", string(content))
+}
+
+func TestUT_Write_SSTIDerivedVarsNotEscaped(t *testing.T) {
+	engine := mustNewEngine(t)
+	pathProcessor := NewPathProcessor(engine)
+	writer := NewOutputWriter(engine, pathProcessor)
+	// Mark "greeting" as a derived variable — its value should not be escaped
+	writer.SetDerivedVarNames(map[string]bool{"greeting": true})
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templateDir, "file.txt"),
+		[]byte("{{ vars.greeting }}\nInput: {{ vars.input }}"),
+		0o644,
+	))
+
+	// "greeting" is derived (not escaped), "input" is user-provided (escaped)
+	vars := map[string]any{
+		"greeting": "Hello!",
+		"input":    "{{ malicious }}",
+	}
+	err := writer.Write(templateDir, outputDir, vars)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
+	require.NoError(t, err)
+	// greeting rendered normally, input appears literally (escaped then unescaped)
+	assert.Equal(t, "Hello!\nInput: {{ malicious }}", string(content))
+}
+
+// --- unescapeTemplateSyntax ---
+
+func TestUT_UnescapeTemplateSyntax_RoundTrip(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"expression delimiters", "{{ vars.name }}"},
+		{"statement delimiters", "{% if true %}yes{% endif %}"},
+		{"comment delimiters", "{# a comment #}"},
+		{"mixed", "{{ x }} {% if y %}{# z #}{% endif %}"},
+		{"no delimiters", "plain text"},
+		{"empty string", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			escaped := escapeTemplateSyntax(tt.input)
+			unescaped := unescapeTemplateSyntax(escaped)
+			assert.Equal(t, tt.input, unescaped, "round-trip should restore original")
+		})
+	}
+}
+
 // --- test helpers ---
 
 // testDirEntry wraps os.FileInfo to implement fs.DirEntry for tests.

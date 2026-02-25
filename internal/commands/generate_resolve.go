@@ -59,13 +59,13 @@ func resolveGeneratorPaths(cfg *config.Config, name string) (genDir, sharedDir s
 
 	// 3. Not found
 	if cfg.HasTemplateOrigin() {
-		return "", "", app.Errorf("%w", &GeneratorNotFoundError{
+		return "", "", app.NotFoundErrorf("%w", &GeneratorNotFoundError{
 			Generator: name,
 			Template:  cfg.Template.Name,
 			Source:    cfg.Template.Source,
 		})
 	}
-	return "", "", app.Errorf("%w", &GeneratorNotFoundError{
+	return "", "", app.NotFoundErrorf("%w", &GeneratorNotFoundError{
 		Generator: name,
 		LocalPath: cfg.Env.Path,
 	})
@@ -138,7 +138,7 @@ func resolveBundlePath(cfg *config.Config, bundleName, bundleSubDir string) (str
 		}
 	}
 
-	return "", app.Errorf("cannot open bundle file: bundle %q not found", bundleName)
+	return "", app.NotFoundErrorf("cannot open bundle file: bundle %q not found", bundleName)
 }
 
 // resolveBundleFromLibrary attempts to find a bundle file in the library template.

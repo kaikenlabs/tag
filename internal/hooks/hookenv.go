@@ -41,6 +41,26 @@ func BuildHookEnv(vars map[string]any, templateDir, outputDir string, w io.Write
 	return env
 }
 
+// BuildVarEnv creates environment variables containing only TAG_VAR_* entries
+// and TAG_PROJECT_NAME. Unlike BuildHookEnv, it does not set TAG_TEMPLATE_DIR
+// or TAG_OUTPUT_DIR, making it suitable for generate hooks where those paths
+// are not applicable.
+func BuildVarEnv(vars map[string]any, w io.Writer) []string {
+	env := os.Environ()
+
+	if projectName, ok := vars["project_name"]; ok {
+		env = append(env, "TAG_PROJECT_NAME="+stringifyValue(projectName))
+	}
+
+	for name, value := range vars {
+		envKey := formatEnvKey(name)
+		envValue := sanitizeEnvValue(name, stringifyValue(value), w)
+		env = append(env, fmt.Sprintf("%s=%s", envKey, envValue))
+	}
+
+	return env
+}
+
 // formatEnvKey converts a variable name to an environment variable key.
 // Example: "project_name" -> "TAG_VAR_PROJECT_NAME"
 // Example: "use-docker" -> "TAG_VAR_USE_DOCKER"

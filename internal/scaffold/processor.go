@@ -133,6 +133,12 @@ func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]an
 		result = rendered
 	}
 
+	// Restore escaped template delimiters to their original form so that
+	// user-provided values containing {{ }} appear literally in paths.
+	if !p.allowRecursiveRender {
+		result = unescapeTemplateSyntax(result)
+	}
+
 	return result, nil
 }
 
@@ -179,5 +185,20 @@ func escapeTemplateSyntax(s string) string {
 	s = strings.ReplaceAll(s, "%}", sentinelCloseStmt)
 	s = strings.ReplaceAll(s, "{#", sentinelOpenComment)
 	s = strings.ReplaceAll(s, "#}", sentinelCloseComment)
+	return s
+}
+
+// unescapeTemplateSyntax reverses escapeTemplateSyntax, restoring sentinel
+// tokens back to their original Jinja2 template delimiters.
+func unescapeTemplateSyntax(s string) string {
+	if !strings.Contains(s, "\x00") {
+		return s
+	}
+	s = strings.ReplaceAll(s, sentinelOpenExpr, "{{")
+	s = strings.ReplaceAll(s, sentinelCloseExpr, "}}")
+	s = strings.ReplaceAll(s, sentinelOpenStmt, "{%")
+	s = strings.ReplaceAll(s, sentinelCloseStmt, "%}")
+	s = strings.ReplaceAll(s, sentinelOpenComment, "{#")
+	s = strings.ReplaceAll(s, sentinelCloseComment, "#}")
 	return s
 }
