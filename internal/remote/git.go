@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 // GitFetcher fetches templates from Git repositories.
 type GitFetcher struct {
 	auth AuthProvider
+	out  io.Writer
 }
 
 // NewGitFetcher creates a new Git fetcher with the given auth provider.
@@ -23,7 +25,7 @@ func NewGitFetcher(auth AuthProvider) *GitFetcher {
 	if auth == nil {
 		auth = NewEnvAuthProvider()
 	}
-	return &GitFetcher{auth: auth}
+	return &GitFetcher{auth: auth, out: os.Stderr}
 }
 
 // Fetch clones the repository and returns the path to the template.
@@ -126,9 +128,10 @@ func (f *GitFetcher) clone(ctx context.Context, ref *Reference, destDir string) 
 // doClone performs the actual git clone with the given URL and auth.
 func (f *GitFetcher) doClone(ctx context.Context, url string, ref *Reference, destDir string, auth transport.AuthMethod) (*git.Repository, error) {
 	opts := &git.CloneOptions{
-		URL:   url,
-		Depth: 1, // Shallow clone for efficiency
-		Auth:  auth,
+		URL:      url,
+		Depth:    1, // Shallow clone for efficiency
+		Auth:     auth,
+		Progress: f.progressWriter(),
 	}
 
 	// If we have a specific version, we might need to fetch it
@@ -251,6 +254,14 @@ func (f *GitFetcher) wrapCloneError(ref *Reference, err error) error {
 	}
 
 	return &FetchError{Ref: ref, Message: "clone failed", Err: errors.New(errStr)}
+}
+
+// progressWriter returns the configured output writer, defaulting to io.Discard.
+func (f *GitFetcher) progressWriter() io.Writer {
+	if f.out != nil {
+		return f.out
+	}
+	return io.Discard
 }
 
 // sanitizeErrorMessage strips potential credential fragments from error messages.
