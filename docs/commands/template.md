@@ -53,7 +53,7 @@ tag template new generator <name> [flags]
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--package` | `-k` | `mypackage` | Package name for the generated Go file |
+| `--package` | `-p` | `mypackage` | Package name for the generated Go file |
 | `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
 | `--in-bundle` | `-B` | | Create generator inside a bundle directory (for self-contained bundles) |
 
@@ -64,7 +64,7 @@ tag template new generator <name> [flags]
 tag template new generator handler
 
 # Create with a custom package name
-tag template new generator handler -k api
+tag template new generator handler -p api
 
 # Create in a library template
 tag template new generator handler --lib

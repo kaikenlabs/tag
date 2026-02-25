@@ -271,5 +271,4 @@ if err != nil {
   - `docs/commands/` - Command reference (scaffold, generate, convert)
   - `docs/templates/` - Template authoring guides (syntax, filters, hooks)
   - `docs/reference/` - Configuration reference (tag.template.json, remote-refs)
-  - `docs/migration/` - Migration guide (v1-to-v2)
   - `docs/getting-started.md` - Getting started guide

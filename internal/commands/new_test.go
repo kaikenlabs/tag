@@ -250,14 +250,21 @@ func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {
 	assert.True(t, cmd.Args)
 	assert.Equal(t, "<generator-name>", cmd.ArgsUsage)
 
-	// Verify package flag exists
+	// Verify description is present
+	assert.NotEmpty(t, cmd.Description)
+
+	// Verify package flag exists with correct alias
 	var hasPackageFlag bool
 	for _, f := range cmd.Flags {
-		if sf, ok := f.(*cli.StringFlag); ok && sf.Name == "package" {
-			hasPackageFlag = true
-			assert.Equal(t, "mypackage", sf.Value)
-			break
+		sf, ok := f.(*cli.StringFlag)
+		if !ok || sf.Name != "package" {
+			continue
 		}
+		hasPackageFlag = true
+		assert.Equal(t, "mypackage", sf.Value)
+		assert.Contains(t, sf.Aliases, "p", "package flag should have -p alias")
+		assert.NotContains(t, sf.Aliases, "k", "package flag should not have old -k alias")
+		break
 	}
 	assert.True(t, hasPackageFlag, "should have package flag")
 

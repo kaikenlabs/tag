@@ -37,6 +37,9 @@ install: build ## build and install to ~/.local/bin
 	@cp $(APP_NAME) ~/.local/bin/$(APP_NAME)
 	@echo "Installed $(APP_NAME) to ~/.local/bin/$(APP_NAME)"
 
+clean: ## Remove build artifacts and coverage reports
+	@rm -f $(APP_NAME) coverage.out coverage.html
+
 # HELP
 # This will output the help for each task
 # thanks to https://marmelab.com/blog/2016/02/29/auto-documented-makefile.html

@@ -146,5 +146,6 @@ func TestUT_InitCommand_ReturnsValidCommand(t *testing.T) {
 	require.NotNil(t, cmd)
 	assert.Equal(t, "init", cmd.Name)
 	assert.NotEmpty(t, cmd.Usage)
+	assert.NotEmpty(t, cmd.Description)
 	assert.NotNil(t, cmd.Action)
 }
