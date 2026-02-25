@@ -178,7 +178,7 @@ tag template new generator greet --in-bundle examples
 
 This creates generators at `.tag/_bundles/examples/hello/` and `.tag/_bundles/examples/greet/` instead of `.tag/hello/`. Self-contained bundles are distributable and don't depend on project-level generators.
 
-See [Self-Contained Bundles](../../TAG_REFERENCE.md#self-contained-bundles) in the TAG Reference for details.
+See [Self-Contained Bundles](../../.skill/SKILL.md#self-contained-bundles) in the TAG skill reference for details.
 
 ## --lib Flag
 
