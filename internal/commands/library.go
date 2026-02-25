@@ -3,6 +3,7 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -109,36 +110,36 @@ func libAddCommand() *cli.Command {
 				return asAppError(err)
 			}
 
-			printAddResult(result)
+			printAddResult(c.App.Writer, result)
 			return nil
 		},
 	}
 }
 
-func printAddResult(result *library.AddResult) {
+func printAddResult(w io.Writer, result *library.AddResult) {
 	action := "Added"
 	if result.IsUpdate {
 		action = "Updated"
 	}
 
-	fmt.Printf("%s template %q\n", action, result.Name)
-	fmt.Printf("  Source: %s\n", result.Source)
-	fmt.Printf("  Path:   %s\n", result.TemplateDir)
+	fmt.Fprintf(w, "%s template %q\n", action, result.Name)
+	fmt.Fprintf(w, "  Source: %s\n", result.Source)
+	fmt.Fprintf(w, "  Path:   %s\n", result.TemplateDir)
 
 	if result.ConvertedFrom != "" {
-		fmt.Printf("  Converted from: %s\n", result.ConvertedFrom)
+		fmt.Fprintf(w, "  Converted from: %s\n", result.ConvertedFrom)
 	}
 
 	if len(result.Warnings) > 0 {
-		fmt.Println()
-		fmt.Println("Warnings:")
-		for _, w := range result.Warnings {
-			fmt.Printf("  - %s\n", w)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Warnings:")
+		for _, warn := range result.Warnings {
+			fmt.Fprintf(w, "  - %s\n", warn)
 		}
 	}
 
-	fmt.Println()
-	fmt.Printf("Run with: tag scaffold %s\n", result.Name)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Run with: tag scaffold %s\n", result.Name)
 }
 
 func libListCommand() *cli.Command {
@@ -158,15 +159,15 @@ func libListCommand() *cli.Command {
 			}
 
 			if len(entries) == 0 {
-				fmt.Println("No templates installed.")
-				fmt.Println()
-				fmt.Println("Add one with: tag lib add <ref>")
+				fmt.Fprintln(c.App.Writer, "No templates installed.")
+				fmt.Fprintln(c.App.Writer)
+				fmt.Fprintln(c.App.Writer, "Add one with: tag lib add <ref>")
 				return nil
 			}
 
 			// Print table header
-			fmt.Printf("%-20s %-30s %-10s %s\n", "NAME", "SOURCE", "VERSION", "DESCRIPTION")
-			fmt.Printf("%-20s %-30s %-10s %s\n", "----", "------", "-------", "-----------")
+			fmt.Fprintf(c.App.Writer, "%-20s %-30s %-10s %s\n", "NAME", "SOURCE", "VERSION", "DESCRIPTION")
+			fmt.Fprintf(c.App.Writer, "%-20s %-30s %-10s %s\n", "----", "------", "-------", "-----------")
 
 			for _, entry := range entries {
 				version := entry.Version
@@ -174,7 +175,7 @@ func libListCommand() *cli.Command {
 					version = "-"
 				}
 				desc := truncate(entry.Description, 40)
-				fmt.Printf("%-20s %-30s %-10s %s\n",
+				fmt.Fprintf(c.App.Writer, "%-20s %-30s %-10s %s\n",
 					truncate(entry.Name, 20),
 					truncate(entry.Source, 30),
 					truncate(version, 10),
@@ -209,7 +210,7 @@ func libRemoveCommand() *cli.Command {
 				return asAppError(err)
 			}
 
-			fmt.Printf("Removed template %q\n", name)
+			fmt.Fprintf(c.App.Writer, "Removed template %q\n", name)
 			return nil
 		},
 	}
@@ -242,7 +243,7 @@ func updateSingleTemplate(c *cli.Context, lib *library.Library) error {
 	if err != nil {
 		return asAppError(err)
 	}
-	printAddResult(result)
+	printAddResult(c.App.Writer, result)
 	return nil
 }
 
@@ -251,9 +252,9 @@ func updateAllTemplates(c *cli.Context, lib *library.Library) error {
 
 	// Print successfully updated templates even on partial failure
 	if len(results) > 0 {
-		fmt.Printf("Updated %d template(s)\n", len(results))
+		fmt.Fprintf(c.App.Writer, "Updated %d template(s)\n", len(results))
 		for _, r := range results {
-			fmt.Printf("  - %s\n", r.Name)
+			fmt.Fprintf(c.App.Writer, "  - %s\n", r.Name)
 		}
 	}
 

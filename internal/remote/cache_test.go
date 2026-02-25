@@ -230,11 +230,16 @@ func TestUT_FSCache_List(t *testing.T) {
 	_, err = cache.Set("key2", srcDir, &CacheMeta{FetchedAt: time.Now(), Version: "v2"})
 	require.NoError(t, err)
 
-	keys, err := cache.List()
+	entries, err := cache.List()
 	require.NoError(t, err)
-	assert.Len(t, keys, 2)
-	assert.Contains(t, keys, "key1")
-	assert.Contains(t, keys, "key2")
+	assert.Len(t, entries, 2)
+
+	keyNames := make([]string, len(entries))
+	for i, e := range entries {
+		keyNames[i] = e.Key
+	}
+	assert.Contains(t, keyNames, "key1")
+	assert.Contains(t, keyNames, "key2")
 }
 
 func TestUT_FSCache_Cleanup(t *testing.T) {
@@ -260,7 +265,7 @@ func TestUT_FSCache_Cleanup(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run cleanup
-	err = cache.Cleanup()
+	_, err = cache.Cleanup()
 	require.NoError(t, err)
 
 	// Expired should be gone

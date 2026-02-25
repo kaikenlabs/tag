@@ -2,12 +2,9 @@ package commands
 
 import (
 	"bytes"
-	"io"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/kaikenlabs/tag/internal/convert"
 )
@@ -160,9 +157,9 @@ func TestUT_PrintConversionResult(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := captureStdout(t, func() {
-				printConversionResult(tt.result)
-			})
+			var buf bytes.Buffer
+			printConversionResult(&buf, tt.result)
+			output := buf.String()
 
 			for _, s := range tt.contains {
 				assert.Contains(t, output, s)
@@ -178,26 +175,4 @@ func TestUT_ConvertCookiecutterAction_MissingArguments(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "source template is required")
-}
-
-// captureStdout captures stdout output during the execution of fn.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	os.Stdout = w
-
-	fn()
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, r)
-	require.NoError(t, err)
-
-	return buf.String()
 }

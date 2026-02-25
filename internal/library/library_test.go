@@ -18,6 +18,14 @@ import (
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
+// newWithDir creates a Library with explicit dependencies (for testing).
+func newWithDir(dataDir string, resolver Resolver) *Library {
+	return &Library{
+		dataDir:  dataDir,
+		resolver: resolver,
+	}
+}
+
 // localResolver is a test resolver that returns local paths as-is.
 type localResolver struct{}
 
@@ -57,7 +65,7 @@ func TestUT_DeriveName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := deriveName(tt.ref)
+			got := remote.DeriveName(tt.ref)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -162,7 +170,7 @@ func TestUT_Add_InvalidName_ExplicitEmpty(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "test", "", "")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "."})
 	assert.ErrorIs(t, err, ErrInvalidName)
@@ -176,7 +184,7 @@ func TestUT_Add_InvalidName_PathTraversal(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "test", "", "")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	tests := []struct {
 		name string
@@ -198,7 +206,7 @@ func TestUT_Add_InvalidName_PathTraversal(t *testing.T) {
 
 func TestUT_Add_NonExistentRef(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &failResolver{err: errors.New("not found")})
+	lib := newWithDir(dataDir, &failResolver{err: errors.New("not found")})
 
 	_, err := lib.Add(context.Background(), AddOptions{
 		Ref:  "/nonexistent/path/that/does/not/exist",
@@ -213,7 +221,7 @@ func TestUT_Add_AutoDeriveName(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "test", "", "")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	// Name is empty, should be derived from ref (filepath.Base of the temp dir)
 	result, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc})
@@ -229,7 +237,7 @@ func TestUT_Add_ForcePreservesAddedAt(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "v1", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -256,7 +264,7 @@ func TestUT_Add_LocalTagTemplate(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "A Go API template", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	result, err := lib.Add(context.Background(), AddOptions{
 		Ref:  templateSrc,
@@ -285,7 +293,7 @@ func TestUT_Add_Duplicate_Errors(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "test", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -299,7 +307,7 @@ func TestUT_Add_Duplicate_WithForce(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "test", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -314,7 +322,7 @@ func TestUT_Add_CookiecutterTemplate(t *testing.T) {
 	templateSrc := t.TempDir()
 	createCookiecutterTemplate(t, templateSrc)
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	result, err := lib.Add(context.Background(), AddOptions{
 		Ref:  templateSrc,
@@ -331,7 +339,7 @@ func TestUT_Remove_Existing(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "test", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -346,7 +354,7 @@ func TestUT_Remove_Existing(t *testing.T) {
 
 func TestUT_Remove_Missing(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	err := lib.Remove("nonexistent")
 	assert.ErrorIs(t, err, ErrTemplateNotFound)
@@ -354,7 +362,7 @@ func TestUT_Remove_Missing(t *testing.T) {
 
 func TestUT_List_Empty(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	entries, err := lib.List()
 	require.NoError(t, err)
@@ -363,7 +371,7 @@ func TestUT_List_Empty(t *testing.T) {
 
 func TestUT_List_Sorted(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	// Add in reverse order
 	for _, name := range []string{"zebra", "alpha", "middle"} {
@@ -386,7 +394,7 @@ func TestUT_Get_Existing(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "A Go API", "2.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -400,7 +408,7 @@ func TestUT_Get_Existing(t *testing.T) {
 
 func TestUT_Get_Missing(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Get("nonexistent")
 	assert.ErrorIs(t, err, ErrTemplateNotFound)
@@ -411,7 +419,7 @@ func TestUT_TemplatePath(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "", "")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -424,7 +432,7 @@ func TestUT_TemplatePath(t *testing.T) {
 
 func TestUT_TemplatePath_Missing(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.TemplatePath("nonexistent")
 	assert.ErrorIs(t, err, ErrTemplateNotFound)
@@ -434,7 +442,7 @@ func TestUT_Registry_Persistence(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Add with one library instance
-	lib1 := NewWithDir(dataDir, &localResolver{})
+	lib1 := newWithDir(dataDir, &localResolver{})
 	src := t.TempDir()
 	createTagTemplate(t, src, "go-api", "test", "1.0.0")
 
@@ -442,7 +450,7 @@ func TestUT_Registry_Persistence(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read with a new library instance (simulates new session)
-	lib2 := NewWithDir(dataDir, &localResolver{})
+	lib2 := newWithDir(dataDir, &localResolver{})
 	entry, err := lib2.Get("go-api")
 	require.NoError(t, err)
 	assert.Equal(t, "go-api", entry.Name)
@@ -453,7 +461,7 @@ func TestUT_Remove_DeletesFilesFromDisk(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "test", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	result, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -472,7 +480,7 @@ func TestUT_Remove_DeletesFilesFromDisk(t *testing.T) {
 
 func TestUT_Update_NonExistent(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Update(context.Background(), "nonexistent")
 	assert.ErrorIs(t, err, ErrTemplateNotFound)
@@ -480,7 +488,7 @@ func TestUT_Update_NonExistent(t *testing.T) {
 
 func TestUT_UpdateAll_EmptyLibrary(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.UpdateAll(context.Background())
 	assert.ErrorIs(t, err, ErrEmptyLibrary)
@@ -488,7 +496,7 @@ func TestUT_UpdateAll_EmptyLibrary(t *testing.T) {
 
 func TestUT_UpdateAll_MultipleTemplates(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	for _, name := range []string{"alpha", "beta"} {
 		src := t.TempDir()
@@ -507,7 +515,7 @@ func TestUT_TemplatePath_DiskMissing(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "test", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -529,7 +537,7 @@ func TestUT_Add_TemplateWithNoConfig(t *testing.T) {
 	// Only create a README, no tag.template.json
 	require.NoError(t, os.WriteFile(filepath.Join(templateSrc, "README.md"), []byte("# Hello"), 0o644))
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	result, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "bare"})
 	require.NoError(t, err)
@@ -543,7 +551,7 @@ func TestUT_Add_TemplateWithNoConfig(t *testing.T) {
 
 func TestUT_Remove_InvalidName(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	assert.ErrorIs(t, lib.Remove(""), ErrInvalidName)
 	assert.ErrorIs(t, lib.Remove(".."), ErrInvalidName)
@@ -553,7 +561,7 @@ func TestUT_Remove_InvalidName(t *testing.T) {
 
 func TestUT_Get_InvalidName(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Get("")
 	assert.ErrorIs(t, err, ErrInvalidName)
@@ -565,7 +573,7 @@ func TestUT_Get_InvalidName(t *testing.T) {
 
 func TestUT_Add_NilResolver(t *testing.T) {
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, nil)
+	lib := newWithDir(dataDir, nil)
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: "/some/path", Name: "test"})
 	assert.Error(t, err)
@@ -648,7 +656,7 @@ func TestUT_TemplatePath_RejectsSymlink(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "test", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -755,7 +763,7 @@ func TestUT_StoreTemplateFresh_InconsistentState(t *testing.T) {
 	require.NoError(t, os.MkdirAll(destPath, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(destPath, "existing.txt"), []byte("pre-existing"), 0o600))
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	// Add should succeed (routes through atomic path due to existing dir)
 	result, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
@@ -769,7 +777,7 @@ func TestUT_StoreTemplateFresh_InconsistentState(t *testing.T) {
 func TestUT_ThreeStepAtomicSwap(t *testing.T) {
 	// Verify that the three-step atomic swap preserves data on update
 	dataDir := t.TempDir()
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	// Add initial template
 	src1 := t.TempDir()
@@ -807,7 +815,7 @@ func TestUT_Remove_SymlinkDir(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "test", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)
@@ -858,7 +866,7 @@ func TestUT_UpdateAll_PartialFailure(t *testing.T) {
 	createTagTemplate(t, src2, "beta", "beta desc", "1.0.0")
 
 	// Use a normal resolver for the initial add
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: src1, Name: "alpha"})
 	require.NoError(t, err)
@@ -866,7 +874,7 @@ func TestUT_UpdateAll_PartialFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now use a selective-fail resolver that fails for src2
-	failLib := NewWithDir(dataDir, &selectiveFailResolver{
+	failLib := newWithDir(dataDir, &selectiveFailResolver{
 		failRefs: map[string]bool{src2: true},
 	})
 
@@ -894,7 +902,7 @@ func TestUT_Update_RefetchesFromSource(t *testing.T) {
 	templateSrc := t.TempDir()
 	createTagTemplate(t, templateSrc, "go-api", "v1 desc", "1.0.0")
 
-	lib := NewWithDir(dataDir, &localResolver{})
+	lib := newWithDir(dataDir, &localResolver{})
 
 	_, err := lib.Add(context.Background(), AddOptions{Ref: templateSrc, Name: "go-api"})
 	require.NoError(t, err)

@@ -3,7 +3,7 @@ package commands
 import (
 	"errors"
 	"fmt"
-	"os"
+	"log/slog"
 	"strings"
 
 	"github.com/manifoldco/promptui"
@@ -185,7 +185,7 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	opts.TemplateRef = templateRef
 	opts.IsRemote = isRemote
 	if isRemote {
-		opts.TemplateName = deriveTemplateName(templateRef)
+		opts.TemplateName = remote.DeriveName(templateRef)
 	}
 
 	// Create and run scaffold
@@ -381,12 +381,12 @@ func runCookiecutterConversion(c *cli.Context, templateDir, destination string) 
 		return nil, app.Errorf("conversion failed: %w", err)
 	}
 
-	fmt.Printf("Converted template to: %s\n", result.Destination)
-	fmt.Printf("  Variables: %d, Files: %d\n", result.VariablesConverted, result.FilesProcessed)
+	fmt.Fprintf(c.App.Writer, "Converted template to: %s\n", result.Destination)
+	fmt.Fprintf(c.App.Writer, "  Variables: %d, Files: %d\n", result.VariablesConverted, result.FilesProcessed)
 	if len(result.Warnings) > 0 {
-		fmt.Printf("  Warnings: %d (review after scaffolding)\n", len(result.Warnings))
+		fmt.Fprintf(c.App.Writer, "  Warnings: %d (review after scaffolding)\n", len(result.Warnings))
 	}
-	fmt.Println()
+	fmt.Fprintln(c.App.Writer)
 
 	return result, nil
 }
@@ -414,15 +414,15 @@ func promptForProjectDir(prompter scaffold.Prompter, opts *scaffold.Options) err
 func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 	lib, err := newLocalLibrary()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not add template to library: %v\n", err)
+		slog.Warn("could not add template to library", "error", err)
 		return
 	}
 
-	name := deriveTemplateName(templateRef)
+	name := remote.DeriveName(templateRef)
 
 	// Skip if the template is already in the library.
 	if _, getErr := lib.Get(name); getErr == nil {
-		fmt.Printf("\nTemplate %q already in library. Run with: tag scaffold %s\n", name, name)
+		fmt.Fprintf(c.App.Writer, "\nTemplate %q already in library. Run with: tag scaffold %s\n", name, name)
 		return
 	}
 
@@ -433,17 +433,11 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 		ResolvedDir: templateDir,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not add template to library: %v\n", err)
+		slog.Warn("could not add template to library", "error", err)
 		return
 	}
 
-	fmt.Printf("\nTemplate added to library as %q. Run with: tag scaffold %s\n", result.Name, result.Name)
-}
-
-// deriveTemplateName extracts a library-compatible template name from a remote reference.
-// For example, "bb:whalar/go-ms-service-template" becomes "go-ms-service-template".
-func deriveTemplateName(ref string) string {
-	return remote.DeriveName(ref)
+	fmt.Fprintf(c.App.Writer, "\nTemplate added to library as %q. Run with: tag scaffold %s\n", result.Name, result.Name)
 }
 
 // suggestConvertedTemplateName generates a default name for converted template output.

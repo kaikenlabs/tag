@@ -48,6 +48,7 @@ func main() {
 			commands.ScaffoldCommand(),
 			commands.TemplateCommand(cfg),
 			commands.LibCommand(),
+			commands.CacheCommand(),
 			commands.ConvertCommand(),
 			commands.VersionCommand(Version),
 		},

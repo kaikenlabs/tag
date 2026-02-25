@@ -13,7 +13,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/convert"
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/remote"
-	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/validate"
 )
@@ -50,21 +50,13 @@ func NewLocal(dataDir string) *Library {
 	return &Library{dataDir: dataDir}
 }
 
-// NewWithDir creates a Library with explicit dependencies (for testing).
-func NewWithDir(dataDir string, resolver Resolver) *Library {
-	return &Library{
-		dataDir:  dataDir,
-		resolver: resolver,
-	}
-}
-
 // Add installs a template into the library.
 func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) {
 	// Derive name
 	name := opts.Name
 	autoDerived := name == ""
 	if autoDerived {
-		name = deriveName(opts.Ref)
+		name = remote.DeriveName(opts.Ref)
 	}
 
 	if err := validateName(name); err != nil {
@@ -246,7 +238,7 @@ func storeTemplateAtomic(ctx context.Context, resolvedDir, destPath, name string
 
 // storeToDir detects the template type and copies or converts into targetDir.
 func storeToDir(ctx context.Context, resolvedDir, targetDir string, opts AddOptions, result *AddResult) error {
-	_, isCookiecutter := scaffold.IsCookiecutterTemplate(resolvedDir)
+	_, isCookiecutter := tmplconfig.IsCookiecutterTemplate(resolvedDir)
 	if isCookiecutter {
 		return storeCookiecutterToDir(ctx, resolvedDir, targetDir, opts, result)
 	}
@@ -427,11 +419,6 @@ func (l *Library) TemplatePath(name string) (string, error) {
 	return path, nil
 }
 
-// deriveName extracts a template name from a reference string.
-func deriveName(ref string) string {
-	return remote.DeriveName(ref)
-}
-
 // validateName checks that a template name is valid for use as a directory name.
 func validateName(name string) error {
 	if err := validate.TemplateName(name); err != nil {
@@ -453,7 +440,7 @@ func ReadTemplateMetadata(templateDir string) (version, description string, err 
 		return "", "", fmt.Errorf("read %s: %w", types.TemplateConfigFile, err)
 	}
 
-	config, err := scaffold.ParseTemplateConfig(data)
+	config, err := tmplconfig.ParseTemplateConfig(data)
 	if err != nil {
 		return "", "", fmt.Errorf("parse %s: %w", types.TemplateConfigFile, err)
 	}

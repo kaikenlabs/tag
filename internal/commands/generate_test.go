@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1133,22 +1134,17 @@ func TestUT_WarnVersionMismatch_PrintsWarning(t *testing.T) {
 	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
 	cfg.Template.Version = "1.0.0" // scaffolded version differs
 
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
+	// Capture slog output
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	old := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(old)
 
 	warnVersionMismatch(cfg, templateDir)
 
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 	output := buf.String()
-
-	assert.Contains(t, output, "Warning: template version mismatch")
+	assert.Contains(t, output, "template version mismatch")
 	assert.Contains(t, output, "1.0.0")
 	assert.Contains(t, output, "2.0.0")
 }
@@ -1162,19 +1158,14 @@ func TestUT_WarnVersionMismatch_NoWarningWhenMatch(t *testing.T) {
 	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
 	cfg.Template.Version = "1.0.0"
 
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
+	// Capture slog output
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	old := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(old)
 
 	warnVersionMismatch(cfg, templateDir)
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 
 	assert.Empty(t, buf.String(), "no warning expected when versions match")
 }
@@ -1185,19 +1176,14 @@ func TestUT_WarnVersionMismatch_SkipsWhenNoVersion(t *testing.T) {
 	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
 	cfg.Template.Version = "" // no version recorded at scaffold time
 
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
+	// Capture slog output
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	old := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(old)
 
 	warnVersionMismatch(cfg, templateDir)
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 
 	assert.Empty(t, buf.String(), "no warning expected when scaffold version is empty")
 }

@@ -28,6 +28,7 @@ TAG is a Go-based CLI tool for template-driven code generation and project scaff
 - `tag template info <template>` - Show template metadata, variables, hooks, and docs
 - `tag template list` - List available generators and bundles
 - `tag lib add|list|remove|update|edit` - Template library management
+- `tag cache clear [--all]|list` - Template cache management
 - `tag convert cookiecutter <source>` - Convert Cookiecutter templates to TAG format
 - `tag version [--check]` - Print version, optionally check for updates
 
@@ -135,7 +136,12 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── interpreter.go      - Script interpreter resolution (shebang, extension)
     │       └── errors.go           - HookError type and sentinels
     │
-    ├── internal/convert/       Cookiecutter conversion
+    ├── internal/tmplconfig/    Shared template configuration types
+    │       ├── types.go            - TemplateConfig, VariableDef, VariableType
+    │       ├── parse.go            - ParseTemplateConfig, variable parsing
+    │       └── detect.go           - IsCookiecutterTemplate detection
+    │
+    ├── internal/convert/       Cookiecutter conversion (depends on tmplconfig, not scaffold)
     │       ├── cookiecutter.go     - Converter orchestration
     │       ├── variables.go        - Variable conversion
     │       ├── paths.go            - Path placeholder conversion
