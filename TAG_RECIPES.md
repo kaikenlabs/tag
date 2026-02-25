@@ -555,8 +555,8 @@ This creates `.tag/_bundles/examples/examples.json` with `"self_contained": true
 ### Step 2: Add generators inside the bundle
 
 ```bash
-tag template new generator hello --in-bundle examples -k mypackage
-tag template new generator greet --in-bundle examples -k mypackage
+tag template new generator hello --in-bundle examples -p mypackage
+tag template new generator greet --in-bundle examples -p mypackage
 ```
 
 This creates generators at `.tag/_bundles/examples/hello/hello.go` and `.tag/_bundles/examples/greet/greet.go` instead of the usual `.tag/hello/`.

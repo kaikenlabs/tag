@@ -13,6 +13,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Reserve Write/Edit for new files or non-code files (config, docs, memory)
 4. Use sequential thinking MCP for complex thinking operations.
 5. Use ref MCP server to look for documentation on well known libraries.
+6. After implementing code changes, check if `TAG_REFERENCE.md` and `TAG_RECIPES.md` need updating:
+  - New/changed CLI commands, flags, or environment variables → update TAG_REFERENCE.md
+  - New/changed user-facing behavior (exit codes, prompts, output) → update TAG_REFERENCE.md
+  - New usage patterns or workflow examples → update TAG_RECIPES.md
+  - Flag alias changes or renamed options → update both files
 
 ## Project Overview
 
