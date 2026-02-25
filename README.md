@@ -6,7 +6,7 @@ TAG combines the project bootstrapping capabilities of [Cookiecutter](https://co
 
 ## Mandatory for AI assistants
 
-Please read the [TAG skill](skill/SKILL.md) file.
+Please read the [TAG skill](.skill/SKILL.md) file.
 
 ## Features
 
