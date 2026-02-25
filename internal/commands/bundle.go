@@ -44,7 +44,7 @@ func templateNewBundleCommand(cfg *config.Config) *cli.Command {
 
 func bundleAction(c *cli.Context, cfg *config.Config) error {
 	if c.Args().Len() == 0 {
-		return app.Errorf("please provide the bundle name")
+		return app.UsageErrorf("please provide the bundle name")
 	}
 	bundleName := c.Args().Get(0)
 

@@ -92,7 +92,7 @@ func libAddCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 1 {
-				return app.Errorf("template reference is required\n\nUsage: tag lib add <ref>")
+				return app.UsageErrorf("template reference is required\n\nUsage: tag lib add <ref>")
 			}
 
 			lib, err := newLibrary()
@@ -196,7 +196,7 @@ func libRemoveCommand() *cli.Command {
 		BashComplete: completeLibraryTemplateNames,
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 1 {
-				return app.Errorf("template name is required\n\nUsage: tag lib rm <name>")
+				return app.UsageErrorf("template name is required\n\nUsage: tag lib rm <name>")
 			}
 
 			lib, err := newLocalLibrary()
@@ -288,7 +288,7 @@ func libEditCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 1 {
-				return app.Errorf("template name is required\n\nUsage: tag lib edit <name>")
+				return app.UsageErrorf("template name is required\n\nUsage: tag lib edit <name>")
 			}
 
 			lib, err := newLocalLibrary()

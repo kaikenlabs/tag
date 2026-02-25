@@ -862,6 +862,47 @@ func assertEnvNotContainsPrefix(t *testing.T, env []string, prefix string) {
 	}
 }
 
+// --- Unit Tests for BuildVarEnv ---
+
+func TestUT_BuildVarEnv_BasicVariables(t *testing.T) {
+	vars := map[string]any{
+		"project_name": "my_project",
+		"author":       "Jane",
+	}
+
+	env := BuildVarEnv(vars, io.Discard)
+
+	assertEnvContains(t, env, "TAG_PROJECT_NAME=my_project")
+	assertEnvContains(t, env, "TAG_VAR_PROJECT_NAME=my_project")
+	assertEnvContains(t, env, "TAG_VAR_AUTHOR=Jane")
+
+	// Should NOT contain TAG_TEMPLATE_DIR or TAG_OUTPUT_DIR
+	for _, e := range env {
+		assert.False(t, strings.HasPrefix(e, "TAG_TEMPLATE_DIR="),
+			"BuildVarEnv should not set TAG_TEMPLATE_DIR")
+		assert.False(t, strings.HasPrefix(e, "TAG_OUTPUT_DIR="),
+			"BuildVarEnv should not set TAG_OUTPUT_DIR")
+	}
+}
+
+func TestUT_BuildVarEnv_EmptyVars(t *testing.T) {
+	env := BuildVarEnv(map[string]any{}, io.Discard)
+
+	// Should still include system environment
+	assert.NotEmpty(t, env)
+
+	// No TAG_VAR_ entries
+	for _, e := range env {
+		assert.False(t, strings.HasPrefix(e, "TAG_VAR_"),
+			"empty vars should produce no TAG_VAR_ entries")
+	}
+}
+
+func TestUT_BuildVarEnv_NilVars(t *testing.T) {
+	env := BuildVarEnv(nil, io.Discard)
+	assert.NotEmpty(t, env, "nil vars should still include system env")
+}
+
 // filterTagEnv returns only TAG_ prefixed env vars for easier debugging
 func filterTagEnv(env []string) []string {
 	var result []string

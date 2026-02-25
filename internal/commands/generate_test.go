@@ -374,12 +374,12 @@ Hello {{ .Name }}`
 }
 
 func TestUT_RunHooks_EmptyHooks(t *testing.T) {
-	err := runHooks([][]string{}, hooks.HookPhasePreGen)
+	err := runHooks([][]string{}, hooks.HookPhasePreGen, nil)
 	require.NoError(t, err)
 }
 
 func TestUT_RunHooks_NilHooks(t *testing.T) {
-	err := runHooks(nil, hooks.HookPhasePreGen)
+	err := runHooks(nil, hooks.HookPhasePreGen, nil)
 	require.NoError(t, err)
 }
 
@@ -399,7 +399,7 @@ func TestUT_RunHooks_ValidHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative path with ./ prefix to indicate it's a local file
-	err = runHooks([][]string{{"./test-hook.sh"}}, hooks.HookPhasePreGen)
+	err = runHooks([][]string{{"./test-hook.sh"}}, hooks.HookPhasePreGen, nil)
 	require.NoError(t, err)
 }
 
@@ -418,7 +418,7 @@ func TestUT_RunHooks_FailingHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative path with ./ prefix to indicate it's a local file
-	err = runHooks([][]string{{"./failing-hook.sh"}}, hooks.HookPhasePreGen)
+	err = runHooks([][]string{{"./failing-hook.sh"}}, hooks.HookPhasePreGen, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hook failed")
 }
@@ -444,7 +444,7 @@ func TestUT_RunHooks_StopsOnFailure(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative paths with ./ prefix to indicate they are local files
-	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}}, hooks.HookPhasePreGen)
+	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}}, hooks.HookPhasePreGen, nil)
 	require.Error(t, err)
 
 	// Verify second hook didn't run
@@ -461,13 +461,13 @@ func TestUT_RunHooks_NonexistentCommand(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-	err = runHooks([][]string{{"nonexistent-command-xyz"}}, hooks.HookPhasePreGen)
+	err = runHooks([][]string{{"nonexistent-command-xyz"}}, hooks.HookPhasePreGen, nil)
 	require.Error(t, err)
 }
 
 func TestUT_RunHooks_PathCommand(t *testing.T) {
 	// Test that PATH commands work (e.g., "echo" should be found in PATH)
-	err := runHooks([][]string{{"echo", "hello"}}, hooks.HookPhasePreGen)
+	err := runHooks([][]string{{"echo", "hello"}}, hooks.HookPhasePreGen, nil)
 	require.NoError(t, err)
 }
 
@@ -486,7 +486,7 @@ func TestUT_RunHooks_RelativePathCommand(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Relative path should resolve from working directory
-	err = runHooks([][]string{{"./myscript.sh"}}, hooks.HookPhasePreGen)
+	err = runHooks([][]string{{"./myscript.sh"}}, hooks.HookPhasePreGen, nil)
 	require.NoError(t, err)
 }
 

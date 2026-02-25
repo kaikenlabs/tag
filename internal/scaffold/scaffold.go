@@ -60,6 +60,7 @@ func NewScaffold(opts Options) (*Scaffold, error) {
 	processor := NewPathProcessor(engine)
 	processor.SetAllowRecursiveRender(opts.AllowRecursiveRender)
 	writer := NewOutputWriter(engine, processor)
+	writer.SetAllowRecursiveRender(opts.AllowRecursiveRender)
 
 	return &Scaffold{
 		validator:  validator,
@@ -132,14 +133,17 @@ func (s *Scaffold) loadConfig(ctx *runContext) error {
 		ctx.opts.TemplateVersion = config.Version
 	}
 
-	// Set derived variable names on the processor for SSTI protection.
-	if configurable, ok := s.processor.(SSTIConfigurable); ok {
-		derivedNames := make(map[string]bool)
-		for name, def := range config.Vars {
-			if def.IsDerived() || def.IsPrivate(name) {
-				derivedNames[name] = true
-			}
+	// Set derived variable names on the processor and writer for SSTI protection.
+	derivedNames := make(map[string]bool)
+	for name, def := range config.Vars {
+		if def.IsDerived() || def.IsPrivate(name) {
+			derivedNames[name] = true
 		}
+	}
+	if configurable, ok := s.processor.(SSTIConfigurable); ok {
+		configurable.SetDerivedVarNames(derivedNames)
+	}
+	if configurable, ok := s.writer.(SSTIConfigurable); ok {
 		configurable.SetDerivedVarNames(derivedNames)
 	}
 

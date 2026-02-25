@@ -150,6 +150,32 @@ func TestUT_HasTemplateOrigin_NilConfig(t *testing.T) {
 	assert.False(t, cfg.HasTemplateOrigin())
 }
 
+func TestUT_CreateConfigFile(t *testing.T) {
+	// Change to temp dir so CreateConfigFile writes there
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	err = CreateConfigFile(CreateConfigOptions{
+		TagPath:    ".tag",
+		SharedPath: "_shared",
+		BundlePath: "_bundles",
+	})
+	require.NoError(t, err)
+
+	cfg, err := LoadConfigFile(tmpDir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	assert.Equal(t, ".tag", cfg.Env.Path)
+	assert.Equal(t, "_shared", cfg.Env.SharedPath)
+	assert.Equal(t, "_bundles", cfg.Env.BundlePath)
+	assert.Empty(t, cfg.Hooks.Pre)
+	assert.Empty(t, cfg.Hooks.Post)
+}
+
 func TestUT_CheckConfig_NilConfig(t *testing.T) {
 	err := CheckConfig(nil)
 	require.Error(t, err)

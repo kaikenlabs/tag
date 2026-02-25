@@ -36,7 +36,11 @@ func initAction(c *cli.Context) error {
 		return app.Errorf("cannot initialise tag's bundle path: %w", err)
 	}
 
-	if err := config.CreateConfigFile(c); err != nil {
+	if err := config.CreateConfigFile(config.CreateConfigOptions{
+		TagPath:    c.String(flags.PathFlag),
+		SharedPath: c.String(flags.SharedPathFlag),
+		BundlePath: c.String(flags.BundlePathFlag),
+	}); err != nil {
 		return app.Errorf("cannot create the config file at %s: %w", dirPath, err)
 	}
 

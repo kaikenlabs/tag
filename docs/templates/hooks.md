@@ -466,6 +466,49 @@ Python hooks are executed using the system's `python3` (or `python`) interpreter
 
 > **Note**: TAG tries `python3` first, then `python`. If neither is installed, the hook will fail with a clear "command not found" error.
 
+## Generate Hooks
+
+The `tag generate` command also supports pre and post hooks, defined in `.tagconfig.json` under `hooks.pre` and `hooks.post`. These hooks run before and after code generation, similar to scaffold hooks.
+
+### Environment Variables
+
+Generate hooks receive scaffold-time variables as environment variables:
+
+| Environment Variable | Description |
+|---------------------|-------------|
+| `TAG_PROJECT_NAME` | Value of the `project_name` variable (if set) |
+| `TAG_VAR_<NAME>` | Each scaffold variable as `TAG_VAR_` + uppercase name |
+
+Variable names follow the same transformation rules as scaffold hooks (uppercase, non-alphanumeric characters become underscores).
+
+> **Note**: Generate hooks do **not** receive `TAG_TEMPLATE_DIR` or `TAG_OUTPUT_DIR` — those are scaffold-specific.
+
+### Example
+
+```json
+{
+  "hooks": {
+    "post": [
+      ["gofmt", "-w", "."],
+      ["goimports", "-w", "."]
+    ]
+  }
+}
+```
+
+```bash
+# In a post-generation hook script:
+echo "Formatting code for $TAG_PROJECT_NAME..."
+```
+
+### Skipping Hooks
+
+Use `--no-hooks` to skip hook execution:
+
+```bash
+tag generate model User --no-hooks
+```
+
 ## See Also
 
 - [Template Authoring](authoring.md) - Complete template guide

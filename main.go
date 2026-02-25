@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 
 	"github.com/kaikenlabs/tag/pkg/prettylog"
 
+	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
 
 	"github.com/kaikenlabs/tag/internal/commands"
 	"github.com/kaikenlabs/tag/internal/config"
@@ -73,13 +76,35 @@ func main() {
 				EnvVars: []string{"TAG_BUNDLE_PATH"},
 			},
 		},
+		// Custom error handler to avoid urfave/cli printing errors (we use slog).
+		ExitErrHandler: handleExitError,
 	}
 	tag.Commands = append(tag.Commands, commands.CompletionCommand(tag))
 
 	if err := tag.Run(os.Args); err != nil {
+		exitCode := app.ExitGeneral
+
+		// Check for prompt cancellation (Ctrl+C) → exit 130
+		if errors.Is(err, scaffold.ErrPromptCancelled) {
+			os.Exit(app.ExitInterrupted)
+		}
+
+		// Extract exit code from CommandError
+		var cmdErr *app.CommandError
+		if errors.As(err, &cmdErr) {
+			exitCode = cmdErr.ExitCode()
+		}
+
 		slog.Error(err.Error())
-		os.Exit(1)
+		os.Exit(exitCode)
 	}
+}
+
+// handleExitError is the ExitErrHandler for urfave/cli. It prevents
+// the framework from printing errors or calling os.Exit, letting main()
+// handle error reporting and exit codes consistently.
+func handleExitError(_ *cli.Context, _ error) {
+	// Intentionally empty: errors are handled in main() after tag.Run() returns.
 }
 
 func setLogger() {

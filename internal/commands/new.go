@@ -50,7 +50,7 @@ func templateNewGeneratorCommand(cfg *config.Config) *cli.Command {
 func newAction(c *cli.Context, cfg *config.Config) error {
 	generator := c.Args().Get(0)
 	if generator == "" {
-		return app.Errorf("please provide the generator name")
+		return app.UsageErrorf("please provide the generator name")
 	}
 
 	if err := ValidateNameSafe(generator); err != nil {
