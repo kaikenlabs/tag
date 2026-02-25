@@ -13,11 +13,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Reserve Write/Edit for new files or non-code files (config, docs, memory)
 4. Use sequential thinking MCP for complex thinking operations.
 5. Use ref MCP server to look for documentation on well known libraries.
-6. After implementing code changes, check if `TAG_REFERENCE.md` and `TAG_RECIPES.md` need updating:
-  - New/changed CLI commands, flags, or environment variables → update TAG_REFERENCE.md
-  - New/changed user-facing behavior (exit codes, prompts, output) → update TAG_REFERENCE.md
-  - New usage patterns or workflow examples → update TAG_RECIPES.md
-  - Flag alias changes or renamed options → update both files
+6. After implementing code changes, check if the TAG skill files need updating:
+  - New/changed CLI commands, flags, or environment variables → update `skill/SKILL.md` and `skill/reference.md`
+  - New/changed user-facing behavior (exit codes, prompts, output) → update `skill/SKILL.md` or `skill/reference.md`
+  - New usage patterns or workflow examples → update `skill/recipes.md`
+  - Flag alias changes or renamed options → update `skill/SKILL.md` and `skill/reference.md`
 
 ## Project Overview
 
@@ -272,6 +272,10 @@ if err != nil {
 
 ## Documentation
 
+- `skill/` - TAG authoring skill (for AI agents and external consumers)
+  - `skill/SKILL.md` - Core reference: decision tree, generator/bundle anatomy, CLI quick reference, pitfalls
+  - `skill/reference.md` - Full syntax, filters, variable system, hooks, remote templates
+  - `skill/recipes.md` - Real-world patterns and examples (CRUD bundles, inject patterns, scaffolds)
 - `docs/` - User-facing documentation
   - `docs/commands/` - Command reference (scaffold, generate, convert)
   - `docs/templates/` - Template authoring guides (syntax, filters, hooks)
