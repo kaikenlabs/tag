@@ -659,6 +659,8 @@ Cookiecutter templates are **auto-detected and converted** when added to the lib
 | `tag lib rm <name>` | Remove template from library |
 | `tag lib update [name]` | Update template(s) from source |
 | `tag lib edit <name>` | Open template in editor |
+| `tag cache clear [--all]` | Clear expired (or all) cached remote templates |
+| `tag cache list` | List cached remote templates |
 | `tag version [--check]` | Print version, check for updates |
 
 ### Common flags
@@ -677,7 +679,29 @@ Cookiecutter templates are **auto-detected and converted** when added to the lib
 | `-B` / `--in-bundle` | template new generator | Create generator inside a bundle directory |
 | `-s` / `--self-contained` | template new bundle | Create bundle with `self_contained: true` |
 | `--update` / `-u` | scaffold, template info | Force refresh of cached remote templates |
+| `-p` / `--package` | template new generator | Package name for the generator (default: "mypackage") |
 | `--dry-run` / `-d` | generate, convert | Preview without writing files |
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `GITHUB_TOKEN` | Authentication for GitHub remote templates |
+| `GITLAB_TOKEN` | Authentication for GitLab remote templates |
+| `BITBUCKET_TOKEN` | Authentication for Bitbucket remote templates |
+| `NO_COLOR` | Disable colored output when set to any non-empty value (per [no-color.org](https://no-color.org/)) |
+
+### Exit codes
+
+TAG uses semantic exit codes for scripting and CI integration:
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | General application error |
+| `2` | Usage/argument error (missing args, invalid flags) |
+| `3` | Resource not found (template, library entry) |
+| `130` | Interrupted by user (Ctrl+C / SIGINT) |
 
 ## Pitfalls & Gotchas
 
