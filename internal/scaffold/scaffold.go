@@ -307,11 +307,37 @@ func resolveOutputDir(outputDir string, vars map[string]any, cwd string) (string
 		}
 	}
 
-	if !filepath.IsAbs(outputDir) {
+	// Track whether the original path was absolute (explicit user choice via --output).
+	wasAbsolute := filepath.IsAbs(outputDir)
+
+	if !wasAbsolute {
 		outputDir = filepath.Join(cwd, outputDir)
 	}
 
-	return outputDir, nil
+	absOutput, err := filepath.Abs(filepath.Clean(outputDir))
+	if err != nil {
+		return "", fmt.Errorf("invalid output directory: %w", err)
+	}
+
+	// Always validate that resolved paths stay within the working directory.
+	// For explicitly provided absolute paths, skip containment (user's explicit choice).
+	if !wasAbsolute {
+		absCwd, err := filepath.Abs(cwd)
+		if err != nil {
+			return "", fmt.Errorf("invalid working directory: %w", err)
+		}
+
+		rel, err := filepath.Rel(absCwd, absOutput)
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve output directory relative to working directory: %w", err)
+		}
+
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("output directory %q escapes working directory", outputDir)
+		}
+	}
+
+	return absOutput, nil
 }
 
 // prepareOutputDir validates and prepares the output directory,
