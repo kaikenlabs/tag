@@ -264,7 +264,17 @@ func (c *DefaultVariableCollector) validateRequired(config *TemplateConfig, vars
 
 	if len(missing) > 0 {
 		slices.Sort(missing)
-		return fmt.Errorf("%w: %s", ErrRequiredVariableMissing, strings.Join(missing, ", "))
+
+		var metaFlags strings.Builder
+		for _, name := range missing {
+			fmt.Fprintf(&metaFlags, "  --meta %s=<value>\n", name)
+		}
+
+		return fmt.Errorf("%w: %s\n\nProvide values with:\n%s  --values <file.json>",
+			ErrRequiredVariableMissing,
+			strings.Join(missing, ", "),
+			metaFlags.String(),
+		)
 	}
 
 	return nil
