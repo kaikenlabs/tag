@@ -15,10 +15,7 @@ var (
 	green  colourCode = "\033[32m"
 	yellow colourCode = "\033[33m"
 	blue   colourCode = "\033[34m"
-	purple colourCode = "\033[35m"
 	cyan   colourCode = "\033[36m"
-	gray   colourCode = "\033[37m"
-	white  colourCode = "\033[97m"
 )
 
 // Red - colour red

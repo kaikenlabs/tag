@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -103,36 +104,36 @@ func convertCookiecutterAction(c *cli.Context) error {
 	}
 
 	// Display results
-	printConversionResult(result)
+	printConversionResult(c.App.Writer, result)
 
 	return nil
 }
 
 // printConversionResult displays the conversion summary.
-func printConversionResult(result *convert.Result) {
+func printConversionResult(w io.Writer, result *convert.Result) {
 	if result.DryRun {
-		fmt.Println("=== Dry Run - No files written ===")
-		fmt.Println()
+		fmt.Fprintln(w, "=== Dry Run - No files written ===")
+		fmt.Fprintln(w)
 	}
 
-	fmt.Printf("Converted template: %s\n", result.Destination)
-	fmt.Println()
+	fmt.Fprintf(w, "Converted template: %s\n", result.Destination)
+	fmt.Fprintln(w)
 
 	// Success indicators
-	fmt.Printf("✓ Variables: %d converted\n", result.VariablesConverted)
-	fmt.Printf("✓ Directories renamed: %d\n", result.DirsRenamed)
-	fmt.Printf("✓ Files renamed: %d\n", result.FilesRenamed)
-	fmt.Printf("✓ Files processed: %d\n", result.FilesProcessed)
+	fmt.Fprintf(w, "✓ Variables: %d converted\n", result.VariablesConverted)
+	fmt.Fprintf(w, "✓ Directories renamed: %d\n", result.DirsRenamed)
+	fmt.Fprintf(w, "✓ Files renamed: %d\n", result.FilesRenamed)
+	fmt.Fprintf(w, "✓ Files processed: %d\n", result.FilesProcessed)
 
 	if result.HooksCopied > 0 {
-		fmt.Printf("⚠ Hooks: %d files copied (review required)\n", result.HooksCopied)
+		fmt.Fprintf(w, "⚠ Hooks: %d files copied (review required)\n", result.HooksCopied)
 	}
 
 	// Incompatibilities
 	if len(result.Incompatibilities) > 0 {
-		fmt.Println()
-		fmt.Printf("⚠ Content incompatibilities found: %d\n", len(result.Incompatibilities))
-		fmt.Println("  Minor adjustments may be needed:")
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "⚠ Content incompatibilities found: %d\n", len(result.Incompatibilities))
+		fmt.Fprintln(w, "  Minor adjustments may be needed:")
 
 		// Group by file
 		byFile := make(map[string][]convert.Incompatibility)
@@ -142,12 +143,12 @@ func printConversionResult(result *convert.Result) {
 
 		for path, incs := range byFile {
 			for _, inc := range incs {
-				fmt.Printf("  - %s:%d - %s\n", path, inc.Line, inc.Kind)
+				fmt.Fprintf(w, "  - %s:%d - %s\n", path, inc.Line, inc.Kind)
 				if inc.Original != "" {
-					fmt.Printf("    Found: %s\n", truncate(inc.Original, 60))
+					fmt.Fprintf(w, "    Found: %s\n", truncate(inc.Original, 60))
 				}
 				if inc.Suggestion != "" {
-					fmt.Printf("    Gonja: %s\n", truncate(inc.Suggestion, 60))
+					fmt.Fprintf(w, "    Gonja: %s\n", truncate(inc.Suggestion, 60))
 				}
 			}
 		}
@@ -155,19 +156,19 @@ func printConversionResult(result *convert.Result) {
 
 	// Warnings
 	if len(result.Warnings) > 0 {
-		fmt.Println()
-		fmt.Println("Warnings:")
-		for _, w := range result.Warnings {
-			fmt.Printf("  ⚠ %s\n", w)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Warnings:")
+		for _, warn := range result.Warnings {
+			fmt.Fprintf(w, "  ⚠ %s\n", warn)
 		}
 	}
 
-	fmt.Println()
-	fmt.Println("See: https://tag.kaikenlabs.com/docs/migration")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "See: https://tag.kaikenlabs.com/docs/migration")
 
 	if result.DryRun {
-		fmt.Println()
-		fmt.Println("Run without --dry-run to perform the conversion.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Run without --dry-run to perform the conversion.")
 	}
 }
 

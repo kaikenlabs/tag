@@ -293,7 +293,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 	}
 
 	// Save replay data and display summary
-	saveReplayData(ctx.opts, ctx.config, ctx.vars)
+	saveReplayData(s.output, ctx.opts, ctx.config, ctx.vars)
 	s.displaySummary(ctx.outputDir, ctx.templateDirAbs, ctx.vars, ctx.opts)
 
 	success = true
@@ -366,13 +366,13 @@ func prepareOutputDir(outputDir string, force bool) error {
 }
 
 // saveReplayData saves input values for reproducible scaffolding.
-func saveReplayData(opts Options, config *TemplateConfig, vars map[string]any) {
+func saveReplayData(w io.Writer, opts Options, config *TemplateConfig, vars map[string]any) {
 	if opts.NoSave || opts.TemplateRef == "" {
 		return
 	}
 
 	if err := replay.Save(opts.TemplateRef, config.Version, vars, secretKeys(config.Vars)); err != nil {
-		fmt.Printf("Warning: failed to save replay data: %v\n", err)
+		fmt.Fprintf(w, "Warning: failed to save replay data: %v\n", err)
 	}
 }
 

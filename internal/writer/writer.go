@@ -8,11 +8,7 @@ import (
 	"sync"
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
-)
-
-const (
-	// FileModeDefault is the default file permission (rw-r--r--).
-	FileModeDefault = 0o644
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // NewFileWriter creates a new writer with a cached working directory,
@@ -57,7 +53,7 @@ func (w *Write) AppendFile(name string, data []byte) error {
 		return fmt.Errorf("path safety check failed: %w", err)
 	}
 
-	file, err := w.fs.OpenFile(name, os.O_APPEND|os.O_WRONLY, FileModeDefault)
+	file, err := w.fs.OpenFile(name, os.O_APPEND|os.O_WRONLY, types.FileMode)
 	if err != nil {
 		slog.Error("cannot open file", "file", name, "error", err)
 		return err
@@ -98,7 +94,7 @@ func (w *Write) InjectIntoFile(name string, data []byte, inject Inject) error {
 		slog.Error("cannot inject via matcher", "error", err, "file", name, "matcher", inject.Matcher, "clause", inject.Clause)
 		return err
 	}
-	if err := w.fs.WriteFile(name, formattedOutput, FileModeDefault); err != nil {
+	if err := w.fs.WriteFile(name, formattedOutput, types.FileMode); err != nil {
 		slog.Error("cannot write to file", "file", name, "error", err)
 		return err
 	}

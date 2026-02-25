@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -24,7 +24,7 @@ func TestUT_ConvertCookiecutterConfig_StringDefaults(t *testing.T) {
 	// Check project_name
 	assert.Equal(t, "my_project", config.RawVars["project_name"])
 	varDef := config.Vars["project_name"]
-	assert.Equal(t, scaffold.VarTypeString, varDef.Type)
+	assert.Equal(t, tmplconfig.VarTypeString, varDef.Type)
 	assert.Equal(t, "my_project", varDef.Default)
 
 	// Check author
@@ -60,11 +60,11 @@ func TestUT_ConvertCookiecutterConfig_BooleanDefaults(t *testing.T) {
 
 	// Check boolean type
 	varDef := config.Vars["use_docker"]
-	assert.Equal(t, scaffold.VarTypeBoolean, varDef.Type)
+	assert.Equal(t, tmplconfig.VarTypeBoolean, varDef.Type)
 	assert.Equal(t, true, varDef.Default)
 
 	varDef = config.Vars["include_tests"]
-	assert.Equal(t, scaffold.VarTypeBoolean, varDef.Type)
+	assert.Equal(t, tmplconfig.VarTypeBoolean, varDef.Type)
 	assert.Equal(t, false, varDef.Default)
 }
 
@@ -81,7 +81,7 @@ func TestUT_ConvertCookiecutterConfig_NumberDefaults(t *testing.T) {
 
 	// Check number type
 	varDef := config.Vars["port"]
-	assert.Equal(t, scaffold.VarTypeNumber, varDef.Type)
+	assert.Equal(t, tmplconfig.VarTypeNumber, varDef.Type)
 	assert.Equal(t, float64(8080), varDef.Default)
 }
 
@@ -98,7 +98,7 @@ func TestUT_ConvertCookiecutterConfig_ChoiceVariables(t *testing.T) {
 
 	// Check choice type
 	varDef := config.Vars["license"]
-	assert.Equal(t, scaffold.VarTypeChoice, varDef.Type)
+	assert.Equal(t, tmplconfig.VarTypeChoice, varDef.Type)
 	assert.Equal(t, []string{"MIT", "BSD-3", "Apache-2.0"}, varDef.Options)
 	assert.Equal(t, "MIT", varDef.Default) // First option is default
 }
@@ -196,7 +196,7 @@ func TestUT_ConvertCookiecutterConfig_EmptyConfig(t *testing.T) {
 }
 
 func TestUT_GenerateTagTemplateJSON(t *testing.T) {
-	config := &scaffold.TemplateConfig{
+	config := &tmplconfig.TemplateConfig{
 		RawVars: map[string]any{
 			"project_name": "test",
 			"use_docker": map[string]any{

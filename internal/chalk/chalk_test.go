@@ -6,6 +6,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	purple colourCode = "\033[35m"
+	gray   colourCode = "\033[37m"
+	white  colourCode = "\033[97m"
+)
+
 // Purple - colour purple (test-only helper)
 func Purple(msg string) string {
 	return colourTerminalOutput(msg, purple)

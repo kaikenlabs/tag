@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,16 +111,21 @@ func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOption
 
 	cachedPath, err := r.cache.Set(cacheKey, tempPath, meta)
 	if err != nil {
-		// Log warning but continue with temp path
-		// The template is still usable, just not cached
-		fmt.Fprintf(os.Stderr, "Warning: could not cache template: %v\n", err)
+		slog.Warn("could not cache template", "ref", ref.Original, "error", err)
 		return tempPath, nil
 	}
 
 	// 7. Clean up temp directory (ignore error - best effort)
 	_ = CleanupTempDir(tempPath)
 
-	// 8. Return cached path (subpath is already in the cached content)
+	// 8. Opportunistic cleanup of expired cache entries
+	if fsCache, ok := r.cache.(*FSCache); ok {
+		if _, cleanErr := fsCache.Cleanup(); cleanErr != nil {
+			slog.Warn("cache cleanup failed", "error", cleanErr)
+		}
+	}
+
+	// 9. Return cached path (subpath is already in the cached content)
 	return cachedPath, nil
 }
 

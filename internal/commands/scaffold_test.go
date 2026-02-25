@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kaikenlabs/tag/internal/remote"
 )
 
 func TestUT_SuggestConvertedTemplateName(t *testing.T) {
@@ -122,7 +124,7 @@ func TestUT_DeriveTemplateName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := deriveTemplateName(tt.input)
+			result := remote.DeriveName(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

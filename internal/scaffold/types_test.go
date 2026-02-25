@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/tmplconfig"
 )
 
 func TestUT_ParseTemplateConfig_ShortForm(t *testing.T) {
@@ -335,7 +337,7 @@ func TestUT_ContainsTemplateExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, containsTemplateExpression(tt.input))
+			assert.Equal(t, tt.expected, tmplconfig.ContainsTemplateExpression(tt.input))
 		})
 	}
 }

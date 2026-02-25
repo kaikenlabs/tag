@@ -3,6 +3,7 @@ package remote
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -146,8 +147,10 @@ func (c *FSCache) Set(key, sourcePath string, meta *CacheMeta) (string, error) {
 		meta.ExpiresAt = &expires
 	}
 
-	// Write metadata (ignore error - cache entry is still valid without it)
-	_ = c.writeMeta(key, meta)
+	// Write metadata — cache entry is still valid without it, but log a warning.
+	if err := c.writeMeta(key, meta); err != nil {
+		slog.Warn("failed to write cache metadata", "key", key, "error", err)
+	}
 
 	return cachePath, nil
 }
@@ -192,16 +195,17 @@ func (c *FSCache) writeMeta(key string, meta *CacheMeta) error {
 	return os.WriteFile(metaFile, data, types.FileModePrivate)
 }
 
-// Cleanup removes expired cache entries.
-func (c *FSCache) Cleanup() error {
+// Cleanup removes expired cache entries and returns the count of removed entries.
+func (c *FSCache) Cleanup() (int, error) {
 	entries, err := os.ReadDir(c.baseDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return 0, nil
 		}
-		return err
+		return 0, err
 	}
 
+	removed := 0
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -216,15 +220,23 @@ func (c *FSCache) Cleanup() error {
 
 		if meta.ExpiresAt != nil && time.Now().After(*meta.ExpiresAt) {
 			// Expired, remove (ignore error - best effort cleanup)
-			_ = c.Invalidate(key)
+			if invalidateErr := c.Invalidate(key); invalidateErr == nil {
+				removed++
+			}
 		}
 	}
 
-	return nil
+	return removed, nil
 }
 
-// List returns all cache keys.
-func (c *FSCache) List() ([]string, error) {
+// CacheEntry contains a cache key and its metadata.
+type CacheEntry struct {
+	Key  string
+	Meta *CacheMeta // nil if metadata is missing/corrupt
+}
+
+// List returns all cache entries with their metadata.
+func (c *FSCache) List() ([]CacheEntry, error) {
 	entries, err := os.ReadDir(c.baseDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -233,12 +245,44 @@ func (c *FSCache) List() ([]string, error) {
 		return nil, err
 	}
 
-	var keys []string
+	var result []CacheEntry
 	for _, entry := range entries {
-		if entry.IsDir() {
-			keys = append(keys, entry.Name())
+		if !entry.IsDir() {
+			continue
 		}
+		key := entry.Name()
+		meta, _ := c.readMeta(key) // nil if unreadable
+		result = append(result, CacheEntry{Key: key, Meta: meta})
 	}
 
-	return keys, nil
+	return result, nil
+}
+
+// ClearExpired removes only expired cache entries.
+func (c *FSCache) ClearExpired() (int, error) {
+	return c.Cleanup()
+}
+
+// ClearAll removes all cache entries.
+func (c *FSCache) ClearAll() (int, error) {
+	entries, err := os.ReadDir(c.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	removed := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if err := c.Invalidate(entry.Name()); err != nil {
+			return removed, err
+		}
+		removed++
+	}
+
+	return removed, nil
 }

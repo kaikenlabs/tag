@@ -5,20 +5,20 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/tmplconfig"
 )
 
 const typeString = "string"
 
 // ConvertCookiecutterConfig parses cookiecutter.json and converts it to TAG format.
 // Returns the converted TemplateConfig, variable conversion details, and any warnings.
-func ConvertCookiecutterConfig(data []byte) (*scaffold.TemplateConfig, []VariableConversion, []string, error) {
+func ConvertCookiecutterConfig(data []byte) (*tmplconfig.TemplateConfig, []VariableConversion, []string, error) {
 	var ccConfig map[string]any
 	if err := json.Unmarshal(data, &ccConfig); err != nil {
 		return nil, nil, nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 	}
 
-	config := &scaffold.TemplateConfig{
+	config := &tmplconfig.TemplateConfig{
 		RawVars: make(map[string]any),
 	}
 	var conversions []VariableConversion
@@ -41,7 +41,7 @@ func ConvertCookiecutterConfig(data []byte) (*scaffold.TemplateConfig, []Variabl
 	}
 
 	// Parse RawVars into typed Vars
-	config.Vars = make(map[string]scaffold.VariableDef)
+	config.Vars = make(map[string]tmplconfig.VariableDef)
 	for name, raw := range config.RawVars {
 		varDef, err := parseConvertedVariable(raw)
 		if err != nil {
@@ -159,33 +159,33 @@ func convertVariable(name string, value any) (VariableConversion, any, string) {
 }
 
 // parseConvertedVariable parses a converted variable value into VariableDef.
-func parseConvertedVariable(raw any) (scaffold.VariableDef, error) {
+func parseConvertedVariable(raw any) (tmplconfig.VariableDef, error) {
 	switch v := raw.(type) {
 	case string:
-		return scaffold.VariableDef{
-			Type:    scaffold.VarTypeString,
+		return tmplconfig.VariableDef{
+			Type:    tmplconfig.VarTypeString,
 			Default: v,
 		}, nil
 
 	case bool:
-		return scaffold.VariableDef{
-			Type:    scaffold.VarTypeBoolean,
+		return tmplconfig.VariableDef{
+			Type:    tmplconfig.VarTypeBoolean,
 			Default: v,
 		}, nil
 
 	case float64:
-		return scaffold.VariableDef{
-			Type:    scaffold.VarTypeNumber,
+		return tmplconfig.VariableDef{
+			Type:    tmplconfig.VarTypeNumber,
 			Default: v,
 		}, nil
 
 	case map[string]any:
-		varDef := scaffold.VariableDef{
-			Type: scaffold.VarTypeString,
+		varDef := tmplconfig.VariableDef{
+			Type: tmplconfig.VarTypeString,
 		}
 
 		if t, ok := v["type"].(string); ok {
-			varDef.Type = scaffold.VariableType(t)
+			varDef.Type = tmplconfig.VariableType(t)
 		}
 		if p, ok := v["prompt"].(string); ok {
 			varDef.Prompt = p
@@ -209,12 +209,12 @@ func parseConvertedVariable(raw any) (scaffold.VariableDef, error) {
 		return varDef, nil
 
 	default:
-		return scaffold.VariableDef{}, fmt.Errorf("unsupported variable format: %T", raw)
+		return tmplconfig.VariableDef{}, fmt.Errorf("unsupported variable format: %T", raw)
 	}
 }
 
 // GenerateTagTemplateJSON generates the tag.template.json content from config.
-func GenerateTagTemplateJSON(config *scaffold.TemplateConfig, name, description string) ([]byte, error) {
+func GenerateTagTemplateJSON(config *tmplconfig.TemplateConfig, name, description string) ([]byte, error) {
 	output := map[string]any{}
 
 	if name != "" {

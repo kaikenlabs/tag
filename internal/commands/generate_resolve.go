@@ -109,9 +109,11 @@ func warnVersionMismatch(cfg *config.Config, templateDir string) {
 	}
 	libVersion, _, _ := library.ReadTemplateMetadata(templateDir)
 	if libVersion != "" && libVersion != cfg.Template.Version {
-		fmt.Fprintf(os.Stderr, "Warning: template version mismatch (scaffolded: %s, library: %s). "+
-			"Consider re-scaffolding or running 'tag lib update %s'.\n",
-			cfg.Template.Version, libVersion, cfg.Template.Name)
+		slog.Warn("template version mismatch",
+			"scaffolded", cfg.Template.Version,
+			"library", libVersion,
+			"template", cfg.Template.Name,
+		)
 	}
 }
 

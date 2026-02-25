@@ -30,6 +30,7 @@ type DefaultOutputWriter struct {
 	pathProcessor        PathProcessor
 	allowRecursiveRender bool
 	derivedVarNames      map[string]bool
+	out                  io.Writer
 }
 
 // NewOutputWriter creates a new output writer.
@@ -37,6 +38,7 @@ func NewOutputWriter(engine template.TemplateRenderer, pathProcessor PathProcess
 	return &DefaultOutputWriter{
 		engine:        engine,
 		pathProcessor: pathProcessor,
+		out:           os.Stdout,
 	}
 }
 
@@ -103,7 +105,7 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 
 		// Skip symlinks to prevent exfiltration of files outside the template
 		if d.Type()&os.ModeSymlink != 0 {
-			fmt.Printf("Warning: skipping symlink %s\n", srcPath)
+			fmt.Fprintf(w.out, "Warning: skipping symlink %s\n", srcPath)
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
