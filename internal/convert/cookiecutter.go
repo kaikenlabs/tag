@@ -127,7 +127,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	// 8. Write tag.template.json
 	if !opts.DryRun {
 		// Ensure destination directory exists
-		if err := os.MkdirAll(destDir, 0o755); err != nil {
+		if err := os.MkdirAll(destDir, types.DirMode); err != nil {
 			return nil, fmt.Errorf("failed to create output directory: %w", err)
 		}
 
@@ -137,7 +137,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 		}
 
 		tagConfigPath := filepath.Join(destDir, types.TemplateConfigFile)
-		if err := os.WriteFile(tagConfigPath, tagJSON, 0o600); err != nil {
+		if err := os.WriteFile(tagConfigPath, tagJSON, types.FileMode); err != nil {
 			return nil, fmt.Errorf("failed to write tag.template.json: %w", err)
 		}
 	}
@@ -258,7 +258,7 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, result *Result,
 		//nolint:nestif // dry-run branching requires nested conditions for file operations
 		if !dryRun {
 			// Ensure parent directory exists
-			if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 

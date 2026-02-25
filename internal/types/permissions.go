@@ -18,6 +18,10 @@ const (
 	// FileMode is the default permission for created files.
 	FileMode os.FileMode = 0o644
 
+	// FileModeExecutable is for files that need execute permission
+	// (e.g., hook scripts, converted hooks).
+	FileModeExecutable os.FileMode = 0o755
+
 	// FileModePrivate is for files that should only be readable by
 	// the owner (e.g., replay data with saved variable values).
 	FileModePrivate os.FileMode = 0o600

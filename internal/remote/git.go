@@ -12,6 +12,8 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // GitFetcher fetches templates from Git repositories.
@@ -109,7 +111,7 @@ func (f *GitFetcher) clone(ctx context.Context, ref *Reference, destDir string) 
 		if sshErr == nil {
 			// Clean destDir for retry (clone requires empty directory)
 			os.RemoveAll(destDir)
-			if mkErr := os.MkdirAll(destDir, 0o755); mkErr != nil {
+			if mkErr := os.MkdirAll(destDir, types.DirMode); mkErr != nil {
 				return nil, &FetchError{Ref: ref, Message: "cannot recreate temp directory", Err: mkErr}
 			}
 

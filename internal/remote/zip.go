@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // ZipFetcher fetches templates from zip files (remote or local).
@@ -208,7 +210,7 @@ func (f *ZipFetcher) extract(zipPath, destDir string) error {
 		}
 
 		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(destPath, 0o755); err != nil {
+			if err := os.MkdirAll(destPath, types.DirMode); err != nil {
 				return fmt.Errorf("create directory: %w", err)
 			}
 			continue
@@ -253,7 +255,7 @@ func (f *ZipFetcher) sanitizePath(destDir, filePath string) (string, error) {
 // The counter tracks cumulative bytes across all files and enforces the global limit.
 func (f *ZipFetcher) extractFile(file *zip.File, destPath string, counter *countingWriter) error {
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
 	}
 

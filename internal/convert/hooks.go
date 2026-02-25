@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // HookKind identifies the type of hook script.
@@ -104,7 +106,7 @@ func (p *HooksProcessor) CopyHooks() ([]HookFinding, error) {
 	// Create hooks directory in destination
 	destHooksDir := filepath.Join(p.destDir, "hooks")
 	if !p.dryRun {
-		if err := os.MkdirAll(destHooksDir, 0o755); err != nil {
+		if err := os.MkdirAll(destHooksDir, types.DirMode); err != nil {
 			return nil, err
 		}
 	}
@@ -130,7 +132,7 @@ func (p *HooksProcessor) CopyHooks() ([]HookFinding, error) {
 // copyHookFile copies a hook file, converting {{ cookiecutter.* }} to {{ vars.* }}
 // in the file contents, and preserving its permissions.
 func copyHookFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), types.DirMode); err != nil {
 		return err
 	}
 
