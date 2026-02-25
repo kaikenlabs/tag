@@ -83,10 +83,11 @@ make test-unit                          # Run unit tests with coverage (requires
 make test-integration                   # Build and run integration test
 ```
 
-### Linting
+### Linting and Formatting
 ```bash
 go vet ./...            # Basic vet check
 make lint               # Full lint (requires: make tools first)
+make fmt                # Format code with gofumpt and goimports
 make scan               # Security scanning (gosec + govulncheck)
 ```
 

@@ -300,7 +300,8 @@ tag scaffold   # picker
 | "template path is required" | Missing template argument in non-interactive mode | Provide a template path or reference |
 | "failed to resolve template" | Invalid reference or network error | Check the template reference format |
 | "output directory already exists" | Target directory exists | Use `--force` or choose a different output |
-| "missing required variable" | Required variable has no value | Provide value via `--meta` or prompts |
+| "required variable missing" | Required variable has no value in `--no-input` mode | Error includes `--meta` and `--values` hints |
+| "output directory escapes working directory" | `project_name` contains path traversal (`../`) | Use a simple project name without path separators |
 | "This appears to be a Cookiecutter template" | Cookiecutter template in non-interactive mode | Use `tag convert cookiecutter` first |
 
 ## Migration from Previous Versions
@@ -320,6 +321,15 @@ The following commands have been restructured:
 | `tag lib inspect <name>` | `tag template info <name>` |
 
 Removed flag aliases: `-tp` (use `--path`), `-sp` (use `--shared-path`), `-bp` (use `--bundle-path`).
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `NO_COLOR` | Disable colored output when set to any non-empty value (per [no-color.org](https://no-color.org/)) |
+| `GITHUB_TOKEN` | Authentication token for GitHub remote templates |
+| `GITLAB_TOKEN` | Authentication token for GitLab remote templates |
+| `BITBUCKET_TOKEN` | Authentication token for Bitbucket remote templates |
 
 ## See Also
 
