@@ -344,6 +344,72 @@ func TestUT_VariableCollector_DerivedVarsWithMethodCalls(t *testing.T) {
 	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
 }
 
+func TestUT_VariableCollector_MetaSkipsPrompt(t *testing.T) {
+	// Variables provided via --meta flag should NOT be prompted in interactive mode
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Enter value for prompted_var"] = "prompted_value"
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"meta_var":     {Type: VarTypeString, Default: "default"},
+			"prompted_var": {Type: VarTypeString, Default: "default"},
+		},
+	}
+
+	opts := Options{
+		Meta: map[string]string{
+			"meta_var": "from_meta",
+		},
+		IsTTY: true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	// meta_var should come from --meta (not prompted)
+	assert.Equal(t, "from_meta", vars["meta_var"])
+	// prompted_var should be prompted since it wasn't in --meta
+	assert.Equal(t, "prompted_value", vars["prompted_var"])
+	// Only one prompt should have happened (prompted_var only)
+	assert.Equal(t, 1, mockPrompter.CallCount["Input"])
+}
+
+func TestUT_VariableCollector_MetaSkipsPromptAllTypes(t *testing.T) {
+	// Verify --meta skips prompts for boolean, number, and choice types too
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"bool_var":   {Type: VarTypeBoolean, Default: false},
+			"number_var": {Type: VarTypeNumber, Default: float64(0)},
+			"choice_var": {Type: VarTypeChoice, Options: []string{"a", "b"}, Default: "a"},
+		},
+	}
+
+	opts := Options{
+		Meta: map[string]string{
+			"bool_var":   "true",
+			"number_var": "42",
+			"choice_var": "b",
+		},
+		IsTTY: true,
+	}
+
+	vars, err := collector.Collect(config, opts)
+	require.NoError(t, err)
+
+	assert.Equal(t, true, vars["bool_var"])
+	assert.Equal(t, float64(42), vars["number_var"])
+	assert.Equal(t, "b", vars["choice_var"])
+	// No prompts should have happened
+	assert.Equal(t, 0, mockPrompter.CallCount["Input"])
+	assert.Equal(t, 0, mockPrompter.CallCount["Confirm"])
+	assert.Equal(t, 0, mockPrompter.CallCount["Number"])
+	assert.Equal(t, 0, mockPrompter.CallCount["Select"])
+}
+
 func TestUT_VariableCollector_TypeCoercion(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	collector := NewVariableCollector(mockPrompter)
