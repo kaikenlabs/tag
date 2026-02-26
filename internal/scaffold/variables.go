@@ -116,8 +116,11 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options)
 				continue
 			}
 
-			// Skip if explicitly provided via replay or values file
+			// Skip if explicitly provided via replay, values file, or --meta flag
 			if explicitlyProvided[name] {
+				continue
+			}
+			if _, hasMeta := opts.Meta[name]; hasMeta {
 				continue
 			}
 
