@@ -51,6 +51,7 @@ func main() {
 			commands.CacheCommand(),
 			commands.ConvertCommand(),
 			commands.VersionCommand(Version),
+			commands.UpdateCommand(Version),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{

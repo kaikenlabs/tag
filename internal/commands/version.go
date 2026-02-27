@@ -76,9 +76,7 @@ func versionCheckAction(ctx context.Context, w io.Writer, currentVersion, repoUR
 	}
 
 	fmt.Fprintf(w, "Update available: v%s → v%s\n\n", current, latestClean)
-	fmt.Fprintf(w, "  go install github.com/kaikenlabs/tag@v%s\n", latestClean)
-	fmt.Fprintf(w, "  # or\n")
-	fmt.Fprintf(w, "  curl -sSfL https://raw.githubusercontent.com/kaikenlabs/tag/main/install.sh | sh\n")
+	fmt.Fprintf(w, "  tag update\n")
 
 	return nil
 }

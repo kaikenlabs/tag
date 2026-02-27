@@ -166,6 +166,8 @@ my-project/
 | `tag lib ls` | List installed templates |
 | `tag lib rm <name>` | Remove template |
 | `tag lib update [name]` | Update from source |
+| `tag update` | Self-update to latest release |
+| `tag version [--check]` | Print version, check for updates |
 
 ### Key Flags
 

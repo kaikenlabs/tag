@@ -304,3 +304,12 @@ tag cache list                         # Show cached templates
 tag cache clear                        # Clear expired entries
 tag cache clear --all                  # Clear entire cache
 ```
+
+### Self-Update
+
+```bash
+tag update                             # Download and install latest release
+tag version --check                    # Check if update available
+```
+
+Downloads the platform-appropriate binary from GitHub Releases, verifies its SHA256 checksum, and replaces the current binary in-place.

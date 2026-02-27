@@ -107,7 +107,7 @@ func TestUT_VersionCheckAction_UpdateAvailable(t *testing.T) {
 	err := versionCheckAction(context.Background(), &buf, "v1.0.0", srv.URL)
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "Update available: v1.0.0 → v2.0.0")
-	assert.Contains(t, buf.String(), "go install")
+	assert.Contains(t, buf.String(), "tag update")
 }
 
 func TestUT_VersionCheckAction_DevBuild(t *testing.T) {
