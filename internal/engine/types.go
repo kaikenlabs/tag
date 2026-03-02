@@ -44,6 +44,15 @@ type GenerateResult struct {
 	Details     []FileOpDetail // per-file breakdown, always populated
 }
 
+// Add accumulates the counters and file-operation details from other into r.
+func (r *GenerateResult) Add(other GenerateResult) {
+	r.Created += other.Created
+	r.Skipped += other.Skipped
+	r.Overwritten += other.Overwritten
+	r.Modified += other.Modified
+	r.Details = append(r.Details, other.Details...)
+}
+
 // FileOpDetail records the outcome for a single file.
 type FileOpDetail struct {
 	Path string // destination path

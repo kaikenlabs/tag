@@ -46,7 +46,7 @@ func TestIT_Scaffold_HooksSkippedInNoInputMode(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Output should be created but hook marker should NOT exist
@@ -89,7 +89,7 @@ func TestIT_Scaffold_PreHookSuccess(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify output was created
@@ -130,7 +130,7 @@ func TestIT_Scaffold_PreHookFailure_NoOutputCreated(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pre-scaffold hook failed")
 
@@ -171,7 +171,7 @@ func TestIT_Scaffold_PostHookSuccess(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify output and marker file were created
@@ -214,7 +214,7 @@ func TestIT_Scaffold_PostHookFailure_OutputPreserved(t *testing.T) {
 	require.NoError(t, err)
 
 	// Post-hook failures should NOT cause scaffold to fail
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify output was still created despite hook failure
@@ -260,7 +260,7 @@ func TestIT_Scaffold_HooksReceiveEnvironmentVariables(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Read and verify env check file
@@ -306,7 +306,7 @@ func TestIT_Scaffold_PreHooksRunInTemplateDirectory(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Read the marker file created in template directory
@@ -347,7 +347,7 @@ func TestIT_Scaffold_PostHooksRunInOutputDirectory(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Read the marker file created in output directory
@@ -392,7 +392,7 @@ func TestIT_Scaffold_MultipleHooksExecuteInOrder(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify hooks ran in order
@@ -431,7 +431,7 @@ func TestIT_Scaffold_NoHooksConfigured(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify output was created successfully

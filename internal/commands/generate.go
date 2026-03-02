@@ -22,19 +22,31 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
-// newEngine is a function variable that creates a new generator with optional history recording.
-// It can be replaced in tests to inject a mock generator.
-var newEngine = func(dryRun bool, dirPath, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
-	tmplEngine, err := template.NewEngine()
-	if err != nil {
-		return nil, fmt.Errorf("cannot create template engine: %w", err)
-	}
-	return engine.NewGeneratorWithRecorder(tmplEngine, dryRun, dirPath, sharedPath, rec)
+// GeneratorFactory creates a generator for single-template execution.
+type GeneratorFactory func(dryRun bool, dirPath, sharedPath string, rec *history.Recorder, out io.Writer) (engine.Generator, error)
+
+// BundleGeneratorFactory creates a generator for bundle execution, sharing a template engine across generators.
+type BundleGeneratorFactory func(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath string, rec *history.Recorder, out io.Writer) (engine.Generator, error)
+
+// generatorFactories holds the factory functions used to create engine generators.
+// Tests can substitute these to inject mock generators without mutating global state.
+type generatorFactories struct {
+	newEngine       GeneratorFactory
+	newBundleEngine BundleGeneratorFactory
 }
 
-// newBundleEngine is a function variable that creates a generator with a shared template engine and history recording.
-// It can be replaced in tests to inject a mock generator.
-var newBundleEngine = engine.NewGeneratorWithRecorder
+func defaultGeneratorFactories() generatorFactories {
+	return generatorFactories{
+		newEngine: func(dryRun bool, dirPath, sharedPath string, rec *history.Recorder, out io.Writer) (engine.Generator, error) {
+			tmplEngine, err := template.NewEngine()
+			if err != nil {
+				return nil, fmt.Errorf("cannot create template engine: %w", err)
+			}
+			return engine.NewGeneratorWithRecorder(tmplEngine, dryRun, dirPath, sharedPath, rec, out)
+		},
+		newBundleEngine: engine.NewGeneratorWithRecorder,
+	}
+}
 
 func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
@@ -72,7 +84,7 @@ EXAMPLES
 		Args:      true,
 		ArgsUsage: "<bundle-or-generator> <name> [args]",
 		Action: func(c *cli.Context) error {
-			return generateAction(c, cfg)
+			return generateAction(c, cfg, defaultGeneratorFactories())
 		},
 		BashComplete: func(c *cli.Context) {
 			// Only complete the first argument (generator/bundle name)
@@ -88,7 +100,7 @@ EXAMPLES
 				Aliases: []string{"m"},
 			},
 			&cli.BoolFlag{
-				Name:  "no-hooks",
+				Name:  flags.NoHooksFlag,
 				Value: false,
 				Usage: "Skip execution of pre and post hooks",
 			},
@@ -106,7 +118,7 @@ EXAMPLES
 	}
 }
 
-func generateAction(c *cli.Context, cfg *config.Config) error {
+func generateAction(c *cli.Context, cfg *config.Config, fac generatorFactories) error {
 	if err := config.CheckConfig(cfg); err != nil {
 		return err
 	}
@@ -141,163 +153,140 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if target.IsBundle {
-		return generateBundle(c, cfg, generatorOrBundleName, targetName, target.BundlePath, onExisting)
+		return generateBundle(c, cfg, fac, generatorOrBundleName, targetName, target.BundlePath, onExisting)
 	}
-	return generateTemplate(c, cfg, generatorOrBundleName, targetName, target.GenDir, target.SharedDir, onExisting)
+	return generateTemplate(c, cfg, fac, generatorOrBundleName, targetName, target.GenDir, target.SharedDir, onExisting)
 }
 
-func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, bundlePath string, onExisting engine.OnExistingPolicy) error {
-	if !c.Bool("no-hooks") {
-		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables); err != nil {
+// generateFunc is the core generation work executed between pre/post hooks.
+// rec is the shared history recorder to pass to the engine.
+type generateFunc func(rec *history.Recorder) (engine.GenerateResult, error)
+
+// generateWithHooks runs pre-hooks, calls fn for the core generation logic, runs
+// post-hooks, records history, and prints the final summary.
+// When fn returns an error it may have already printed a partial-progress summary;
+// generateWithHooks returns the error immediately without printing again.
+func generateWithHooks(c *cli.Context, cfg *config.Config, generatorName string, fn generateFunc) error {
+	if !c.Bool(flags.NoHooksFlag) {
+		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables, c.App.Writer); err != nil {
 			return err
 		}
-	}
-
-	data, err := os.ReadFile(bundlePath)
-	if err != nil {
-		return app.Errorf("cannot open bundle file: %w", err)
-	}
-
-	var bundle engine.Bundle
-	err = json.Unmarshal(data, &bundle)
-	if err != nil {
-		return app.Errorf("cannot decode bundle file: %w", err)
-	}
-
-	// Create shared template engine for all generators in the bundle.
-	// This avoids re-creating the engine (and its cache) for each generator.
-	tmplEngine, err := template.NewEngine()
-	if err != nil {
-		return app.Errorf("cannot create template engine: %w", err)
 	}
 
 	dryRun := c.Bool(flags.DryRunFlag)
-	tagDir := types.TemplatesDir
+	rec := history.NewRecorder(types.TemplatesDir)
 
-	// Create a single recorder shared across all generators in the bundle so
-	// that first-touch semantics for hash_before work correctly.
-	rec := history.NewRecorder(tagDir)
-
-	var totalResult engine.GenerateResult
-	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
-	for _, generator := range bundle.Generators {
-		var genDirPath, sharedPath string
-		if bundle.SelfContained {
-			if err := ValidateNameSafe(generator.Name); err != nil {
-				return app.Errorf("invalid generator name in bundle: %w", err)
-			}
-			bundleDir := filepath.Dir(bundlePath)
-			genDirPath = filepath.Join(bundleDir, generator.Name)
-			sharedPath = filepath.Join(bundleDir, types.SharedDir)
-			if _, statErr := os.Stat(genDirPath); statErr != nil {
-				return app.Errorf("generator %q not found in self-contained bundle %q (expected at %s)",
-					generator.Name, generatorName, genDirPath)
-			}
-		} else {
-			var resolveErr error
-			genDirPath, sharedPath, resolveErr = resolveGeneratorPaths(cfg, generator.Name)
-			if resolveErr != nil {
-				return resolveErr
-			}
-		}
-
-		gen, genErr := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath, rec)
-		if genErr != nil {
-			return app.Errorf("error creating engine: %w", genErr)
-		}
-
-		genData := engine.Data{
-			Name:       targetName,
-			RawMeta:    c.StringSlice(flags.MetaFlag),
-			OnExisting: onExisting,
-		}
-		if cfg.Variables != nil {
-			genData.ScaffoldVars = cfg.Variables
-		}
-
-		genResult, genRunErr := runGenerate(gen, genData)
-		if genRunErr != nil {
-			// Print partial progress before surfacing the error so the user
-			// knows how many operations completed before the failure.
-			if totalResult.Created+totalResult.Skipped+totalResult.Overwritten+totalResult.Modified > 0 {
-				printGenerateSummary(os.Stdout, totalResult, c.Bool(flags.VerboseFlag))
-			}
-			return genRunErr
-		}
-		totalResult.Created += genResult.Created
-		totalResult.Skipped += genResult.Skipped
-		totalResult.Overwritten += genResult.Overwritten
-		totalResult.Modified += genResult.Modified
-		totalResult.Details = append(totalResult.Details, genResult.Details...)
-	}
-
-	if !c.Bool("no-hooks") {
-		if err := runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables); err != nil {
-			return err
-		}
-	}
-
-	if !dryRun {
-		gen := rec.Build(generatorName, "generate")
-		if appendErr := history.Append(tagDir, gen); appendErr != nil {
-			slog.Warn("could not write history manifest", "error", appendErr)
-		}
-	}
-
-	printGenerateSummary(os.Stdout, totalResult, c.Bool(flags.VerboseFlag))
-	return nil
-}
-
-func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, dirPath, sharedPath string, onExisting engine.OnExistingPolicy) error {
-	if !c.Bool("no-hooks") {
-		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables); err != nil {
-			return err
-		}
-	}
-
-	slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
-
-	dryRun := c.Bool(flags.DryRunFlag)
-	tagDir := types.TemplatesDir
-	rec := history.NewRecorder(tagDir)
-
-	gen, err := newEngine(dryRun, dirPath, sharedPath, rec)
-	if err != nil {
-		return app.Errorf("error creating engine: %w", err)
-	}
-
-	data := engine.Data{
-		Name:       targetName,
-		RawMeta:    c.StringSlice(flags.MetaFlag),
-		OnExisting: onExisting,
-	}
-	if cfg.Variables != nil {
-		data.ScaffoldVars = cfg.Variables
-	}
-
-	result, err := runGenerate(gen, data)
+	result, err := fn(rec)
 	if err != nil {
 		return err
 	}
 
-	if !c.Bool("no-hooks") {
-		if err := runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables); err != nil {
+	if !c.Bool(flags.NoHooksFlag) {
+		if err := runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables, c.App.Writer); err != nil {
 			return err
 		}
 	}
 
 	if !dryRun {
 		histGen := rec.Build(generatorName, "generate")
-		if appendErr := history.Append(tagDir, histGen); appendErr != nil {
+		if appendErr := history.Append(types.TemplatesDir, histGen); appendErr != nil {
 			slog.Warn("could not write history manifest", "error", appendErr)
 		}
 	}
 
-	printGenerateSummary(os.Stdout, result, c.Bool(flags.VerboseFlag))
+	printGenerateSummary(c.App.Writer, result, c.Bool(flags.VerboseFlag))
 	return nil
 }
 
-func runHooks(hookCmds [][]string, phase hooks.HookPhase, vars map[string]any) error {
+func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, generatorName, targetName, bundlePath string, onExisting engine.OnExistingPolicy) error {
+	data, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return app.Errorf("cannot open bundle file: %w", err)
+	}
+
+	var bundle engine.Bundle
+	if err = json.Unmarshal(data, &bundle); err != nil {
+		return app.Errorf("cannot decode bundle file: %w", err)
+	}
+
+	tmplEngine, err := template.NewEngine()
+	if err != nil {
+		return app.Errorf("cannot create template engine: %w", err)
+	}
+
+	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
+	return generateWithHooks(c, cfg, generatorName, func(rec *history.Recorder) (engine.GenerateResult, error) {
+		var total engine.GenerateResult
+		for _, generator := range bundle.Generators {
+			var genDirPath, sharedPath string
+			if bundle.SelfContained {
+				if err := ValidateNameSafe(generator.Name); err != nil {
+					return total, app.Errorf("invalid generator name in bundle: %w", err)
+				}
+				bundleDir := filepath.Dir(bundlePath)
+				genDirPath = filepath.Join(bundleDir, generator.Name)
+				sharedPath = filepath.Join(bundleDir, types.SharedDir)
+				if _, statErr := os.Stat(genDirPath); statErr != nil {
+					return total, app.Errorf("generator %q not found in self-contained bundle %q (expected at %s)",
+						generator.Name, generatorName, genDirPath)
+				}
+			} else {
+				var resolveErr error
+				genDirPath, sharedPath, resolveErr = resolveGeneratorPaths(cfg, generator.Name)
+				if resolveErr != nil {
+					return total, resolveErr
+				}
+			}
+
+			gen, genErr := fac.newBundleEngine(tmplEngine, c.Bool(flags.DryRunFlag), genDirPath, sharedPath, rec, c.App.Writer)
+			if genErr != nil {
+				return total, app.Errorf("error creating engine: %w", genErr)
+			}
+
+			genData := engine.Data{
+				Name:       targetName,
+				RawMeta:    c.StringSlice(flags.MetaFlag),
+				OnExisting: onExisting,
+			}
+			if cfg.Variables != nil {
+				genData.ScaffoldVars = cfg.Variables
+			}
+
+			genResult, genRunErr := runGenerate(gen, genData)
+			if genRunErr != nil {
+				// Print partial progress so the user knows how many operations
+				// completed before the failure.
+				if total.Created+total.Skipped+total.Overwritten+total.Modified > 0 {
+					printGenerateSummary(c.App.Writer, total, c.Bool(flags.VerboseFlag))
+				}
+				return total, genRunErr
+			}
+			total.Add(genResult)
+		}
+		return total, nil
+	})
+}
+
+func generateTemplate(c *cli.Context, cfg *config.Config, fac generatorFactories, generatorName, targetName, dirPath, sharedPath string, onExisting engine.OnExistingPolicy) error {
+	slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
+	return generateWithHooks(c, cfg, generatorName, func(rec *history.Recorder) (engine.GenerateResult, error) {
+		gen, err := fac.newEngine(c.Bool(flags.DryRunFlag), dirPath, sharedPath, rec, c.App.Writer)
+		if err != nil {
+			return engine.GenerateResult{}, app.Errorf("error creating engine: %w", err)
+		}
+		data := engine.Data{
+			Name:       targetName,
+			RawMeta:    c.StringSlice(flags.MetaFlag),
+			OnExisting: onExisting,
+		}
+		if cfg.Variables != nil {
+			data.ScaffoldVars = cfg.Variables
+		}
+		return runGenerate(gen, data)
+	})
+}
+
+func runHooks(hookCmds [][]string, phase hooks.HookPhase, vars map[string]any, w io.Writer) error {
 	if len(hookCmds) == 0 {
 		return nil
 	}
@@ -314,7 +303,7 @@ func runHooks(hookCmds [][]string, phase hooks.HookPhase, vars map[string]any) e
 
 	results, err := hooks.RunArgvHooks(phase, hookCmds, dir, env)
 
-	hooks.PrintHookResults(results, os.Stdout)
+	hooks.PrintHookResults(results, w)
 
 	if err != nil {
 		return app.Errorf("hook failed: %w", err)

@@ -7,7 +7,6 @@ import (
 
 	"github.com/kaikenlabs/tag/pkg/prettylog"
 
-	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 
@@ -87,18 +86,16 @@ func main() {
 	if err := tag.Run(os.Args); err != nil {
 		exitCode := app.ExitGeneral
 
-		// Check for prompt cancellation (Ctrl+C) → exit 130
-		if errors.Is(err, scaffold.ErrPromptCancelled) {
-			os.Exit(app.ExitInterrupted)
-		}
-
 		// Extract exit code from CommandError
 		var cmdErr *app.CommandError
 		if errors.As(err, &cmdErr) {
 			exitCode = cmdErr.ExitCode()
 		}
 
-		slog.Error(err.Error())
+		// Don't log user-initiated cancellation (Ctrl+C)
+		if exitCode != app.ExitInterrupted {
+			slog.Error(err.Error())
+		}
 		os.Exit(exitCode)
 	}
 }

@@ -76,33 +76,28 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 		return err
 	}
 
-	var basePath, bundleSubPath string
+	basePath, err := resolveBasePath(c, cfg)
+	if err != nil {
+		return err
+	}
+	var bundleSubPath string
 	if c.Bool(flags.LibFlag) {
-		if !cfg.HasTemplateOrigin() {
-			return app.Errorf("no library template configured in %s", config.File)
-		}
-		tagDir, err := resolveLibraryTagDir(cfg.Template.Name)
-		if err != nil {
-			return err
-		}
-		basePath = tagDir
 		bundleSubPath = types.BundlesDir
 		slog.Info(chalk.Green("creating new bundle in library template"), "template", cfg.Template.Name)
 	} else {
-		if err := cfg.Validate(); err != nil {
+		if err = cfg.Validate(); err != nil {
 			return app.Errorf("configuration error: %w", err)
 		}
-		basePath = cfg.Env.Path
 		bundleSubPath = c.Path(flags.BundlePathFlag)
 		slog.Info(chalk.Green("creating new bundle"), "path", basePath)
 	}
 
 	dirPath := filepath.Join(basePath, bundleSubPath, bundleName, fmt.Sprintf("%s%s", bundleName, types.BundleExtension))
 
-	if err := fileutil.ValidatePathContainment(basePath, dirPath); err != nil {
+	if err = fileutil.ValidatePathContainment(basePath, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(dirPath), types.DirModeRestricted); err != nil {
+	if err = os.MkdirAll(filepath.Dir(dirPath), types.DirModeRestricted); err != nil {
 		return app.Errorf("error creating %s: %w", dirPath, err)
 	}
 

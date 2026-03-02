@@ -3,6 +3,8 @@ package library
 import (
 	"errors"
 	"fmt"
+
+	"github.com/kaikenlabs/tag/internal/validate"
 )
 
 // Sentinel errors for library operations.
@@ -16,8 +18,9 @@ var (
 	// ErrEmptyLibrary indicates the library has no installed templates.
 	ErrEmptyLibrary = errors.New("library is empty")
 
-	// ErrInvalidName indicates the template name is invalid.
-	ErrInvalidName = errors.New("invalid template name")
+	// ErrInvalidName is the same sentinel as validate.ErrInvalidName.
+	// Use errors.Is(err, library.ErrInvalidName) to check for name validation errors.
+	ErrInvalidName = validate.ErrInvalidName
 )
 
 // LibraryError represents a structured error from a library operation.

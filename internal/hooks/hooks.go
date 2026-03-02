@@ -363,40 +363,33 @@ func collectAllHooks(hooks *types.HooksConfig) []string {
 
 // displayHookList prints the list of configured hooks to the given writer.
 // templateDir is used to resolve file-based commands for interpreter annotation.
-func displayHookList(hooks *types.HooksConfig, templateDir string, w io.Writer) {
+// printHookSection prints a named section of hook commands and returns whether
+// any hook interpreter was NOT FOUND on the system.
+func printHookSection(label string, commands []string, templateDir string, w io.Writer) bool {
+	if len(commands) == 0 {
+		return false
+	}
+	fmt.Fprintln(w, "  "+label+":")
 	hasNotFound := false
+	for _, cmd := range commands {
+		annotation := describeHookCommand(cmd, templateDir)
+		if annotation != "" {
+			fmt.Fprintf(w, "    - %s  %s\n", cmd, annotation)
+		} else {
+			fmt.Fprintf(w, "    - %s\n", cmd)
+		}
+		if strings.Contains(annotation, "NOT FOUND") {
+			hasNotFound = true
+		}
+	}
+	return hasNotFound
+}
 
+func displayHookList(hooks *types.HooksConfig, templateDir string, w io.Writer) {
 	fmt.Fprintln(w, "This template defines the following hooks:")
-	if len(hooks.PreScaffold) > 0 {
-		fmt.Fprintln(w, "  Pre-scaffold:")
-		for _, cmd := range hooks.PreScaffold {
-			annotation := describeHookCommand(cmd, templateDir)
-			if annotation != "" {
-				fmt.Fprintf(w, "    - %s  %s\n", cmd, annotation)
-			} else {
-				fmt.Fprintf(w, "    - %s\n", cmd)
-			}
-			if strings.Contains(annotation, "NOT FOUND") {
-				hasNotFound = true
-			}
-		}
-	}
-	if len(hooks.PostScaffold) > 0 {
-		fmt.Fprintln(w, "  Post-scaffold:")
-		for _, cmd := range hooks.PostScaffold {
-			annotation := describeHookCommand(cmd, templateDir)
-			if annotation != "" {
-				fmt.Fprintf(w, "    - %s  %s\n", cmd, annotation)
-			} else {
-				fmt.Fprintf(w, "    - %s\n", cmd)
-			}
-			if strings.Contains(annotation, "NOT FOUND") {
-				hasNotFound = true
-			}
-		}
-	}
-
-	if hasNotFound {
+	preHasNotFound := printHookSection("Pre-scaffold", hooks.PreScaffold, templateDir, w)
+	postHasNotFound := printHookSection("Post-scaffold", hooks.PostScaffold, templateDir, w)
+	if preHasNotFound || postHasNotFound {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "WARNING: some hook interpreters were not found on your system.")
 	}

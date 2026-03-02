@@ -2,6 +2,7 @@ package scaffold
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -221,20 +222,17 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 	}
 
 	if fileutil.IsTextContent(sample) {
-		// Text file: read the rest of the content and process as template
+		// Text file: read the full content and process as template
 		var fullContent []byte
 		if readErr == io.EOF {
 			// Entire file fit in the sample
 			fullContent = sample
 		} else {
-			// Read remaining content and combine with sample
-			remainder, err := io.ReadAll(f)
+			// Combine sample with the remaining content
+			fullContent, err = io.ReadAll(io.MultiReader(bytes.NewReader(sample), f))
 			if err != nil {
 				return fmt.Errorf("failed to read file %s: %w", srcPath, err)
 			}
-			fullContent = make([]byte, len(sample)+len(remainder))
-			copy(fullContent, sample)
-			copy(fullContent[len(sample):], remainder)
 		}
 		if err := w.processTemplate(srcPath, destPath, fullContent, ctx, mode); err != nil {
 			return err

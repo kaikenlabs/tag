@@ -3,9 +3,13 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v2"
 
@@ -15,6 +19,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -103,6 +108,27 @@ func scaffoldAction(c *cli.Context) error {
 }
 
 // scaffoldFromLibrary scaffolds a project from an installed library template.
+// runScaffold initialises and runs a scaffold with the given options.
+// onCookiecutter handles the CookiecutterDetectedError case, allowing callers to
+// provide context-specific error messages or recovery logic.
+func runScaffold(c *cli.Context, opts scaffold.Options, onCookiecutter func(*scaffold.CookiecutterDetectedError) error) error {
+	s, err := scaffold.NewScaffold(opts)
+	if err != nil {
+		return app.Errorf("failed to initialize scaffold: %w", err)
+	}
+	s.SetRecorder(history.NewRecorder(""))
+	result, err := s.Run(opts)
+	if err != nil {
+		var ccErr *scaffold.CookiecutterDetectedError
+		if errors.As(err, &ccErr) {
+			return onCookiecutter(ccErr)
+		}
+		return app.Errorf("scaffolding failed: %w", err)
+	}
+	displayScaffoldSummary(c.App.Writer, result)
+	return nil
+}
+
 func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.Entry, positional []string) error {
 	projectName := ""
 	if len(positional) >= 2 {
@@ -124,22 +150,9 @@ func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.En
 	opts.TemplateName = entry.Name
 	opts.IsRemote = false
 
-	s, err := scaffold.NewScaffold(opts)
-	if err != nil {
-		return app.Errorf("failed to initialize scaffold: %w", err)
-	}
-
-	s.SetRecorder(history.NewRecorder(""))
-
-	if err := s.Run(opts); err != nil {
-		var ccErr *scaffold.CookiecutterDetectedError
-		if errors.As(err, &ccErr) {
-			return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", entry.Name, entry.Name)
-		}
-		return app.Errorf("scaffolding failed: %w", err)
-	}
-
-	return nil
+	return runScaffold(c, opts, func(*scaffold.CookiecutterDetectedError) error {
+		return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", entry.Name, entry.Name)
+	})
 }
 
 // scaffoldFromRef handles the case where a template reference is provided.
@@ -175,8 +188,7 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	}
 
 	// Parse meta flags
-	metaSlice := c.StringSlice("meta")
-	meta, err := parse.ParseKeyValues(metaSlice, true)
+	meta, err := parse.ParseKeyValues(c.StringSlice("meta"), true)
 	if err != nil {
 		return app.Errorf("invalid meta flag: %w", err)
 	}
@@ -193,20 +205,10 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	}
 
 	// Create and run scaffold
-	s, err := scaffold.NewScaffold(opts)
-	if err != nil {
-		return app.Errorf("failed to initialize scaffold: %w", err)
-	}
-
-	// Scaffold only creates new files (no inject/append), so tagDir for backups is unused.
-	s.SetRecorder(history.NewRecorder(""))
-
-	if err := s.Run(opts); err != nil {
-		var ccErr *scaffold.CookiecutterDetectedError
-		if errors.As(err, &ccErr) {
-			return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts)
-		}
-		return app.Errorf("scaffolding failed: %w", err)
+	if err := runScaffold(c, opts, func(ccErr *scaffold.CookiecutterDetectedError) error {
+		return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts)
+	}); err != nil {
+		return err
 	}
 
 	// Auto-add remote templates to the library for future use
@@ -273,7 +275,7 @@ func pickTemplate(lib *library.Library) (string, error) {
 		Value(&result).
 		Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
-			return "", scaffold.ErrPromptCancelled
+			return "", &app.CommandError{Message: "cancelled", Code: app.ExitInterrupted}
 		}
 		return "", err
 	}
@@ -327,9 +329,11 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 		return app.Errorf("failed to reinitialize scaffold: %w", err)
 	}
 	s.SetRecorder(history.NewRecorder(""))
-	if err := s.Run(opts); err != nil {
+	scaffoldResult, err := s.Run(opts)
+	if err != nil {
 		return app.Errorf("scaffolding failed: %w", err)
 	}
+	displayScaffoldSummary(c.App.Writer, scaffoldResult)
 	return nil
 }
 
@@ -434,4 +438,63 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 // suggestConvertedTemplateName generates a default name for converted template output.
 func suggestConvertedTemplateName(templateRef string) string {
 	return remote.DeriveName(templateRef) + "-tag"
+}
+
+// displayScaffoldSummary prints a post-scaffold summary to w.
+func displayScaffoldSummary(w io.Writer, result scaffold.ScaffoldResult) {
+	outputDir := result.OutputDir
+	templateDir := result.TemplateDir
+	vars := result.Vars
+	opts := result.Opts
+
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Scaffolding complete!")
+	fmt.Fprintf(w, "  Output: %s\n", outputDir)
+
+	// Show key variables
+	if projectName, ok := vars["project_name"].(string); ok {
+		fmt.Fprintf(w, "  Project: %s\n", projectName)
+	}
+
+	// Show template origin
+	if opts.TemplateName != "" {
+		version := ""
+		if opts.TemplateVersion != "" {
+			version = " (" + opts.TemplateVersion + ")"
+		}
+		fmt.Fprintf(w, "  Template: %s%s\n", opts.TemplateRef, version)
+	}
+
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Next steps:")
+	fmt.Fprintf(w, "  cd %s\n", outputDir)
+
+	// Check if the template has generators
+	hasGenerators := hasSubdirScaffold(templateDir, types.TemplatesDir) || hasSubdirScaffold(templateDir, types.GeneratorsDir)
+
+	if hasGenerators && opts.TemplateName != "" {
+		fmt.Fprintln(w, "  tag generate list    # see available generators")
+	} else if hasGenerators && opts.TemplateName == "" {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "  Add to library for generators: tag lib add %s\n", opts.TemplateRef)
+	}
+	fmt.Fprintln(w)
+
+	// Display template README if present
+	readmePath := filepath.Join(templateDir, types.TemplateReadme)
+	if content, err := os.ReadFile(readmePath); err == nil && len(content) > 0 {
+		rendered, err := glamour.Render(string(content), "auto")
+		if err != nil {
+			// Fallback: print raw markdown
+			fmt.Fprintln(w, string(content))
+		} else {
+			fmt.Fprint(w, rendered)
+		}
+	}
+}
+
+// hasSubdirScaffold checks if a directory contains a named subdirectory.
+func hasSubdirScaffold(dir, subdir string) bool {
+	info, err := os.Stat(filepath.Join(dir, subdir))
+	return err == nil && info.IsDir()
 }

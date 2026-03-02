@@ -159,6 +159,5 @@ func buildScaffoldOpts(c *cli.Context, templateDir, projectName string, meta map
 		NoSave:               c.Bool("no-save"),
 		AcceptHooks:          c.Bool("accept-hooks"),
 		AllowRecursiveRender: c.Bool("allow-recursive-render"),
-		IsTTY:                scaffold.IsTTY(),
 	}
 }

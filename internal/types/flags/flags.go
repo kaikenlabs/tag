@@ -12,4 +12,5 @@ const (
 	InBundleFlag      = "in-bundle"
 	OnExistingFlag    = "on-existing"
 	VerboseFlag       = "verbose"
+	NoHooksFlag       = "no-hooks"
 )

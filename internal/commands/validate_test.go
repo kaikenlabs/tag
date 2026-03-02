@@ -86,7 +86,7 @@ func TestUT_GenerateAction_PathTraversal(t *testing.T) {
 
 	ctx := createTestCLIContext(t, []string{"../../evil", "target"}, nil)
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "path traversal")
@@ -98,7 +98,7 @@ func TestUT_GenerateAction_PathTraversalInTarget(t *testing.T) {
 
 	ctx := createTestCLIContext(t, []string{"validGen", "../../evil"}, nil)
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "path traversal")

@@ -83,26 +83,20 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 		return err
 	}
 
-	var basePath string
+	basePath, err := resolveBasePath(c, cfg)
+	if err != nil {
+		return err
+	}
 	if c.Bool(flags.LibFlag) {
-		if !cfg.HasTemplateOrigin() {
-			return app.Errorf("no library template configured in %s", config.File)
-		}
-		tagDir, err := resolveLibraryTagDir(cfg.Template.Name)
-		if err != nil {
-			return err
-		}
-		basePath = tagDir
 		slog.Info(chalk.Green("creating new generator in library template"), "template", cfg.Template.Name)
 	} else {
-		basePath = cfg.Env.Path
 		slog.Info(chalk.Green("creating new generator"), "path", basePath)
 	}
 
 	// When --bundle is set, create generator inside the bundle directory
 	bundleName := c.String(flags.InBundleFlag)
 	if bundleName != "" {
-		if err := ValidateNameSafe(bundleName); err != nil {
+		if err = ValidateNameSafe(bundleName); err != nil {
 			return app.Errorf("invalid bundle name: %w", err)
 		}
 		bundleSubPath := c.Path(flags.BundlePathFlag)
@@ -120,10 +114,10 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 
 	dirPath := filepath.Join(basePath, generator, generator+".go")
 
-	if err := fileutil.ValidatePathContainment(basePath, dirPath); err != nil {
+	if err = fileutil.ValidatePathContainment(basePath, dirPath); err != nil {
 		return app.Errorf("path safety check failed: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(dirPath), types.DirModeRestricted); err != nil {
+	if err = os.MkdirAll(filepath.Dir(dirPath), types.DirModeRestricted); err != nil {
 		return app.Errorf("error creating %s: %w", dirPath, err)
 	}
 
@@ -146,6 +140,19 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 
 // resolveLibraryTagDir resolves the .tag directory inside a library template.
 // Creates the .tag directory if it doesn't exist.
+// resolveBasePath returns the base .tag directory for new template/bundle creation.
+// With --lib, it resolves the library template's .tag directory;
+// otherwise it returns cfg.Env.Path.
+func resolveBasePath(c *cli.Context, cfg *config.Config) (string, error) {
+	if c.Bool(flags.LibFlag) {
+		if !cfg.HasTemplateOrigin() {
+			return "", app.Errorf("no library template configured in %s", config.File)
+		}
+		return resolveLibraryTagDir(cfg.Template.Name)
+	}
+	return cfg.Env.Path, nil
+}
+
 func resolveLibraryTagDir(libName string) (string, error) {
 	lib, err := newLocalLibrary()
 	if err != nil {

@@ -913,3 +913,109 @@ func filterTagEnv(env []string) []string {
 	}
 	return result
 }
+
+// --- Output format snapshot tests ---
+
+func TestUT_PrintHookSection_EmptyCommands(t *testing.T) {
+	var buf strings.Builder
+	hasNotFound := printHookSection("Pre-scaffold", nil, "/tmp", &buf)
+	assert.False(t, hasNotFound)
+	assert.Empty(t, buf.String(), "empty section should produce no output")
+}
+
+func TestUT_PrintHookSection_SingleBareCommand(t *testing.T) {
+	var buf strings.Builder
+	hasNotFound := printHookSection("Pre-scaffold", []string{"make build"}, "/tmp", &buf)
+	assert.False(t, hasNotFound)
+	assert.Equal(t, "  Pre-scaffold:\n    - make build\n", buf.String())
+}
+
+func TestUT_PrintHookSection_MultipleCommands(t *testing.T) {
+	var buf strings.Builder
+	hasNotFound := printHookSection("Post-scaffold", []string{"make test", "make lint"}, "/tmp", &buf)
+	assert.False(t, hasNotFound)
+	assert.Equal(t, "  Post-scaffold:\n    - make test\n    - make lint\n", buf.String())
+}
+
+func TestUT_DisplayHookList_PreAndPost(t *testing.T) {
+	hooks := &types.HooksConfig{
+		PreScaffold:  []string{"make deps"},
+		PostScaffold: []string{"make test"},
+	}
+	var buf strings.Builder
+	displayHookList(hooks, "/tmp", &buf)
+	out := buf.String()
+	assert.Contains(t, out, "This template defines the following hooks:")
+	assert.Contains(t, out, "  Pre-scaffold:")
+	assert.Contains(t, out, "    - make deps")
+	assert.Contains(t, out, "  Post-scaffold:")
+	assert.Contains(t, out, "    - make test")
+	assert.NotContains(t, out, "WARNING")
+}
+
+func TestUT_DisplayHookList_PreOnly(t *testing.T) {
+	hooks := &types.HooksConfig{
+		PreScaffold: []string{"make deps"},
+	}
+	var buf strings.Builder
+	displayHookList(hooks, "/tmp", &buf)
+	out := buf.String()
+	assert.Contains(t, out, "  Pre-scaffold:")
+	assert.NotContains(t, out, "Post-scaffold:")
+}
+
+func TestUT_DisplayHookList_PostOnly(t *testing.T) {
+	hooks := &types.HooksConfig{
+		PostScaffold: []string{"make test"},
+	}
+	var buf strings.Builder
+	displayHookList(hooks, "/tmp", &buf)
+	out := buf.String()
+	assert.NotContains(t, out, "Pre-scaffold:")
+	assert.Contains(t, out, "  Post-scaffold:")
+}
+
+func TestUT_DisplayHookList_Empty(t *testing.T) {
+	hooks := &types.HooksConfig{}
+	var buf strings.Builder
+	displayHookList(hooks, "/tmp", &buf)
+	out := buf.String()
+	assert.Contains(t, out, "This template defines the following hooks:")
+	assert.NotContains(t, out, "Pre-scaffold:")
+	assert.NotContains(t, out, "Post-scaffold:")
+	assert.NotContains(t, out, "WARNING")
+}
+
+func TestUT_PrintHookResults_NoOutput(t *testing.T) {
+	var buf strings.Builder
+	PrintHookResults([]HookResult{{Command: "make build", Output: "", ExitCode: 0}}, &buf)
+	assert.Empty(t, buf.String())
+}
+
+func TestUT_PrintHookResults_WithOutput(t *testing.T) {
+	var buf strings.Builder
+	PrintHookResults([]HookResult{{Command: "make build", Output: "ok\n", ExitCode: 0}}, &buf)
+	assert.Equal(t, "ok\n", buf.String())
+}
+
+func TestUT_PrintHookResults_EnsuresTrailingNewline(t *testing.T) {
+	var buf strings.Builder
+	PrintHookResults([]HookResult{{Command: "echo hi", Output: "hi", ExitCode: 0}}, &buf)
+	assert.Equal(t, "hi\n", buf.String())
+}
+
+func TestUT_PrintHookResults_EmptyResults(t *testing.T) {
+	var buf strings.Builder
+	PrintHookResults(nil, &buf)
+	assert.Empty(t, buf.String())
+}
+
+func TestUT_PrintHookResults_MultipleResults(t *testing.T) {
+	var buf strings.Builder
+	PrintHookResults([]HookResult{
+		{Command: "step1", Output: "step1 done\n"},
+		{Command: "step2", Output: ""},
+		{Command: "step3", Output: "step3 done"},
+	}, &buf)
+	assert.Equal(t, "step1 done\nstep3 done\n", buf.String())
+}

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -49,7 +48,7 @@ func Errorf(format string, args ...any) error {
 	wrapped := fmt.Errorf(format, args...)
 	return &CommandError{
 		Message: wrapped.Error(),
-		Cause:   errors.Unwrap(wrapped),
+		Cause:   wrapped,
 	}
 }
 
@@ -58,7 +57,7 @@ func UsageErrorf(format string, args ...any) error {
 	wrapped := fmt.Errorf(format, args...)
 	return &CommandError{
 		Message: wrapped.Error(),
-		Cause:   errors.Unwrap(wrapped),
+		Cause:   wrapped,
 		Code:    ExitUsage,
 	}
 }
@@ -68,7 +67,7 @@ func NotFoundErrorf(format string, args ...any) error {
 	wrapped := fmt.Errorf(format, args...)
 	return &CommandError{
 		Message: wrapped.Error(),
-		Cause:   errors.Unwrap(wrapped),
+		Cause:   wrapped,
 		Code:    ExitNotFound,
 	}
 }

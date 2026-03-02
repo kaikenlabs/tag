@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kaikenlabs/tag/internal/remote"
+	"github.com/kaikenlabs/tag/internal/scaffold"
 )
 
 func TestUT_SuggestConvertedTemplateName(t *testing.T) {
@@ -212,4 +214,48 @@ func TestUT_ScaffoldFromRef_LocalPathSkipsLibrary(t *testing.T) {
 	err := scaffoldFromRef(ctx, []string{"./my-template"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve template")
+}
+
+func TestUT_DisplayScaffoldSummary_WritesToOutput(t *testing.T) {
+	var buf bytes.Buffer
+	result := scaffold.ScaffoldResult{
+		OutputDir:   "/tmp/my-app",
+		TemplateDir: t.TempDir(),
+		Vars: map[string]any{
+			"project_name": "my-app",
+		},
+		Opts: scaffold.Options{
+			TemplateName:    "go-api",
+			TemplateRef:     "gh:user/go-api",
+			TemplateVersion: "1.0.0",
+		},
+	}
+
+	displayScaffoldSummary(&buf, result)
+
+	output := buf.String()
+	assert.Contains(t, output, "Scaffolding complete!")
+	assert.Contains(t, output, "Output: /tmp/my-app")
+	assert.Contains(t, output, "Project: my-app")
+	assert.Contains(t, output, "Template: gh:user/go-api (1.0.0)")
+	assert.Contains(t, output, "cd /tmp/my-app")
+}
+
+func TestUT_DisplayScaffoldSummary_NoTemplateOrigin(t *testing.T) {
+	var buf bytes.Buffer
+	result := scaffold.ScaffoldResult{
+		OutputDir:   "/tmp/local-project",
+		TemplateDir: t.TempDir(),
+		Vars: map[string]any{
+			"project_name": "local-project",
+		},
+		Opts: scaffold.Options{}, // No template name
+	}
+
+	displayScaffoldSummary(&buf, result)
+
+	output := buf.String()
+	assert.Contains(t, output, "Scaffolding complete!")
+	assert.Contains(t, output, "Output: /tmp/local-project")
+	assert.NotContains(t, output, "Template:")
 }

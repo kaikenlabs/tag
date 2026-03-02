@@ -20,23 +20,10 @@ const (
 // BuildHookEnv creates environment variables for hook execution.
 // It merges the current environment with TAG-specific variables.
 func BuildHookEnv(vars map[string]any, templateDir, outputDir string, w io.Writer) []string {
-	// Start with current environment
-	env := os.Environ()
+	env := BuildVarEnv(vars, w)
 
-	// Add TAG-specific variables
+	// Add TAG-specific directory variables
 	env = append(env, "TAG_TEMPLATE_DIR="+templateDir, "TAG_OUTPUT_DIR="+outputDir)
-
-	// Add project_name as a special variable
-	if projectName, ok := vars["project_name"]; ok {
-		env = append(env, "TAG_PROJECT_NAME="+stringifyValue(projectName))
-	}
-
-	// Add all user variables with TAG_VAR_ prefix (sanitized)
-	for name, value := range vars {
-		envKey := formatEnvKey(name)
-		envValue := sanitizeEnvValue(name, stringifyValue(value), w)
-		env = append(env, fmt.Sprintf("%s=%s", envKey, envValue))
-	}
 
 	return env
 }

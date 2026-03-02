@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
-
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/replay"
@@ -38,6 +36,7 @@ type Scaffold struct {
 	hookRunner hooks.HookRunner  // Executes pre/post scaffold hooks
 	output     io.Writer         // Destination for user-facing messages (default: os.Stdout)
 	recorder   *history.Recorder // Optional history recorder; nil = no recording
+	isTTY      bool              // Whether stdout is an interactive terminal
 }
 
 // SetRecorder attaches a history recorder. When set, file operations during
@@ -50,39 +49,72 @@ func (s *Scaffold) SetRecorder(r *history.Recorder) {
 }
 
 // NewScaffold creates a new scaffold instance with default dependencies.
-func NewScaffold(opts Options) (*Scaffold, error) {
-	// Create template engine
-	engine, err := template.NewEngine()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create template engine: %w", err)
+
+// ScaffoldOption is a functional option for NewScaffold.
+type ScaffoldOption func(*Scaffold)
+
+// WithEngine injects a custom template engine (primarily for testing).
+func WithEngine(e template.TemplateRenderer) ScaffoldOption {
+	return func(s *Scaffold) { s.engine = e }
+}
+
+// WithValidator injects a custom schema validator (primarily for testing).
+func WithValidator(v *schema.Validator) ScaffoldOption {
+	return func(s *Scaffold) { s.validator = v }
+}
+
+// WithIsTTY overrides the TTY detection for testing. In production, IsTTY()
+// is called automatically by NewScaffold.
+func WithIsTTY(v bool) ScaffoldOption {
+	return func(s *Scaffold) { s.isTTY = v }
+}
+
+func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
+	s := &Scaffold{
+		output:     os.Stdout,
+		hookRunner: hooks.NewHookRunner(),
+		isTTY:      IsTTY(), // auto-detected; WithIsTTY can override for tests
 	}
 
-	// Create schema validator
-	validator, err := schema.NewValidator()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create schema validator: %w", err)
+	// Apply functional options (may override engine, validator, isTTY, etc.)
+	for _, opt := range fopts {
+		opt(s)
+	}
+
+	// Create template engine if not injected
+	if s.engine == nil {
+		e, err := template.NewEngine()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create template engine: %w", err)
+		}
+		s.engine = e
+	}
+
+	// Create schema validator if not injected
+	if s.validator == nil {
+		v, err := schema.NewValidator()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create schema validator: %w", err)
+		}
+		s.validator = v
 	}
 
 	// Create prompter based on TTY status and --no-input flag
 	prompter := GetPrompter(opts.NoInput)
 
-	// Create other components
+	// Build remaining components from the (possibly injected) engine
 	collector := NewVariableCollector(prompter)
-	processor := NewPathProcessor(engine)
+	processor := NewPathProcessor(s.engine)
 	processor.SetAllowRecursiveRender(opts.AllowRecursiveRender)
-	writer := NewOutputWriter(engine, processor)
+	writer := NewOutputWriter(s.engine, processor)
 	writer.SetAllowRecursiveRender(opts.AllowRecursiveRender)
 
-	return &Scaffold{
-		validator:  validator,
-		collector:  collector,
-		processor:  processor,
-		writer:     writer,
-		engine:     engine,
-		prompter:   prompter,
-		hookRunner: hooks.NewHookRunner(),
-		output:     os.Stdout,
-	}, nil
+	s.collector = collector
+	s.processor = processor
+	s.writer = writer
+	s.prompter = prompter
+
+	return s, nil
 }
 
 // runContext holds shared state across scaffolding phases.
@@ -100,20 +132,20 @@ type runContext struct {
 }
 
 // Run executes the scaffolding process.
-func (s *Scaffold) Run(opts Options) error {
+func (s *Scaffold) Run(opts Options) (ScaffoldResult, error) {
 	ctx := &runContext{opts: opts}
 
 	if err := s.loadConfig(ctx); err != nil {
-		return err
+		return ScaffoldResult{}, err
 	}
 	if err := s.confirmHooks(ctx); err != nil {
-		return err
+		return ScaffoldResult{}, err
 	}
 	if err := s.collectVars(ctx); err != nil {
-		return err
+		return ScaffoldResult{}, err
 	}
 	if err := s.planOutput(ctx); err != nil {
-		return err
+		return ScaffoldResult{}, err
 	}
 	return s.executeScaffold(ctx)
 }
@@ -186,7 +218,7 @@ func (s *Scaffold) collectVars(ctx *runContext) error {
 		ctx.opts.Meta["project_name"] = ctx.opts.ProjectName
 	}
 
-	vars, err := s.collector.Collect(ctx.config, ctx.opts)
+	vars, err := s.collector.Collect(ctx.config, ctx.opts, s.isTTY)
 	if err != nil {
 		return fmt.Errorf("failed to collect variables: %w", err)
 	}
@@ -237,10 +269,10 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 }
 
 // executeScaffold prepares the output directory, runs hooks, writes files, and finalizes.
-func (s *Scaffold) executeScaffold(ctx *runContext) error {
+func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 	// Prepare output directory (safety checks, force handling)
 	if err := prepareOutputDir(ctx.outputDir, ctx.opts.Force); err != nil {
-		return err
+		return ScaffoldResult{}, err
 	}
 
 	// Build hook environment — use projectRoot so TAG_OUTPUT_DIR matches the
@@ -254,16 +286,16 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 		var err error
 		renderedHooks, err = renderHooksConfig(s.engine, ctx.config.Hooks, ctx.vars)
 		if err != nil {
-			return err
+			return ScaffoldResult{}, err
 		}
 		if err := hooks.RunPreScaffoldHooks(s.hookRunner, renderedHooks, ctx.templateDirAbs, ctx.hookEnv, s.output); err != nil {
-			return fmt.Errorf("pre-scaffold hook failed: %w", err)
+			return ScaffoldResult{}, fmt.Errorf("pre-scaffold hook failed: %w", err)
 		}
 	}
 
 	// Create output directory and write files
 	if err := os.MkdirAll(ctx.outputDir, types.DirMode); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+		return ScaffoldResult{}, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Clean up output directory on failure
@@ -275,7 +307,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 	}()
 
 	if err := s.writer.Write(ctx.effectiveTemplateDir, ctx.outputDir, ctx.vars); err != nil {
-		return fmt.Errorf("failed to process template: %w", err)
+		return ScaffoldResult{}, fmt.Errorf("failed to process template: %w", err)
 	}
 
 	// Generate config — filter out secret variables before writing to .tagconfig.json
@@ -287,7 +319,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 		Variables:       configVars,
 	}
 	if err := GenerateTagConfig(ctx.projectRoot, tagConfigOpts); err != nil {
-		return fmt.Errorf("failed to generate tagconfig: %w", err)
+		return ScaffoldResult{}, fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
 	// Run post-scaffold hooks
@@ -303,9 +335,8 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 		hooks.RunPostScaffoldHooks(s.hookRunner, postHooks, ctx.projectRoot, ctx.hookEnv, s.output)
 	}
 
-	// Save replay data and display summary
+	// Save replay data
 	saveReplayData(s.output, ctx.opts, ctx.config, ctx.vars)
-	s.displaySummary(ctx.outputDir, ctx.templateDirAbs, ctx.vars, ctx.opts)
 
 	// Write history manifest entry to the output project's .tag/ directory.
 	if s.recorder != nil {
@@ -317,7 +348,12 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 	}
 
 	success = true
-	return nil
+	return ScaffoldResult{
+		OutputDir:   ctx.outputDir,
+		TemplateDir: ctx.templateDirAbs,
+		Vars:        ctx.vars,
+		Opts:        ctx.opts,
+	}, nil
 }
 
 // resolveOutputDir determines and returns the absolute output directory path.
@@ -446,61 +482,6 @@ func (s *Scaffold) loadAndValidateConfig(templateDir string) (*TemplateConfig, e
 	}
 
 	return config, nil
-}
-
-// displaySummary prints a summary of the scaffolding operation.
-func (s *Scaffold) displaySummary(outputDir, templateDir string, vars map[string]any, opts Options) {
-	w := s.output
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Scaffolding complete!")
-	fmt.Fprintf(w, "  Output: %s\n", outputDir)
-
-	// Show key variables
-	if projectName, ok := vars["project_name"].(string); ok {
-		fmt.Fprintf(w, "  Project: %s\n", projectName)
-	}
-
-	// Show template origin
-	if opts.TemplateName != "" {
-		version := ""
-		if opts.TemplateVersion != "" {
-			version = " (" + opts.TemplateVersion + ")"
-		}
-		fmt.Fprintf(w, "  Template: %s%s\n", opts.TemplateRef, version)
-	}
-
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Next steps:")
-	fmt.Fprintf(w, "  cd %s\n", outputDir)
-
-	// Check if the template has generators
-	hasGenerators := hasSubdir(templateDir, types.TemplatesDir) || hasSubdir(templateDir, types.GeneratorsDir)
-
-	if hasGenerators && opts.TemplateName != "" {
-		fmt.Fprintln(w, "  tag generate list    # see available generators")
-	} else if hasGenerators && opts.TemplateName == "" {
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "  Add to library for generators: tag lib add %s\n", opts.TemplateRef)
-	}
-	fmt.Fprintln(w)
-
-	// Display template README if present
-	readmePath := filepath.Join(templateDir, types.TemplateReadme)
-	if content, err := os.ReadFile(readmePath); err == nil && len(content) > 0 {
-		rendered, err := glamour.Render(string(content), "auto")
-		if err != nil {
-			// Fallback: print raw markdown
-			fmt.Fprintln(w, string(content))
-		} else {
-			fmt.Fprint(w, rendered)
-		}
-	}
-}
-
-// hasSubdir checks if a directory contains a subdirectory with the given name.
-func hasSubdir(dir, subdir string) bool {
-	info, err := os.Stat(filepath.Join(dir, subdir))
-	return err == nil && info.IsDir()
 }
 
 // validateSafeOutputDir checks that the output directory is safe for deletion with --force.

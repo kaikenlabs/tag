@@ -1,0 +1,5 @@
+[tools]
+go = "1.26.0"
+golangci-lint = "2.10.1"
+"go:golang.org/x/tools/cmd/deadcode" = "latest"
+

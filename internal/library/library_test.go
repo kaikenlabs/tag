@@ -21,6 +21,7 @@ import (
 // newWithDir creates a Library with explicit dependencies (for testing).
 func newWithDir(dataDir string, resolver Resolver) *Library {
 	return &Library{
+		store:    newStore(dataDir),
 		dataDir:  dataDir,
 		resolver: resolver,
 	}
@@ -730,7 +731,7 @@ func TestUT_Registry_RejectsNewerVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "library.json"), data, 0o600))
 
-	_, err = loadRegistry(dataDir)
+	_, err = newStore(dataDir).load()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "newer than supported")
 }
@@ -746,7 +747,7 @@ func TestUT_Registry_AcceptsCurrentVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "library.json"), data, 0o600))
 
-	loaded, err := loadRegistry(dataDir)
+	loaded, err := newStore(dataDir).load()
 	require.NoError(t, err)
 	assert.Equal(t, registryVersion, loaded.Version)
 }

@@ -13,7 +13,7 @@ import (
 func TestUT_LoadRegistry_NonExistentFile(t *testing.T) {
 	dataDir := t.TempDir()
 
-	reg, err := loadRegistry(dataDir)
+	reg, err := newStore(dataDir).load()
 	require.NoError(t, err)
 	assert.NotNil(t, reg.Entries)
 	assert.Empty(t, reg.Entries)
@@ -24,7 +24,7 @@ func TestUT_LoadRegistry_CorruptJSON(t *testing.T) {
 	err := os.WriteFile(filepath.Join(dataDir, registryFile), []byte("{not valid json"), 0o600)
 	require.NoError(t, err)
 
-	_, err = loadRegistry(dataDir)
+	_, err = newStore(dataDir).load()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parse registry")
 }
@@ -35,14 +35,14 @@ func TestUT_LoadRegistry_NullEntries(t *testing.T) {
 	err := os.WriteFile(filepath.Join(dataDir, registryFile), []byte(`{"entries": null}`), 0o600)
 	require.NoError(t, err)
 
-	reg, err := loadRegistry(dataDir)
+	reg, err := newStore(dataDir).load()
 	require.NoError(t, err)
 	assert.NotNil(t, reg.Entries)
 	assert.Empty(t, reg.Entries)
 }
 
 func TestUT_SaveRegistry_CreatesDirectory(t *testing.T) {
-	// dataDir doesn't exist yet — saveRegistry should create it
+	// dataDir doesn't exist yet — store.save should create it
 	baseDir := t.TempDir()
 	dataDir := filepath.Join(baseDir, "nested", "path")
 
@@ -50,7 +50,7 @@ func TestUT_SaveRegistry_CreatesDirectory(t *testing.T) {
 		"test": {Name: "test", Source: "gh:user/test", AddedAt: time.Now()},
 	}}
 
-	err := saveRegistry(dataDir, reg)
+	err := newStore(dataDir).save(reg)
 	require.NoError(t, err)
 
 	// Verify file was written
@@ -82,10 +82,11 @@ func TestUT_SaveLoad_RoundTrip(t *testing.T) {
 		},
 	}}
 
-	err := saveRegistry(dataDir, original)
+	store := newStore(dataDir)
+	err := store.save(original)
 	require.NoError(t, err)
 
-	loaded, err := loadRegistry(dataDir)
+	loaded, err := store.load()
 	require.NoError(t, err)
 
 	require.Len(t, loaded.Entries, 2)
@@ -108,7 +109,7 @@ func TestUT_SaveRegistry_AtomicWrite(t *testing.T) {
 		"test": {Name: "test", Source: "local"},
 	}}
 
-	err := saveRegistry(dataDir, reg)
+	err := newStore(dataDir).save(reg)
 	require.NoError(t, err)
 
 	tmpPath := filepath.Join(dataDir, registryFile+".tmp")
@@ -120,7 +121,7 @@ func TestUT_SaveRegistry_FilePermissions(t *testing.T) {
 	dataDir := t.TempDir()
 	reg := &Registry{Entries: make(map[string]*Entry)}
 
-	err := saveRegistry(dataDir, reg)
+	err := newStore(dataDir).save(reg)
 	require.NoError(t, err)
 
 	info, err := os.Stat(filepath.Join(dataDir, registryFile))

@@ -12,15 +12,26 @@ import (
 
 const registryFile = "library.json"
 
-// loadRegistry reads the registry from disk.
+// Store manages the registry file on disk.
+// It is responsible solely for loading and saving the Registry —
+// all business logic lives in Library.
+type Store struct {
+	dataDir string
+}
+
+func newStore(dataDir string) *Store {
+	return &Store{dataDir: dataDir}
+}
+
+// load reads the registry from disk.
 // Returns an empty registry if the file does not exist.
 //
 // NOTE: The load-modify-save cycle is NOT safe for concurrent access
 // across processes. This is acceptable for a CLI tool where concurrent
 // library operations are uncommon. If concurrent safety is needed,
 // add advisory file locking (e.g., flock) around the entire cycle.
-func loadRegistry(dataDir string) (*Registry, error) {
-	path := filepath.Join(dataDir, registryFile)
+func (s *Store) load() (*Registry, error) {
+	path := filepath.Join(s.dataDir, registryFile)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -48,11 +59,11 @@ func loadRegistry(dataDir string) (*Registry, error) {
 	return &reg, nil
 }
 
-// saveRegistry writes the registry to disk atomically (temp file + rename).
-// See loadRegistry for concurrency safety notes.
-func saveRegistry(dataDir string, reg *Registry) error {
+// save writes the registry to disk atomically (temp file + rename).
+// See load for concurrency safety notes.
+func (s *Store) save(reg *Registry) error {
 	reg.Version = registryVersion
-	if err := os.MkdirAll(dataDir, types.DirModePrivate); err != nil {
+	if err := os.MkdirAll(s.dataDir, types.DirModePrivate); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
 
@@ -61,7 +72,7 @@ func saveRegistry(dataDir string, reg *Registry) error {
 		return fmt.Errorf("marshal registry: %w", err)
 	}
 
-	path := filepath.Join(dataDir, registryFile)
+	path := filepath.Join(s.dataDir, registryFile)
 	tempPath := path + ".tmp"
 
 	if err := os.WriteFile(tempPath, data, types.FileModePrivate); err != nil {

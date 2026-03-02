@@ -27,6 +27,7 @@ type Resolver interface {
 
 // Library manages a persistent collection of installed templates.
 type Library struct {
+	store    *Store
 	dataDir  string
 	resolver Resolver
 }
@@ -39,6 +40,7 @@ func New(dataDir string) (*Library, error) {
 	}
 
 	return &Library{
+		store:    newStore(dataDir),
 		dataDir:  dataDir,
 		resolver: resolver,
 	}, nil
@@ -47,7 +49,7 @@ func New(dataDir string) (*Library, error) {
 // NewLocal creates a Library without a resolver (for local-only operations like ls, inspect, edit, rm).
 // Operations that require resolving remote templates (add, update) will return an error.
 func NewLocal(dataDir string) *Library {
-	return &Library{dataDir: dataDir}
+	return &Library{store: newStore(dataDir), dataDir: dataDir}
 }
 
 // Add installs a template into the library.
@@ -71,7 +73,7 @@ func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 	}
 
 	// Load registry
-	reg, err := loadRegistry(l.dataDir)
+	reg, err := l.store.load()
 	if err != nil {
 		return nil, &LibraryError{Name: name, Operation: "add", Err: err}
 	}
@@ -140,7 +142,7 @@ func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 	}
 	reg.Entries[name] = entry
 
-	if err := saveRegistry(l.dataDir, reg); err != nil {
+	if err := l.store.save(reg); err != nil {
 		return nil, &LibraryError{Name: name, Operation: "add", Err: err}
 	}
 
@@ -280,7 +282,7 @@ func (l *Library) Remove(name string) error {
 		return &LibraryError{Name: name, Operation: "remove", Err: err}
 	}
 
-	reg, err := loadRegistry(l.dataDir)
+	reg, err := l.store.load()
 	if err != nil {
 		return &LibraryError{Name: name, Operation: "remove", Err: err}
 	}
@@ -298,7 +300,7 @@ func (l *Library) Remove(name string) error {
 	// Remove registry entry
 	delete(reg.Entries, name)
 
-	if err := saveRegistry(l.dataDir, reg); err != nil {
+	if err := l.store.save(reg); err != nil {
 		return &LibraryError{Name: name, Operation: "remove", Err: err}
 	}
 
@@ -307,7 +309,7 @@ func (l *Library) Remove(name string) error {
 
 // List returns all entries sorted by name.
 func (l *Library) List() ([]*Entry, error) {
-	reg, err := loadRegistry(l.dataDir)
+	reg, err := l.store.load()
 	if err != nil {
 		return nil, &LibraryError{Operation: "list", Err: err}
 	}
@@ -330,7 +332,7 @@ func (l *Library) Get(name string) (*Entry, error) {
 		return nil, &LibraryError{Name: name, Operation: "get", Err: err}
 	}
 
-	reg, err := loadRegistry(l.dataDir)
+	reg, err := l.store.load()
 	if err != nil {
 		return nil, &LibraryError{Name: name, Operation: "get", Err: err}
 	}
@@ -421,10 +423,7 @@ func (l *Library) TemplatePath(name string) (string, error) {
 
 // validateName checks that a template name is valid for use as a directory name.
 func validateName(name string) error {
-	if err := validate.TemplateName(name); err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidName, err.Error())
-	}
-	return nil
+	return validate.TemplateName(name)
 }
 
 // ReadTemplateMetadata reads version and description from tag.template.json.

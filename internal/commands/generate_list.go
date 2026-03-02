@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,41 +37,50 @@ type generatorInfo struct {
 	Source      string // "template" or "local"
 }
 
+// generatorLists holds all collected generator/bundle data for a project.
+type generatorLists struct {
+	templateName    string
+	templateSource  string
+	templateVersion string
+	templateGens    []generatorInfo
+	templateBundles []generatorInfo
+	localGens       []generatorInfo
+	localBundles    []generatorInfo
+}
+
+// collectGeneratorLists gathers generators and bundles from the library template and
+// local .tag/ directory. Library errors are soft-failures (logged at debug level).
+func collectGeneratorLists(cfg *config.Config) generatorLists {
+	var lists generatorLists
+	if cfg.HasTemplateOrigin() {
+		lists.templateName = cfg.Template.Name
+		lists.templateSource = cfg.Template.Source
+		lists.templateVersion = cfg.Template.Version
+		if lib, err := newLocalLibrary(); err != nil {
+			slog.Debug("library unavailable for listing", "error", err)
+		} else if templateDir, pathErr := lib.TemplatePath(lists.templateName); pathErr == nil {
+			lists.templateGens = scanGenerators(filepath.Join(templateDir, types.TemplatesDir))
+			lists.templateBundles = scanBundles(filepath.Join(templateDir, types.TemplatesDir, types.BundlesDir))
+		}
+	}
+	if cfg.Env.Path != "" {
+		lists.localGens = scanGenerators(cfg.Env.Path)
+		lists.localBundles = scanBundles(filepath.Join(cfg.Env.Path, cfg.Env.BundlePath))
+	}
+	return lists
+}
+
 func generateList(cfg *config.Config, w io.Writer) error {
 	if err := config.CheckConfig(cfg); err != nil {
 		return err
 	}
 
-	var templateGens, localGens []generatorInfo
-	var templateBundles, localBundles []generatorInfo
-	var templateName, templateSource, templateVersion string
-
-	// 1. Collect generators from library template
-	if cfg.HasTemplateOrigin() {
-		templateName = cfg.Template.Name
-		templateSource = cfg.Template.Source
-		templateVersion = cfg.Template.Version
-
-		lib, err := newLocalLibrary()
-		if err == nil {
-			templateDir, pathErr := lib.TemplatePath(templateName)
-			if pathErr == nil {
-				templateGens = scanGenerators(filepath.Join(templateDir, types.TemplatesDir))
-				templateBundles = scanBundles(filepath.Join(templateDir, types.TemplatesDir, types.BundlesDir))
-			}
-		}
-	}
-
-	// 2. Collect generators from local .tag/
-	if cfg.Env.Path != "" {
-		localGens = scanGenerators(cfg.Env.Path)
-		localBundles = scanBundles(filepath.Join(cfg.Env.Path, cfg.Env.BundlePath))
-	}
+	lists := collectGeneratorLists(cfg)
 
 	// Check if there's anything to show
-	if len(templateGens) == 0 && len(localGens) == 0 && len(templateBundles) == 0 && len(localBundles) == 0 {
+	if len(lists.templateGens) == 0 && len(lists.localGens) == 0 && len(lists.templateBundles) == 0 && len(lists.localBundles) == 0 {
 		fmt.Fprintln(w, "No generators found.")
-		if templateName == "" {
+		if lists.templateName == "" {
 			fmt.Fprintln(w)
 			fmt.Fprintln(w, "This project was not scaffolded from a library template.")
 			fmt.Fprintln(w, "Create generators in .tag/ or scaffold from a template with generators.")
@@ -79,42 +89,42 @@ func generateList(cfg *config.Config, w io.Writer) error {
 	}
 
 	// Print header
-	if templateName != "" {
+	if lists.templateName != "" {
 		version := ""
-		if templateVersion != "" {
-			version = "@" + templateVersion
+		if lists.templateVersion != "" {
+			version = "@" + lists.templateVersion
 		}
-		fmt.Fprintf(w, "Generators for this project (template: %s%s)\n\n", templateSource, version)
+		fmt.Fprintf(w, "Generators for this project (template: %s%s)\n\n", lists.templateSource, version)
 	} else {
 		fmt.Fprintln(w, "Available generators:")
 		fmt.Fprintln(w)
 	}
 
 	// Print template generators
-	if len(templateGens) > 0 {
-		fmt.Fprintf(w, "  %s (%s)\n", chalk.Green("TEMPLATE GENERATORS"), templateName)
-		for _, g := range templateGens {
+	if len(lists.templateGens) > 0 {
+		fmt.Fprintf(w, "  %s (%s)\n", chalk.Green("TEMPLATE GENERATORS"), lists.templateName)
+		for _, g := range lists.templateGens {
 			printGeneratorLine(w, g)
 		}
 		fmt.Fprintln(w)
 	}
 
 	// Print local generators
-	if len(localGens) > 0 {
+	if len(lists.localGens) > 0 {
 		fmt.Fprintf(w, "  %s\n", chalk.Green("PROJECT GENERATORS"))
-		for _, g := range localGens {
+		for _, g := range lists.localGens {
 			printGeneratorLine(w, g)
 		}
 		fmt.Fprintln(w)
 	}
 
 	// Print bundles
-	if len(templateBundles) > 0 || len(localBundles) > 0 {
+	if len(lists.templateBundles) > 0 || len(lists.localBundles) > 0 {
 		fmt.Fprintf(w, "  %s\n", chalk.Green("BUNDLES"))
-		for _, b := range templateBundles {
+		for _, b := range lists.templateBundles {
 			printGeneratorLine(w, b)
 		}
-		for _, b := range localBundles {
+		for _, b := range lists.localBundles {
 			printGeneratorLine(w, b)
 		}
 		fmt.Fprintln(w)
@@ -135,7 +145,7 @@ func printGeneratorLine(w io.Writer, g generatorInfo) {
 // scanDirEntries scans a directory for subdirectories, returning generatorInfo for each.
 // Directories starting with _ or . are skipped (reserved: _shared, _bundles).
 // When readDescription is true, it reads tag.template.json for a description field.
-func scanDirEntries(dir string, readDescription bool) []generatorInfo {
+func scanDirEntries(dir string) []generatorInfo {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -153,20 +163,18 @@ func scanDirEntries(dir string, readDescription bool) []generatorInfo {
 
 		info := generatorInfo{Name: name}
 
-		if readDescription {
-			// Try tag.template.json first.
-			configPath := filepath.Join(dir, name, types.TemplateConfigFile)
-			data, readErr := os.ReadFile(configPath)
-			if readErr == nil {
-				if tc, parseErr := scaffold.ParseTemplateConfig(data); parseErr == nil {
-					info.Description = tc.Description
-				}
+		// Try tag.template.json first.
+		configPath := filepath.Join(dir, name, types.TemplateConfigFile)
+		data, readErr := os.ReadFile(configPath)
+		if readErr == nil {
+			if tc, parseErr := scaffold.ParseTemplateConfig(data); parseErr == nil {
+				info.Description = tc.Description
 			}
+		}
 
-			// Fall back to frontmatter "desc" field from the first template file.
-			if info.Description == "" {
-				info.Description = readFrontmatterDesc(filepath.Join(dir, name))
-			}
+		// Fall back to frontmatter "desc" field from the first template file.
+		if info.Description == "" {
+			info.Description = readFrontmatterDesc(filepath.Join(dir, name))
 		}
 
 		result = append(result, info)
@@ -176,7 +184,7 @@ func scanDirEntries(dir string, readDescription bool) []generatorInfo {
 
 // scanGenerators scans a directory for generator subdirectories with descriptions.
 func scanGenerators(dir string) []generatorInfo {
-	return scanDirEntries(dir, true)
+	return scanDirEntries(dir)
 }
 
 // scanBundles scans a bundles directory for bundle definitions.

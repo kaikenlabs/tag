@@ -212,3 +212,14 @@ func TestUT_Errorf_WrapsError(t *testing.T) {
 		assert.Equal(t, "write failed: disk full", err.Error())
 	})
 }
+
+func TestUT_Errorf_MultiWrap(t *testing.T) {
+	err1 := errors.New("first cause")
+	err2 := errors.New("second cause")
+
+	err := Errorf("failed: %w and %w", err1, err2)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, err1, "errors.Is should find first cause through multi-wrap chain")
+	assert.ErrorIs(t, err, err2, "errors.Is should find second cause through multi-wrap chain")
+}

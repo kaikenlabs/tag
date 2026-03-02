@@ -37,7 +37,16 @@ type Options struct {
 	AcceptHooks          bool              // Accept hooks without prompting (--accept-hooks flag)
 	IsRemote             bool              // Whether the template source is remote
 	AllowRecursiveRender bool              // Allow recursive template rendering in variable values (--allow-recursive-render flag)
-	IsTTY                bool              // Whether stdin is a TTY (set automatically if not provided)
 	TemplateName         string            // Library name (set by tag scaffold)
 	TemplateVersion      string            // From tag.template.json (set after config load)
+}
+
+// ScaffoldResult contains the output of a successful scaffold run.
+// It carries the information needed by the commands layer to render
+// a post-scaffold summary (output location, resolved variables, etc.).
+type ScaffoldResult struct {
+	OutputDir   string         // Absolute path to the generated project
+	TemplateDir string         // Absolute path to the template directory (for README)
+	Vars        map[string]any // Resolved template variables
+	Opts        Options        // Options used for this scaffold run
 }
