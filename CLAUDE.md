@@ -32,6 +32,7 @@ TAG is a Go-based CLI tool for template-driven code generation and project scaff
 - `tag template new bundle <name>` - Create a new bundle (`--lib` for library)
 - `tag template info <template>` - Show template metadata, variables, hooks, and docs
 - `tag template list` - List available generators and bundles
+- `tag template lint [path]` - Validate template (schema, syntax, variable references)
 - `tag lib add|list|remove|update|edit` - Template library management
 - `tag cache clear [--all]|list` - Template cache management
 - `tag convert cookiecutter <source>` - Convert Cookiecutter templates to TAG format
@@ -116,6 +117,7 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── generate.go         - Code generation command + execution
     │       ├── generate_list.go    - Generator/bundle discovery and display
     │       ├── generate_resolve.go - Generator/bundle path resolution + auto-resolve
+    │       ├── lint.go              - Template linting command
     │       ├── scaffold.go         - Project scaffolding + library picker
     │       ├── convert.go          - Cookiecutter conversion command
     │       ├── library.go          - Template library commands
@@ -145,6 +147,12 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── types.go            - TemplateConfig, VariableDef, VariableType
     │       ├── parse.go            - ParseTemplateConfig, variable parsing
     │       └── detect.go           - IsCookiecutterTemplate detection
+    │
+    ├── internal/lint/          Template linting (schema, syntax, variable cross-reference)
+    │       ├── types.go            - Severity, Issue, Result types
+    │       ├── linter.go           - Linter struct and Run() orchestrator
+    │       ├── checks.go           - Schema, template, and variable checks
+    │       └── format.go           - Text and JSON output formatters
     │
     ├── internal/convert/       Cookiecutter conversion (depends on tmplconfig, not scaffold)
     │       ├── cookiecutter.go     - Converter orchestration
