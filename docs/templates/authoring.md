@@ -414,6 +414,22 @@ Include a `README.md.tmpl` in your template:
 2. Run: `{{ vars.package_manager }} start`
 ```
 
+## Validating Your Template
+
+Before scaffolding, run the linter to catch errors early:
+
+```bash
+# Lint the template directory
+tag template lint ./my-template
+
+# Machine-readable output for CI
+tag template lint ./my-template --format json
+```
+
+This checks `tag.template.json` against the JSON Schema, parses all template files for Gonja syntax errors, and verifies that `{{ vars.* }}` references match declared variables.
+
+See [tag template lint](../commands/template.md#tag-template-lint) for full details.
+
 ## Testing Your Template
 
 ```bash
@@ -482,3 +498,4 @@ go-api-template/
 - [Filter Reference](filters.md) - Available filters
 - [Hooks Guide](hooks.md) - Pre and post hooks
 - [tag.template.json Reference](../reference/tag.template.json.md) - Configuration schema
+- [tag template lint](../commands/template.md#tag-template-lint) - Validate templates before publishing

@@ -446,8 +446,11 @@ TAG validates `tag.template.json` at scaffold time:
 - Valid semver for `version` (if provided)
 - JSON structure conformance to the schema
 
+You can also validate your template ahead of time with `tag template lint`, which checks the schema, Gonja template syntax, and `{{ vars.* }}` references against declared variables. See [tag template lint](../commands/template.md#tag-template-lint) for details.
+
 ## See Also
 
 - [Template Authoring](../templates/authoring.md) - Creating templates
 - [Hooks Guide](../templates/hooks.md) - Hook configuration details
 - [Scaffold Command](../commands/scaffold.md) - Using templates
+- [tag template lint](../commands/template.md#tag-template-lint) - Validate templates
