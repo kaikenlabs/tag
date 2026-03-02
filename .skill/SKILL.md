@@ -12,16 +12,16 @@ TAG is a CLI for two workflows: **scaffolding** (creating projects from template
 ## Quick Start
 
 ```bash
-# Scaffold a new project
+# Scaffold a new project (alias: tag s)
 tag scaffold gh:user/template my-project
 
 # Initialize generators in an existing project
 tag template init
 tag template new generator service
-tag generate service payment
+tag generate service payment        # alias: tag g service payment
 
 # Run a bundle (multiple generators)
-tag generate resource product
+tag generate resource product       # alias: tag g resource product
 ```
 
 ## Decision Tree
@@ -154,9 +154,9 @@ my-project/
 
 | Command | Description |
 |---------|-------------|
-| `tag scaffold [template] [name]` | Create project (no args = picker) |
-| `tag generate <gen-or-bundle> <name>` | Run generator or bundle |
-| `tag generate list` | List generators and bundles |
+| `tag scaffold [template] [name]` | Create project (no args = picker). Alias: `tag s` |
+| `tag generate <gen-or-bundle> <name>` | Run generator or bundle. Alias: `tag g` |
+| `tag generate list` | List generators and bundles. Alias: `tag g list` |
 | `tag template init` | Initialize `.tag/` structure |
 | `tag template new generator <name>` | Create generator (`--in-bundle`, `--lib`) |
 | `tag template new bundle <name>` | Create bundle (`--self-contained`, `--lib`) |
