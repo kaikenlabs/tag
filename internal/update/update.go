@@ -102,7 +102,7 @@ func (u *Updater) downloadFile(ctx context.Context, url, dest string) error {
 		return fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := u.client.Do(req) //nolint:gosec // URL is constructed from trusted repo URL
+	resp, err := u.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("network request failed: %w", err)
 	}
