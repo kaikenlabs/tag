@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/convert"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/template"
 )
@@ -425,4 +427,149 @@ func TestIT_GenerateWithScaffoldVars(t *testing.T) {
 	require.NoError(t, err)
 
 	compareDirectories(t, expectedDir, workDir)
+}
+
+// --- History / Undo integration tests ---
+
+// setupTagDir creates the .tag/ directory inside workDir and returns its path.
+func setupTagDir(t *testing.T, workDir string) string {
+	t.Helper()
+	tagDir := filepath.Join(workDir, ".tag")
+	require.NoError(t, os.MkdirAll(tagDir, 0o755))
+	return tagDir
+}
+
+// runGenWithRecorder creates a generator with history recording, runs it, and
+// writes the manifest entry. Returns the tagDir path.
+func runGenWithRecorder(t *testing.T, tagDir, generatorDir, name string) {
+	t.Helper()
+	tmplEngine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	rec := history.NewRecorder(tagDir)
+	gen, err := engine.NewGeneratorWithRecorder(tmplEngine, false, generatorDir, "", rec)
+	require.NoError(t, err)
+
+	require.NoError(t, gen.Generate(engine.Data{Name: name}))
+
+	histGen := rec.Build(filepath.Base(generatorDir), "generate")
+	require.NoError(t, history.Append(tagDir, histGen))
+}
+
+// TestIT_GenerateRecordsManifest verifies that a generation with a Recorder
+// writes a history manifest with the correct entry.
+func TestIT_GenerateRecordsManifest(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "service")
+
+	workDir := setupWorkDir(t, "")
+	tagDir := setupTagDir(t, workDir)
+	runGenWithRecorder(t, tagDir, generatorDir, "payment")
+
+	m, err := history.Load(tagDir)
+	require.NoError(t, err)
+	require.Len(t, m.Generations, 1)
+
+	g := m.Generations[0]
+	assert.Equal(t, "service", g.Template)
+	assert.NotEmpty(t, g.ID)
+	require.Len(t, g.Files, 1)
+	assert.Equal(t, history.ActionCreate, g.Files[0].Action)
+	assert.NotEmpty(t, g.Files[0].HashAfter)
+}
+
+// TestIT_UndoCreate_DeletesFile verifies that undoing a "create" generation
+// removes the created file from disk.
+func TestIT_UndoCreate_DeletesFile(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "service")
+
+	workDir := setupWorkDir(t, "")
+	tagDir := setupTagDir(t, workDir)
+	runGenWithRecorder(t, tagDir, generatorDir, "payment")
+
+	createdPath := filepath.Join(workDir, "app", "service", "payment.go")
+	require.FileExists(t, createdPath, "file should exist after generation")
+
+	var out bytes.Buffer
+	require.NoError(t, history.Undo(tagDir, history.UndoOptions{Out: &out}))
+
+	assert.NoFileExists(t, createdPath, "file should be deleted after undo")
+	assert.Contains(t, out.String(), "1 file(s) reverted")
+}
+
+// TestIT_UndoInject_RestoresFile verifies that undoing an inject generation
+// restores the target file to its pre-injection content.
+func TestIT_UndoInject_RestoresFile(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "inject-after")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "inject-after")
+
+	workDir := setupWorkDir(t, preExistingDir)
+	tagDir := setupTagDir(t, workDir)
+
+	targetPath := filepath.Join(workDir, "app", "router.go")
+	originalContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+
+	runGenWithRecorder(t, tagDir, generatorDir, "users")
+
+	afterContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.NotEqual(t, string(originalContent), string(afterContent), "file should differ after inject")
+
+	require.NoError(t, history.Undo(tagDir, history.UndoOptions{}))
+
+	restoredContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(originalContent), string(restoredContent), "file should be restored after undo")
+}
+
+// TestIT_UndoConflict_ErrorWithoutForce verifies that undo refuses to overwrite
+// a file modified after generation.
+func TestIT_UndoConflict_ErrorWithoutForce(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "inject-after")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "inject-after")
+
+	workDir := setupWorkDir(t, preExistingDir)
+	tagDir := setupTagDir(t, workDir)
+	runGenWithRecorder(t, tagDir, generatorDir, "users")
+
+	// Simulate post-generation edit.
+	targetPath := filepath.Join(workDir, "app", "router.go")
+	require.NoError(t, os.WriteFile(targetPath, []byte("// manually edited\n"), 0o644))
+
+	err := history.Undo(tagDir, history.UndoOptions{})
+	var conflictErr *history.ConflictError
+	require.ErrorAs(t, err, &conflictErr)
+	assert.NotEmpty(t, conflictErr.Paths)
+}
+
+// TestIT_UndoConflict_ForceOverrides verifies that --force allows undo to proceed
+// even when a file was modified after generation.
+func TestIT_UndoConflict_ForceOverrides(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "inject-after")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "inject-after")
+
+	workDir := setupWorkDir(t, preExistingDir)
+	tagDir := setupTagDir(t, workDir)
+
+	targetPath := filepath.Join(workDir, "app", "router.go")
+	originalContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+
+	runGenWithRecorder(t, tagDir, generatorDir, "users")
+
+	// Simulate post-generation edit.
+	require.NoError(t, os.WriteFile(targetPath, []byte("// manually edited\n"), 0o644))
+
+	var out bytes.Buffer
+	require.NoError(t, history.Undo(tagDir, history.UndoOptions{Force: true, Out: &out}))
+	assert.Contains(t, out.String(), "1 file(s) reverted")
+
+	restoredContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(originalContent), string(restoredContent), "force undo should restore to pre-generation state")
 }

@@ -50,6 +50,7 @@ func main() {
 			commands.LibCommand(),
 			commands.CacheCommand(),
 			commands.ConvertCommand(),
+			commands.UndoCommand(),
 			commands.VersionCommand(Version),
 			commands.UpdateCommand(Version),
 		},

@@ -320,6 +320,25 @@ tag cache clear                        # Clear expired entries
 tag cache clear --all                  # Clear entire cache
 ```
 
+### Generation History & Undo
+
+Every `tag generate` and `tag scaffold` records a manifest entry in `.tag/history.json` with SHA256 hashes of affected files. `tag undo` uses this manifest to safely revert changes.
+
+```bash
+tag undo                               # Revert the last generation (with confirmation)
+tag undo --yes                         # Skip confirmation prompt
+tag undo --list                        # Show generation history (newest first)
+tag undo --id gen_1741000000_a3f2bc    # Revert a specific generation by ID
+tag undo --force                       # Override conflict detection
+tag undo --partial                     # Revert unmodified files, skip conflicting ones
+```
+
+**Conflict detection**: If a file was modified after generation was recorded, `undo` refuses to overwrite it with a clear error. Use `--force` to override or `--partial` to skip conflicting files.
+
+**Manifest location**: `.tag/history.json` — generated automatically, do not edit manually.
+
+**Backup location**: `.tag/history/backups/<generation-id>/` — stores pre-modification copies for inject/append operations.
+
 ### Self-Update
 
 ```bash

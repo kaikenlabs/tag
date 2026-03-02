@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -18,13 +20,19 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
-// newEngine is a function variable that creates a new engine.
+// newEngine is a function variable that creates a new generator with optional history recording.
 // It can be replaced in tests to inject a mock generator.
-var newEngine = engine.NewGenerator
+var newEngine = func(dryRun bool, dirPath, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	tmplEngine, err := template.NewEngine()
+	if err != nil {
+		return nil, fmt.Errorf("cannot create template engine: %w", err)
+	}
+	return engine.NewGeneratorWithRecorder(tmplEngine, dryRun, dirPath, sharedPath, rec)
+}
 
-// newBundleEngine is a function variable that creates an engine with a shared template engine.
+// newBundleEngine is a function variable that creates a generator with a shared template engine and history recording.
 // It can be replaced in tests to inject a mock generator.
-var newBundleEngine = engine.NewGeneratorWithEngine
+var newBundleEngine = engine.NewGeneratorWithRecorder
 
 func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
@@ -141,6 +149,11 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	}
 
 	dryRun := c.Bool(flags.DryRunFlag)
+	tagDir := types.TemplatesDir
+
+	// Create a single recorder shared across all generators in the bundle so
+	// that first-touch semantics for hash_before work correctly.
+	rec := history.NewRecorder(tagDir)
 
 	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
 	for _, generator := range bundle.Generators {
@@ -164,7 +177,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 			}
 		}
 
-		gen, genErr := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath)
+		gen, genErr := newBundleEngine(tmplEngine, dryRun, genDirPath, sharedPath, rec)
 		if genErr != nil {
 			return app.Errorf("error creating engine: %w", genErr)
 		}
@@ -180,7 +193,16 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	}
 
 	if !c.Bool("no-hooks") {
-		return runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables)
+		if err := runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables); err != nil {
+			return err
+		}
+	}
+
+	if !dryRun {
+		gen := rec.Build(generatorName, "generate")
+		if appendErr := history.Append(tagDir, gen); appendErr != nil {
+			slog.Warn("could not write history manifest", "error", appendErr)
+		}
 	}
 	return nil
 }
@@ -194,7 +216,11 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 
 	slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
 
-	gen, err := newEngine(c.Bool(flags.DryRunFlag), dirPath, sharedPath)
+	dryRun := c.Bool(flags.DryRunFlag)
+	tagDir := types.TemplatesDir
+	rec := history.NewRecorder(tagDir)
+
+	gen, err := newEngine(dryRun, dirPath, sharedPath, rec)
 	if err != nil {
 		return app.Errorf("error creating engine: %w", err)
 	}
@@ -204,13 +230,21 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		data.ScaffoldVars = cfg.Variables
 	}
 
-	err = gen.Generate(data)
-	if err != nil {
+	if err := gen.Generate(data); err != nil {
 		return app.Errorf("error when generating template: %w", err)
 	}
 
 	if !c.Bool("no-hooks") {
-		return runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables)
+		if err := runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables); err != nil {
+			return err
+		}
+	}
+
+	if !dryRun {
+		histGen := rec.Build(generatorName, "generate")
+		if appendErr := history.Append(tagDir, histGen); appendErr != nil {
+			slog.Warn("could not write history manifest", "error", appendErr)
+		}
 	}
 	return nil
 }
