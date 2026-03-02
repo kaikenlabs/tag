@@ -320,9 +320,26 @@ tag cache clear                        # Clear expired entries
 tag cache clear --all                  # Clear entire cache
 ```
 
+### Code Generation Flags
+
+| Flag | Description |
+|------|-------------|
+| `--on-existing <policy>` | How to handle create-action files that already exist: `fail` (default — atomic, no writes if any conflict), `skip` (silently skip existing files), `overwrite` (replace existing files) |
+| `-v` / `--verbose` | Print per-file operation details (created/skipped/overwritten/modified) after generation |
+| `--dry-run` / `-d` | Preview what would be written without touching the filesystem |
+| `-m key=value` | Set variable values inline |
+
+**`--on-existing` behavior**:
+
+- `fail` (default): Pre-scans all create-action targets before writing anything. If any conflict is found, the entire generation is aborted with no files written (atomic).
+- `skip`: Writes new files, silently skips files that already exist.
+- `overwrite`: Replaces existing files. Overwrites are recorded in generation history with a pre-modification backup, enabling `tag undo`.
+
 ### Generation History & Undo
 
 Every `tag generate` and `tag scaffold` records a manifest entry in `.tag/history.json` with SHA256 hashes of affected files. `tag undo` uses this manifest to safely revert changes.
+
+**Overwrite history**: When `--on-existing=overwrite` is used, the pre-modification content is snapshotted and recorded as an `overwrite` action with `hash_before`, enabling full undo support.
 
 ```bash
 tag undo                               # Revert the last generation (with confirmation)

@@ -18,16 +18,16 @@ import (
 
 // mockGenerator is a test double for engine.Generator.
 type mockGenerator struct {
-	GenerateFunc  func(data engine.Data) error
+	GenerateFunc  func(data engine.Data) (engine.GenerateResult, error)
 	GenerateCalls []engine.Data
 }
 
-func (m *mockGenerator) Generate(data engine.Data) error {
+func (m *mockGenerator) Generate(data engine.Data) (engine.GenerateResult, error) {
 	m.GenerateCalls = append(m.GenerateCalls, data)
 	if m.GenerateFunc != nil {
 		return m.GenerateFunc(data)
 	}
-	return nil
+	return engine.GenerateResult{}, nil
 }
 
 // setupTempDir creates a temporary directory and returns its path.
@@ -86,6 +86,8 @@ func createTestCLIContext(t *testing.T, args []string, flagValues map[string]any
 			&cli.BoolFlag{Name: flags.LibFlag},
 			&cli.BoolFlag{Name: flags.SelfContainedFlag},
 			&cli.StringFlag{Name: flags.InBundleFlag},
+			&cli.StringFlag{Name: flags.OnExistingFlag, Value: ""},
+			&cli.BoolFlag{Name: flags.VerboseFlag},
 		},
 	}
 

@@ -2,8 +2,11 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,7 +81,7 @@ func TestUT_Generate_CreateAction(t *testing.T) {
 	parser := NewParserWithExecutor(mock, map[string]string{"svc.tmpl": "---\nto: output/service.go\n---\npackage service\n"}, nil)
 	core := NewCore(parser, fw, io.Discard)
 
-	err := core.Generate(Data{Name: "MyService"})
+	_, err := core.Generate(Data{Name: "MyService"})
 
 	require.NoError(t, err)
 	require.Len(t, fw.writeCalls, 1)
@@ -101,7 +104,7 @@ func TestUT_Generate_AppendAction(t *testing.T) {
 	parser := NewParserWithExecutor(mock, map[string]string{"a.tmpl": "---\nto: output.go\nappend: true\n---\nappended line\n"}, nil)
 	core := NewCore(parser, fw, io.Discard)
 
-	err := core.Generate(Data{Name: "test"})
+	_, err := core.Generate(Data{Name: "test"})
 
 	require.NoError(t, err)
 	require.Len(t, fw.appendCalls, 1)
@@ -125,7 +128,7 @@ func TestUT_Generate_InjectAction(t *testing.T) {
 	parser := NewParserWithExecutor(mock, map[string]string{"i.tmpl": "---\nto: output.go\ninject: true\nafter: // marker\n---\ninjected code\n"}, nil)
 	core := NewCore(parser, fw, io.Discard)
 
-	err := core.Generate(Data{Name: "test"})
+	_, err := core.Generate(Data{Name: "test"})
 
 	require.NoError(t, err)
 	require.Len(t, fw.injectCalls, 1)
@@ -148,7 +151,7 @@ func TestUT_Generate_MixedActions_Ordering(t *testing.T) {
 	}
 	core := NewCore(te, fw, io.Discard)
 
-	err := core.Generate(Data{Name: "test"})
+	_, err := core.Generate(Data{Name: "test"})
 
 	require.NoError(t, err)
 	// Create should fire first (WriteFile), then Inject (InjectIntoFile), then Append (AppendFile)
@@ -165,7 +168,7 @@ func TestUT_Generate_ParserError_Propagates(t *testing.T) {
 	parser := NewParserWithExecutor(mock, map[string]string{"bad.tmpl": "---\nto: out.go\n---\nbody\n"}, nil)
 	core := NewCore(parser, fw, io.Discard)
 
-	err := core.Generate(Data{Name: "test"})
+	_, err := core.Generate(Data{Name: "test"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse failure")
@@ -185,7 +188,7 @@ func TestUT_Generate_WriteError_Propagates(t *testing.T) {
 	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: output.go\n---\ncontent\n"}, nil)
 	core := NewCore(parser, fw, io.Discard)
 
-	err := core.Generate(Data{Name: "test"})
+	_, err := core.Generate(Data{Name: "test"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "disk full")
@@ -204,7 +207,7 @@ func TestUT_Generate_AppendError_Propagates(t *testing.T) {
 	parser := NewParserWithExecutor(mock, map[string]string{"a.tmpl": "---\nto: output.go\nappend: true\n---\ncontent\n"}, nil)
 	core := NewCore(parser, fw, io.Discard)
 
-	err := core.Generate(Data{Name: "test"})
+	_, err := core.Generate(Data{Name: "test"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "append failed")
@@ -225,7 +228,7 @@ func TestUT_Generate_InjectError_Propagates(t *testing.T) {
 	parser := NewParserWithExecutor(mock, map[string]string{"i.tmpl": "---\nto: output.go\ninject: true\nafter: // marker\n---\ncontent\n"}, nil)
 	core := NewCore(parser, fw, io.Discard)
 
-	err := core.Generate(Data{Name: "test"})
+	_, err := core.Generate(Data{Name: "test"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inject failed")
@@ -240,7 +243,7 @@ func TestUT_Generate_WithScaffoldVars(t *testing.T) {
 	}
 	core := NewCore(te, fw, io.Discard)
 
-	err := core.Generate(Data{
+	_, err := core.Generate(Data{
 		Name: "test",
 		ScaffoldVars: map[string]any{
 			"project_name": "my-app",
@@ -268,10 +271,220 @@ func TestUT_Generate_WithNotes(t *testing.T) {
 
 	// Notes trigger a fmt.Println which we don't capture here, but we verify
 	// the generate succeeds and the file is written.
-	err := core.Generate(Data{Name: "test"})
+	_, err := core.Generate(Data{Name: "test"})
 
 	require.NoError(t, err)
 	require.Len(t, fw.writeCalls, 1)
+}
+
+// --- OnExisting policy tests ---
+
+func TestUT_Generate_OnExistingFail_ConflictReturnsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	existingFile := filepath.Join(tmpDir, "output.go")
+	require.NoError(t, os.WriteFile(existingFile, []byte("original content"), 0o600))
+
+	fw := &mockFileWriter{}
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     existingFile,
+			Action: template.ActionCreate,
+			Extra:  map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "new content"},
+	}
+	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: x\n---\ncontent\n"}, nil)
+	core := NewCore(parser, fw, io.Discard)
+
+	_, err := core.Generate(Data{Name: "test", OnExisting: OnExistingFail})
+
+	require.Error(t, err)
+	var ce *ConflictError
+	require.ErrorAs(t, err, &ce)
+	assert.Contains(t, ce.Files, existingFile)
+	assert.Empty(t, fw.writeCalls, "no writes should occur when conflict detected")
+}
+
+func TestUT_Generate_OnExistingDefault_ConflictReturnsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	existingFile := filepath.Join(tmpDir, "output.go")
+	require.NoError(t, os.WriteFile(existingFile, []byte("original"), 0o600))
+
+	fw := &mockFileWriter{}
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     existingFile,
+			Action: template.ActionCreate,
+			Extra:  map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "new content"},
+	}
+	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: x\n---\ncontent\n"}, nil)
+	core := NewCore(parser, fw, io.Discard)
+
+	// OnExisting zero value = default = fail
+	_, err := core.Generate(Data{Name: "test"})
+
+	require.Error(t, err)
+	var ce *ConflictError
+	require.ErrorAs(t, err, &ce)
+	assert.Contains(t, ce.Files, existingFile)
+	assert.Empty(t, fw.writeCalls)
+}
+
+func TestUT_Generate_OnExistingFail_Atomic_NoPartialWrites(t *testing.T) {
+	// Verifies that when multiple templates are present and one conflicts,
+	// NO files are written (atomic pre-scan behaviour).
+	tmpDir := t.TempDir()
+	conflictFile := filepath.Join(tmpDir, "conflict.go")
+	newFile := filepath.Join(tmpDir, "new.go")
+	require.NoError(t, os.WriteFile(conflictFile, []byte("existing"), 0o600))
+
+	fw := &mockFileWriter{}
+	te := newTestParser(t)
+	te.templates = map[string]string{
+		"t1.tmpl": fmt.Sprintf("---\nto: %s\n---\nnew content\n", newFile),
+		"t2.tmpl": fmt.Sprintf("---\nto: %s\n---\noverwrite\n", conflictFile),
+	}
+	core := NewCore(te, fw, io.Discard)
+
+	_, err := core.Generate(Data{Name: "test", OnExisting: OnExistingFail})
+
+	require.Error(t, err)
+	var ce *ConflictError
+	require.ErrorAs(t, err, &ce)
+	assert.Contains(t, ce.Files, conflictFile)
+	assert.Empty(t, fw.writeCalls, "no files should be written when any conflict exists")
+}
+
+func TestUT_Generate_OnExistingSkip_ExistingFileSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	existingFile := filepath.Join(tmpDir, "output.go")
+	require.NoError(t, os.WriteFile(existingFile, []byte("original"), 0o600))
+
+	fw := &mockFileWriter{}
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     existingFile,
+			Action: template.ActionCreate,
+			Extra:  map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "new content"},
+	}
+	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: x\n---\ncontent\n"}, nil)
+	core := NewCore(parser, fw, io.Discard)
+
+	result, err := core.Generate(Data{Name: "test", OnExisting: OnExistingSkip})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.Created)
+	assert.Equal(t, 1, result.Skipped)
+	assert.Equal(t, 0, result.Overwritten)
+	assert.Empty(t, fw.writeCalls, "skipped files should not be written")
+}
+
+func TestUT_Generate_OnExistingSkip_NewFileCreated(t *testing.T) {
+	tmpDir := t.TempDir()
+	newFile := filepath.Join(tmpDir, "new.go")
+	// File does NOT exist
+
+	fw := &mockFileWriter{}
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     newFile,
+			Action: template.ActionCreate,
+			Extra:  map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "new content"},
+	}
+	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: x\n---\ncontent\n"}, nil)
+	core := NewCore(parser, fw, io.Discard)
+
+	result, err := core.Generate(Data{Name: "test", OnExisting: OnExistingSkip})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Created)
+	assert.Equal(t, 0, result.Skipped)
+	require.Len(t, fw.writeCalls, 1)
+	assert.Equal(t, newFile, fw.writeCalls[0].Name)
+}
+
+func TestUT_Generate_OnExistingOverwrite_ExistingFileOverwritten(t *testing.T) {
+	tmpDir := t.TempDir()
+	existingFile := filepath.Join(tmpDir, "output.go")
+	require.NoError(t, os.WriteFile(existingFile, []byte("original"), 0o600))
+
+	fw := &mockFileWriter{}
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     existingFile,
+			Action: template.ActionCreate,
+			Extra:  map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "new content"},
+	}
+	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: x\n---\ncontent\n"}, nil)
+	core := NewCore(parser, fw, io.Discard)
+
+	result, err := core.Generate(Data{Name: "test", OnExisting: OnExistingOverwrite})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.Created)
+	assert.Equal(t, 0, result.Skipped)
+	assert.Equal(t, 1, result.Overwritten)
+	require.Len(t, fw.writeCalls, 1, "existing file should be overwritten")
+	assert.Equal(t, existingFile, fw.writeCalls[0].Name)
+}
+
+func TestUT_Generate_OnExistingOverwrite_NewFileCreated(t *testing.T) {
+	tmpDir := t.TempDir()
+	newFile := filepath.Join(tmpDir, "new.go")
+	// File does NOT exist
+
+	fw := &mockFileWriter{}
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     newFile,
+			Action: template.ActionCreate,
+			Extra:  map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "new content"},
+	}
+	parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: x\n---\ncontent\n"}, nil)
+	core := NewCore(parser, fw, io.Discard)
+
+	result, err := core.Generate(Data{Name: "test", OnExisting: OnExistingOverwrite})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Created)
+	assert.Equal(t, 0, result.Overwritten)
+	require.Len(t, fw.writeCalls, 1)
+	assert.Equal(t, newFile, fw.writeCalls[0].Name)
+}
+
+func TestUT_Generate_ResultCounts(t *testing.T) {
+	// Verifies that the GenerateResult counts are accurate across all action types.
+	tmpDir := t.TempDir()
+	existingFile := filepath.Join(tmpDir, "existing.go")
+	require.NoError(t, os.WriteFile(existingFile, []byte("old"), 0o600))
+	newFile := filepath.Join(tmpDir, "new.go")
+
+	fw := &mockFileWriter{}
+	te := newTestParser(t)
+	te.templates = map[string]string{
+		"t1.tmpl": fmt.Sprintf("---\nto: %s\n---\nnew\n", newFile),
+		"t2.tmpl": fmt.Sprintf("---\nto: %s\n---\noverwrite\n", existingFile),
+	}
+	core := NewCore(te, fw, io.Discard)
+
+	result, err := core.Generate(Data{Name: "test", OnExisting: OnExistingOverwrite})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Created)
+	assert.Equal(t, 1, result.Overwritten)
+	assert.Equal(t, 0, result.Skipped)
+	assert.Equal(t, 0, result.Modified)
+	assert.Len(t, result.Details, 2)
 }
 
 func Test_parseKeyValues(t *testing.T) {

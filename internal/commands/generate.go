@@ -2,7 +2,9 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -49,15 +51,20 @@ ARGUMENTS
   <name>                 Entity name passed as {{ name }} in templates
 
 FLAGS
-  --meta, -m key=value   Override template variables (repeatable)
-  --no-hooks             Skip pre/post hooks defined in .tagconfig.json
-  --dry-run, -d          Preview changes without writing files (global flag)
+  --meta, -m key=value        Override template variables (repeatable)
+  --no-hooks                  Skip pre/post hooks defined in .tagconfig.json
+  --on-existing=fail|skip|overwrite
+                              Control behaviour when a file already exists (default: fail)
+  --verbose, -v               Show per-file operation details in the summary
+  --dry-run, -d               Preview changes without writing files (global flag)
 
 EXAMPLES
   tag generate model User
   tag generate api-endpoint users --meta package=handlers
   tag generate crud Product --no-hooks
   tag generate crud Product --dry-run
+  tag generate crud Product --on-existing=skip
+  tag generate crud Product --on-existing=overwrite --verbose
   tag generate list                    # List available generators and bundles`,
 		Subcommands: []*cli.Command{
 			generateListCommand(cfg),
@@ -84,6 +91,16 @@ EXAMPLES
 				Name:  "no-hooks",
 				Value: false,
 				Usage: "Skip execution of pre and post hooks",
+			},
+			&cli.StringFlag{
+				Name:  flags.OnExistingFlag,
+				Usage: "Behaviour when a file to be created already exists: fail (default), skip, overwrite",
+				Value: "",
+			},
+			&cli.BoolFlag{
+				Name:    flags.VerboseFlag,
+				Aliases: []string{"v"},
+				Usage:   "Show per-file operation details in the summary",
 			},
 		},
 	}
@@ -112,18 +129,24 @@ func generateAction(c *cli.Context, cfg *config.Config) error {
 		return app.Errorf("invalid target name: %w", err)
 	}
 
+	// Validate --on-existing flag value.
+	onExisting := engine.OnExistingPolicy(c.String(flags.OnExistingFlag))
+	if !onExisting.IsValid() {
+		return app.UsageErrorf("invalid --on-existing value %q: must be one of fail, skip, overwrite", c.String(flags.OnExistingFlag))
+	}
+
 	target, err := resolveGenerateTarget(cfg, generatorOrBundleName, c.Path(flags.BundlePathFlag))
 	if err != nil {
 		return err
 	}
 
 	if target.IsBundle {
-		return generateBundle(c, cfg, generatorOrBundleName, targetName, target.BundlePath)
+		return generateBundle(c, cfg, generatorOrBundleName, targetName, target.BundlePath, onExisting)
 	}
-	return generateTemplate(c, cfg, generatorOrBundleName, targetName, target.GenDir, target.SharedDir)
+	return generateTemplate(c, cfg, generatorOrBundleName, targetName, target.GenDir, target.SharedDir, onExisting)
 }
 
-func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, bundlePath string) error {
+func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetName, bundlePath string, onExisting engine.OnExistingPolicy) error {
 	if !c.Bool("no-hooks") {
 		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables); err != nil {
 			return err
@@ -155,6 +178,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 	// that first-touch semantics for hash_before work correctly.
 	rec := history.NewRecorder(tagDir)
 
+	var totalResult engine.GenerateResult
 	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
 	for _, generator := range bundle.Generators {
 		var genDirPath, sharedPath string
@@ -182,14 +206,29 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 			return app.Errorf("error creating engine: %w", genErr)
 		}
 
-		genData := engine.Data{Name: targetName, RawMeta: c.StringSlice(flags.MetaFlag)}
+		genData := engine.Data{
+			Name:       targetName,
+			RawMeta:    c.StringSlice(flags.MetaFlag),
+			OnExisting: onExisting,
+		}
 		if cfg.Variables != nil {
 			genData.ScaffoldVars = cfg.Variables
 		}
 
-		if err := gen.Generate(genData); err != nil {
-			return app.Errorf("error when generating template: %w", err)
+		genResult, genRunErr := runGenerate(gen, genData)
+		if genRunErr != nil {
+			// Print partial progress before surfacing the error so the user
+			// knows how many operations completed before the failure.
+			if totalResult.Created+totalResult.Skipped+totalResult.Overwritten+totalResult.Modified > 0 {
+				printGenerateSummary(os.Stdout, totalResult, c.Bool(flags.VerboseFlag))
+			}
+			return genRunErr
 		}
+		totalResult.Created += genResult.Created
+		totalResult.Skipped += genResult.Skipped
+		totalResult.Overwritten += genResult.Overwritten
+		totalResult.Modified += genResult.Modified
+		totalResult.Details = append(totalResult.Details, genResult.Details...)
 	}
 
 	if !c.Bool("no-hooks") {
@@ -204,10 +243,12 @@ func generateBundle(c *cli.Context, cfg *config.Config, generatorName, targetNam
 			slog.Warn("could not write history manifest", "error", appendErr)
 		}
 	}
+
+	printGenerateSummary(os.Stdout, totalResult, c.Bool(flags.VerboseFlag))
 	return nil
 }
 
-func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, dirPath, sharedPath string) error {
+func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetName, dirPath, sharedPath string, onExisting engine.OnExistingPolicy) error {
 	if !c.Bool("no-hooks") {
 		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables); err != nil {
 			return err
@@ -225,13 +266,18 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 		return app.Errorf("error creating engine: %w", err)
 	}
 
-	data := engine.Data{Name: targetName, RawMeta: c.StringSlice(flags.MetaFlag)}
+	data := engine.Data{
+		Name:       targetName,
+		RawMeta:    c.StringSlice(flags.MetaFlag),
+		OnExisting: onExisting,
+	}
 	if cfg.Variables != nil {
 		data.ScaffoldVars = cfg.Variables
 	}
 
-	if err := gen.Generate(data); err != nil {
-		return app.Errorf("error when generating template: %w", err)
+	result, err := runGenerate(gen, data)
+	if err != nil {
+		return err
 	}
 
 	if !c.Bool("no-hooks") {
@@ -246,6 +292,8 @@ func generateTemplate(c *cli.Context, cfg *config.Config, generatorName, targetN
 			slog.Warn("could not write history manifest", "error", appendErr)
 		}
 	}
+
+	printGenerateSummary(os.Stdout, result, c.Bool(flags.VerboseFlag))
 	return nil
 }
 
@@ -273,4 +321,30 @@ func runHooks(hookCmds [][]string, phase hooks.HookPhase, vars map[string]any) e
 	}
 
 	return nil
+}
+
+// printGenerateSummary prints a post-generation summary line and, when verbose
+// is true, prints the per-file operation details.
+// runGenerate executes a single generator and routes errors to appropriate
+// user-facing messages, distinguishing conflict errors from unexpected failures.
+func runGenerate(gen engine.Generator, data engine.Data) (engine.GenerateResult, error) {
+	result, err := gen.Generate(data)
+	if err != nil {
+		var ce *engine.ConflictError
+		if errors.As(err, &ce) {
+			return result, app.Errorf("%w", err)
+		}
+		return result, app.Errorf("error when generating template: %w", err)
+	}
+	return result, nil
+}
+
+func printGenerateSummary(w io.Writer, result engine.GenerateResult, verbose bool) {
+	if verbose {
+		for _, d := range result.Details {
+			fmt.Fprintf(w, "  %-12s %s\n", d.Op, d.Path)
+		}
+	}
+	fmt.Fprintf(w, "Generated: %d created, %d skipped, %d overwritten, %d modified\n",
+		result.Created, result.Skipped, result.Overwritten, result.Modified)
 }

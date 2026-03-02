@@ -4,7 +4,7 @@ package engine
 // It allows commands to work with any implementation that can generate
 // code from template data.
 type Generator interface {
-	Generate(data Data) error
+	Generate(data Data) (GenerateResult, error)
 }
 
 // Compile-time check that Core implements Generator.

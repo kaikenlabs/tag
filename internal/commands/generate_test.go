@@ -103,9 +103,9 @@ Hello {{ .Name }}`
 	originalNewEngine := newEngine
 	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
-				return nil
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -140,9 +140,9 @@ Hello {{ .Name }}`
 	originalNewEngine := newEngine
 	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
-				return nil
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -178,9 +178,9 @@ Hello {{ .Name }}`
 	originalNewEngine := newEngine
 	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
-				return nil
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -214,8 +214,8 @@ Hello {{ .Name }}`
 	originalNewEngine := newEngine
 	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
-				return errors.New("template execution failed")
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				return engine.GenerateResult{}, errors.New("template execution failed")
 			},
 		}
 		return mock, nil
@@ -318,9 +318,9 @@ Hello {{ .Name }}`
 	originalBundleEngine := newBundleEngine
 	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				generateCalls++
-				return nil
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -360,9 +360,9 @@ Hello {{ .Name }}`
 	originalBundleEngine := newBundleEngine
 	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				generateCalls++
-				return nil
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -529,8 +529,8 @@ Hello {{ .Name }}`
 		capturedDirPath = dirPath
 		capturedSharedPath = sharedPath
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
-				return nil
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -607,8 +607,8 @@ Hello {{ .Name }}`
 	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		capturedSharedPath = sharedPath
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
-				return nil
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -734,9 +734,9 @@ Hello {{ .Name }}`
 	originalNewEngine := newEngine
 	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
-				return nil
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -749,6 +749,128 @@ Hello {{ .Name }}`
 	assert.Equal(t, "world", capturedData.Name)
 	assert.Equal(t, "my-project", capturedData.ScaffoldVars["project_name"])
 	assert.Equal(t, true, capturedData.ScaffoldVars["use_docker"])
+}
+
+func TestUT_GenerateAction_OnExisting_InvalidValue(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	createGenerator(t, tmpDir, "hello", "---\nto: output.txt\n---\ncontent")
+	createSharedDir(t, tmpDir)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.OnExistingFlag: "badvalue",
+	})
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid --on-existing value")
+	assert.Contains(t, err.Error(), "badvalue")
+}
+
+func TestUT_GenerateAction_OnExisting_PassedToEngine(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	createGenerator(t, tmpDir, "hello", "---\nto: output.txt\n---\ncontent")
+	createSharedDir(t, tmpDir)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.OnExistingFlag: "skip",
+	})
+
+	var capturedData engine.Data
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				capturedData = data
+				return engine.GenerateResult{}, nil
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, engine.OnExistingSkip, capturedData.OnExisting)
+}
+
+func TestUT_GenerateAction_ConflictError_ReturnsError(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	createGenerator(t, tmpDir, "hello", "---\nto: output.txt\n---\ncontent")
+	createSharedDir(t, tmpDir)
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	originalNewEngine := newEngine
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				return engine.GenerateResult{}, &engine.ConflictError{
+					Files: []string{"output.txt", "other.go"},
+				}
+			},
+		}
+		return mock, nil
+	}
+	t.Cleanup(func() { newEngine = originalNewEngine })
+
+	err := generateAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "output.txt")
+}
+
+func TestUT_PrintGenerateSummary_NoVerbose(t *testing.T) {
+	result := engine.GenerateResult{
+		Created:     2,
+		Skipped:     1,
+		Overwritten: 3,
+		Modified:    0,
+		Details: []engine.FileOpDetail{
+			{Path: "a.go", Op: "created"},
+			{Path: "b.go", Op: "created"},
+			{Path: "c.go", Op: "skipped"},
+		},
+	}
+
+	var buf bytes.Buffer
+	printGenerateSummary(&buf, result, false)
+
+	out := buf.String()
+	assert.Contains(t, out, "Generated: 2 created, 1 skipped, 3 overwritten, 0 modified")
+	assert.NotContains(t, out, "a.go", "per-file details should not be shown without --verbose")
+}
+
+func TestUT_PrintGenerateSummary_Verbose(t *testing.T) {
+	result := engine.GenerateResult{
+		Created:  1,
+		Modified: 1,
+		Details: []engine.FileOpDetail{
+			{Path: "a.go", Op: "created"},
+			{Path: "b.go", Op: "modified"},
+		},
+	}
+
+	var buf bytes.Buffer
+	printGenerateSummary(&buf, result, true)
+
+	out := buf.String()
+	assert.Contains(t, out, "a.go")
+	assert.Contains(t, out, "created")
+	assert.Contains(t, out, "b.go")
+	assert.Contains(t, out, "modified")
+	assert.Contains(t, out, "Generated: 1 created, 0 skipped, 0 overwritten, 1 modified")
 }
 
 func TestUT_GenerateTemplate_NilVariablesNoScaffoldVars(t *testing.T) {
@@ -774,9 +896,9 @@ Hello {{ .Name }}`
 	originalNewEngine := newEngine
 	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
-				return nil
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil
@@ -850,9 +972,9 @@ Hello {{ .Name }}`
 	originalBundleEngine := newBundleEngine
 	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
-			GenerateFunc: func(data engine.Data) error {
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
-				return nil
+				return engine.GenerateResult{}, nil
 			},
 		}
 		return mock, nil

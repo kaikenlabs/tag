@@ -78,7 +78,7 @@ type {{ name | pascal }}Service struct{}
 
 ### Actions
 
-- **Create** (default): Write new file. Overwrites if exists.
+- **Create** (default): Write new file. Fails if file already exists (use `--on-existing` to change behavior).
 - **Inject**: Insert at marker (`after:` or `before:` with `inject: true`).
 - **Append**: Add to end of file (`append: true`).
 
@@ -189,6 +189,8 @@ my-project/
 | `-B` / `--in-bundle` | template new generator | Create inside bundle |
 | `-s` / `--self-contained` | template new bundle | Self-contained bundle |
 | `--dry-run` / `-d` | generate, convert | Preview without writing |
+| `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
+| `-v` / `--verbose` | generate | Print per-file operation details in summary |
 | `--force` | scaffold | Overwrite existing output |
 
 ## Pitfalls

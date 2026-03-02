@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/history"
@@ -114,7 +115,9 @@ func NewCore(parser TemplateParser, fwr writer.FileWriter, out io.Writer) Core {
 }
 
 // Generate generates code from templates using the Gonja-based engine.
-func (c *Core) Generate(data Data) error {
+func (c *Core) Generate(data Data) (GenerateResult, error) {
+	var result GenerateResult
+
 	// Build input data for the parser
 	meta, _ := parse.ParseKeyValues(data.RawMeta, false)
 	input := InputData{
@@ -127,40 +130,109 @@ func (c *Core) Generate(data Data) error {
 	parsedOutput, err := c.parser.Parse(input)
 	if err != nil {
 		slog.Error("cannot parse input data", "error", err)
-		return err
+		return result, err
 	}
 
-	// Write files
+	// Phase 1: pre-scan for conflicts when policy is fail (or default).
+	// This ensures the command is atomic — we never write anything if a conflict exists.
+	if data.OnExisting.isFail() {
+		if err := c.checkConflicts(parsedOutput); err != nil {
+			return result, err
+		}
+	}
+
+	// Phase 2: write files, applying policy for create actions.
 	for _, item := range parsedOutput {
-		var action string
 		switch item.Action {
 		case template.ActionAppend:
 			if err := c.fwr.AppendFile(item.To, item.Output); err != nil {
 				slog.Error("cannot append to file", "file", item.To, "error", err)
-				return err
+				return result, err
 			}
-			action = chalk.Yellow("modified")
+			slog.Info(chalk.Yellow("modified"), "file", item.To)
+			result.Modified++
+			result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "modified"})
+
 		case template.ActionInject:
 			if err := c.fwr.InjectIntoFile(item.To, item.Output, writer.Inject{
 				Matcher: item.InjectMatcher,
 				Clause:  item.InjectClause,
 			}); err != nil {
 				slog.Error("cannot inject to file", "file", item.To, "error", err)
-				return err
+				return result, err
 			}
-			action = chalk.Yellow("modified")
-		default:
-			if err := c.fwr.WriteFile(item.To, item.Output, types.FileMode); err != nil {
-				slog.Error("cannot write to file", "file", item.To, "error", err)
-				return err
-			}
-			action = chalk.Blue("created")
-			if item.Notes != "" {
-				fmt.Fprintf(c.out, "%s\n%s: %s\n", chalk.Red("IMPORTANT"), chalk.Yellow(item.To), chalk.Green(item.Notes))
+			slog.Info(chalk.Yellow("modified"), "file", item.To)
+			result.Modified++
+			result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "modified"})
+
+		default: // create
+			if err := c.applyCreatePolicy(item, data.OnExisting, &result); err != nil {
+				return result, err
 			}
 		}
-		slog.Info(action, "file", item.To)
 	}
 
+	return result, nil
+}
+
+// checkConflicts scans all create-action items for existing files and returns
+// a ConflictError if any are found. Used for atomic pre-scan in fail mode.
+func (c *Core) checkConflicts(items []TemplateData) error {
+	var conflicts []string
+	for _, item := range items {
+		if item.Action == template.ActionAppend || item.Action == template.ActionInject {
+			continue
+		}
+		if _, statErr := os.Stat(item.To); statErr == nil {
+			conflicts = append(conflicts, item.To)
+		}
+	}
+	if len(conflicts) > 0 {
+		slices.Sort(conflicts)
+		return &ConflictError{Files: conflicts}
+	}
 	return nil
+}
+
+// applyCreatePolicy handles the create action with the configured OnExistingPolicy.
+// Returns (true, nil) when the item was handled (skip/overwrite) and the caller
+// should continue to the next item. Returns (false, nil) when the file does not
+// exist and the caller should proceed with a normal WriteFile call.
+func (c *Core) applyCreatePolicy(item TemplateData, policy OnExistingPolicy, result *GenerateResult) error {
+	_, statErr := os.Stat(item.To)
+	fileExists := statErr == nil
+
+	if !fileExists {
+		if writeErr := c.fwr.WriteFile(item.To, item.Output, types.FileMode); writeErr != nil {
+			slog.Error("cannot write to file", "file", item.To, "error", writeErr)
+			return writeErr
+		}
+		slog.Info(chalk.Blue("created"), "file", item.To)
+		result.Created++
+		result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "created"})
+		if item.Notes != "" {
+			fmt.Fprintf(c.out, "%s\n%s: %s\n", chalk.Red("IMPORTANT"), chalk.Yellow(item.To), chalk.Green(item.Notes))
+		}
+		return nil
+	}
+
+	switch policy {
+	case OnExistingSkip:
+		slog.Info(chalk.Yellow("skipped"), "file", item.To)
+		result.Skipped++
+		result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "skipped"})
+		return nil
+	case OnExistingOverwrite:
+		if writeErr := c.fwr.WriteFile(item.To, item.Output, types.FileMode); writeErr != nil {
+			slog.Error("cannot overwrite file", "file", item.To, "error", writeErr)
+			return writeErr
+		}
+		slog.Info(chalk.Yellow("overwritten"), "file", item.To)
+		result.Overwritten++
+		result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "overwritten"})
+		return nil
+	default:
+		// isFail() pre-scan should have caught this; guard for safety.
+		return &ConflictError{Files: []string{item.To}}
+	}
 }

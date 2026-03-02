@@ -10,4 +10,6 @@ const (
 	LibFlag           = "lib"
 	SelfContainedFlag = "self-contained"
 	InBundleFlag      = "in-bundle"
+	OnExistingFlag    = "on-existing"
+	VerboseFlag       = "verbose"
 )

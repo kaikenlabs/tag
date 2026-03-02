@@ -129,16 +129,29 @@ func NewRecordingFileWriter(inner writer.FileWriter, rec *Recorder) *RecordingFi
 // Ensure RecordingFileWriter satisfies writer.FileWriter at compile time.
 var _ writer.FileWriter = (*RecordingFileWriter)(nil)
 
-// WriteFile records a "create" operation and delegates to the inner writer.
+// WriteFile records a "create" or "overwrite" operation and delegates to the inner writer.
+// When the target file already exists (overwrite), snapshotBefore backs it up and captures
+// hash_before so that undo can restore it.
 func (w *RecordingFileWriter) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	if err := w.inner.WriteFile(name, data, perm); err != nil {
+	hashBefore, existed, err := w.snapshotBefore(name)
+	if err != nil {
 		return err
 	}
+
+	if writeErr := w.inner.WriteFile(name, data, perm); writeErr != nil {
+		return writeErr
+	}
+
 	hashAfter, err := HashFile(name)
 	if err != nil {
 		return fmt.Errorf("hash after write %s: %w", name, err)
 	}
-	w.rec.RecordCreate(name, hashAfter)
+
+	if !existed {
+		w.rec.RecordCreate(name, hashAfter)
+	} else {
+		w.rec.RecordModify(name, ActionOverwrite, hashBefore, hashAfter)
+	}
 	return nil
 }
 

@@ -248,7 +248,7 @@ func TestIT_GenerateCreate(t *testing.T) {
 	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
-	err = gen.Generate(engine.Data{Name: "user_service"})
+	_, err = gen.Generate(engine.Data{Name: "user_service"})
 	require.NoError(t, err)
 
 	compareDirectories(t, expectedDir, workDir)
@@ -267,7 +267,7 @@ func TestIT_GenerateInjectAfter(t *testing.T) {
 	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
-	err = gen.Generate(engine.Data{Name: "users"})
+	_, err = gen.Generate(engine.Data{Name: "users"})
 	require.NoError(t, err)
 
 	compareDirectories(t, expectedDir, workDir)
@@ -286,7 +286,7 @@ func TestIT_GenerateInjectBefore(t *testing.T) {
 	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
-	err = gen.Generate(engine.Data{Name: "users"})
+	_, err = gen.Generate(engine.Data{Name: "users"})
 	require.NoError(t, err)
 
 	compareDirectories(t, expectedDir, workDir)
@@ -305,7 +305,7 @@ func TestIT_GenerateAppend(t *testing.T) {
 	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
-	err = gen.Generate(engine.Data{Name: "users"})
+	_, err = gen.Generate(engine.Data{Name: "users"})
 	require.NoError(t, err)
 
 	compareDirectories(t, expectedDir, workDir)
@@ -340,7 +340,7 @@ func TestIT_GenerateBundle(t *testing.T) {
 		gen, err := engine.NewGeneratorWithEngine(tmplEngine, false, genDir, "")
 		require.NoError(t, err)
 
-		err = gen.Generate(engine.Data{Name: "order"})
+		_, err = gen.Generate(engine.Data{Name: "order"})
 		require.NoError(t, err)
 	}
 
@@ -361,7 +361,7 @@ func TestIT_GenerateMixed(t *testing.T) {
 	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
-	err = gen.Generate(engine.Data{Name: "auth"})
+	_, err = gen.Generate(engine.Data{Name: "auth"})
 	require.NoError(t, err)
 
 	compareDirectories(t, expectedDir, workDir)
@@ -380,7 +380,7 @@ func TestIT_GenerateSharedTemplates(t *testing.T) {
 	gen, err := engine.NewGenerator(false, generatorDir, sharedDir)
 	require.NoError(t, err)
 
-	err = gen.Generate(engine.Data{Name: "my_widget"})
+	_, err = gen.Generate(engine.Data{Name: "my_widget"})
 	require.NoError(t, err)
 
 	compareDirectories(t, expectedDir, workDir)
@@ -396,7 +396,7 @@ func TestIT_GenerateDryRun(t *testing.T) {
 	gen, err := engine.NewGenerator(true, generatorDir, "")
 	require.NoError(t, err)
 
-	err = gen.Generate(engine.Data{Name: "user_service"})
+	_, err = gen.Generate(engine.Data{Name: "user_service"})
 	require.NoError(t, err)
 
 	// Verify NO files were created
@@ -417,7 +417,7 @@ func TestIT_GenerateWithScaffoldVars(t *testing.T) {
 	gen, err := engine.NewGenerator(false, generatorDir, "")
 	require.NoError(t, err)
 
-	err = gen.Generate(engine.Data{
+	_, err = gen.Generate(engine.Data{
 		Name: "settings",
 		ScaffoldVars: map[string]any{
 			"project_name": "my-project",
@@ -450,7 +450,8 @@ func runGenWithRecorder(t *testing.T, tagDir, generatorDir, name string) {
 	gen, err := engine.NewGeneratorWithRecorder(tmplEngine, false, generatorDir, "", rec)
 	require.NoError(t, err)
 
-	require.NoError(t, gen.Generate(engine.Data{Name: name}))
+	_, genErr := gen.Generate(engine.Data{Name: name})
+	require.NoError(t, genErr)
 
 	histGen := rec.Build(filepath.Base(generatorDir), "generate")
 	require.NoError(t, history.Append(tagDir, histGen))
