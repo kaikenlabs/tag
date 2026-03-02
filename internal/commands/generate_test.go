@@ -3,11 +3,14 @@ package commands
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/urfave/cli/v2"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,7 +48,7 @@ func TestUT_GenerateAction_MissingArguments(t *testing.T) {
 			cfg := createTestConfig(t, tmpDir)
 			ctx := createTestCLIContext(t, tt.args, nil)
 
-			err := generateAction(ctx, cfg)
+			err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 			require.Error(t, err)
 			var cmdErr *app.CommandError
@@ -58,7 +61,7 @@ func TestUT_GenerateAction_MissingArguments(t *testing.T) {
 func TestUT_GenerateAction_NoConfig(t *testing.T) {
 	ctx := createTestCLIContext(t, []string{"myGenerator", "myName"}, nil)
 
-	err := generateAction(ctx, nil)
+	err := generateAction(ctx, nil, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "init")
@@ -73,7 +76,7 @@ func TestUT_GenerateAction_GeneratorNotFound(t *testing.T) {
 		flags.SharedPathFlag: "_shared",
 	})
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "generator \"nonexistent\" not found")
@@ -100,8 +103,8 @@ Hello {{ .Name }}`
 
 	// Use a mock to verify the engine is called correctly
 	var capturedData engine.Data
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
@@ -110,9 +113,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Equal(t, "world", capturedData.Name)
@@ -137,8 +139,8 @@ Hello {{ .Name }}`
 	})
 
 	var capturedData engine.Data
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
@@ -147,9 +149,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Equal(t, "world", capturedData.Name)
@@ -175,8 +176,8 @@ Hello {{ .Name }}`
 	})
 
 	var capturedData engine.Data
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
@@ -185,9 +186,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"key1=value1", "key2=value2"}, capturedData.RawMeta)
@@ -211,8 +211,8 @@ Hello {{ .Name }}`
 		flags.SharedPathFlag: "_shared",
 	})
 
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				return engine.GenerateResult{}, errors.New("template execution failed")
@@ -220,9 +220,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error when generating template")
@@ -246,13 +245,12 @@ Hello {{ .Name }}`
 		flags.SharedPathFlag: "_shared",
 	})
 
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		return nil, errors.New("failed to create engine")
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error creating engine")
@@ -267,7 +265,7 @@ func TestUT_GenerateBundle_BundleNotFound(t *testing.T) {
 		flags.BundlePathFlag: "_bundles",
 	})
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `generator "nonexistent" not found`)
@@ -285,7 +283,7 @@ func TestUT_GenerateBundle_InvalidJSON(t *testing.T) {
 		flags.BundlePathFlag: "_bundles",
 	})
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot decode bundle file")
@@ -315,8 +313,8 @@ Hello {{ .Name }}`
 	})
 
 	var generateCalls int
-	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				generateCalls++
@@ -325,9 +323,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, generateCalls, "expected Generate to be called once for the single generator in bundle")
@@ -357,8 +354,8 @@ Hello {{ .Name }}`
 	})
 
 	var generateCalls int
-	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				generateCalls++
@@ -367,21 +364,20 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, generateCalls, "expected Generate to be called twice for two generators in bundle")
 }
 
 func TestUT_RunHooks_EmptyHooks(t *testing.T) {
-	err := runHooks([][]string{}, hooks.HookPhasePreGen, nil)
+	err := runHooks([][]string{}, hooks.HookPhasePreGen, nil, io.Discard)
 	require.NoError(t, err)
 }
 
 func TestUT_RunHooks_NilHooks(t *testing.T) {
-	err := runHooks(nil, hooks.HookPhasePreGen, nil)
+	err := runHooks(nil, hooks.HookPhasePreGen, nil, io.Discard)
 	require.NoError(t, err)
 }
 
@@ -401,7 +397,7 @@ func TestUT_RunHooks_ValidHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative path with ./ prefix to indicate it's a local file
-	err = runHooks([][]string{{"./test-hook.sh"}}, hooks.HookPhasePreGen, nil)
+	err = runHooks([][]string{{"./test-hook.sh"}}, hooks.HookPhasePreGen, nil, io.Discard)
 	require.NoError(t, err)
 }
 
@@ -420,7 +416,7 @@ func TestUT_RunHooks_FailingHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative path with ./ prefix to indicate it's a local file
-	err = runHooks([][]string{{"./failing-hook.sh"}}, hooks.HookPhasePreGen, nil)
+	err = runHooks([][]string{{"./failing-hook.sh"}}, hooks.HookPhasePreGen, nil, io.Discard)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hook failed")
 }
@@ -446,7 +442,7 @@ func TestUT_RunHooks_StopsOnFailure(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative paths with ./ prefix to indicate they are local files
-	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}}, hooks.HookPhasePreGen, nil)
+	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}}, hooks.HookPhasePreGen, nil, io.Discard)
 	require.Error(t, err)
 
 	// Verify second hook didn't run
@@ -463,13 +459,13 @@ func TestUT_RunHooks_NonexistentCommand(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-	err = runHooks([][]string{{"nonexistent-command-xyz"}}, hooks.HookPhasePreGen, nil)
+	err = runHooks([][]string{{"nonexistent-command-xyz"}}, hooks.HookPhasePreGen, nil, io.Discard)
 	require.Error(t, err)
 }
 
 func TestUT_RunHooks_PathCommand(t *testing.T) {
 	// Test that PATH commands work (e.g., "echo" should be found in PATH)
-	err := runHooks([][]string{{"echo", "hello"}}, hooks.HookPhasePreGen, nil)
+	err := runHooks([][]string{{"echo", "hello"}}, hooks.HookPhasePreGen, nil, io.Discard)
 	require.NoError(t, err)
 }
 
@@ -488,7 +484,7 @@ func TestUT_RunHooks_RelativePathCommand(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Relative path should resolve from working directory
-	err = runHooks([][]string{{"./myscript.sh"}}, hooks.HookPhasePreGen, nil)
+	err = runHooks([][]string{{"./myscript.sh"}}, hooks.HookPhasePreGen, nil, io.Discard)
 	require.NoError(t, err)
 }
 
@@ -524,8 +520,8 @@ Hello {{ .Name }}`
 	})
 
 	var capturedDirPath, capturedSharedPath string
-	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		capturedDirPath = dirPath
 		capturedSharedPath = sharedPath
 		mock := &mockGenerator{
@@ -535,9 +531,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	// Verify generator was resolved from bundle dir, not root .tag/
@@ -563,7 +558,7 @@ func TestUT_GenerateBundle_SelfContained_GeneratorNotFound(t *testing.T) {
 		flags.BundlePathFlag: "_bundles",
 	})
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `generator "missing" not found in self-contained bundle "mybundle"`)
@@ -603,8 +598,8 @@ Hello {{ .Name }}`
 	})
 
 	var capturedSharedPath string
-	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		capturedSharedPath = sharedPath
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
@@ -613,9 +608,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	// Should use bundle's own _shared, not root _shared
@@ -640,7 +634,7 @@ func TestUT_GenerateBundle_SelfContained_PathTraversal(t *testing.T) {
 		flags.BundlePathFlag: "_bundles",
 	})
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid generator name in bundle")
@@ -731,8 +725,8 @@ Hello {{ .Name }}`
 	})
 
 	var capturedData engine.Data
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
@@ -741,9 +735,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Equal(t, "world", capturedData.Name)
@@ -763,7 +756,7 @@ func TestUT_GenerateAction_OnExisting_InvalidValue(t *testing.T) {
 		flags.OnExistingFlag: "badvalue",
 	})
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid --on-existing value")
@@ -783,8 +776,8 @@ func TestUT_GenerateAction_OnExisting_PassedToEngine(t *testing.T) {
 	})
 
 	var capturedData engine.Data
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
@@ -793,9 +786,8 @@ func TestUT_GenerateAction_OnExisting_PassedToEngine(t *testing.T) {
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Equal(t, engine.OnExistingSkip, capturedData.OnExisting)
@@ -812,8 +804,8 @@ func TestUT_GenerateAction_ConflictError_ReturnsError(t *testing.T) {
 		flags.SharedPathFlag: "_shared",
 	})
 
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				return engine.GenerateResult{}, &engine.ConflictError{
@@ -823,9 +815,8 @@ func TestUT_GenerateAction_ConflictError_ReturnsError(t *testing.T) {
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "output.txt")
@@ -893,8 +884,8 @@ Hello {{ .Name }}`
 	})
 
 	var capturedData engine.Data
-	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
@@ -903,9 +894,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newEngine = originalNewEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Nil(t, capturedData.ScaffoldVars)
@@ -969,8 +959,8 @@ Hello {{ .Name }}`
 	})
 
 	var capturedData engine.Data
-	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
 				capturedData = data
@@ -979,9 +969,8 @@ Hello {{ .Name }}`
 		}
 		return mock, nil
 	}
-	t.Cleanup(func() { newBundleEngine = originalBundleEngine })
 
-	err := generateAction(ctx, cfg)
+	err := generateAction(ctx, cfg, fac)
 
 	require.NoError(t, err)
 	assert.Equal(t, "my-project", capturedData.ScaffoldVars["project_name"])
@@ -1327,4 +1316,71 @@ func TestUT_WarnVersionMismatch_SkipsWhenNoVersion(t *testing.T) {
 	warnVersionMismatch(cfg, templateDir)
 
 	assert.Empty(t, buf.String(), "no warning expected when scaffold version is empty")
+}
+
+// --- Output capture tests (validate c.App.Writer injection from M1 refactoring) ---
+
+func TestUT_GenerateTemplate_SummaryGoesToAppWriter(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "greet", templateContent)
+	createSharedDir(t, tmpDir)
+	cfg := createTestConfig(t, tmpDir)
+
+	var buf bytes.Buffer
+	cliApp := &cli.App{
+		Writer: &buf,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: flags.DryRunFlag},
+			&cli.StringFlag{Name: flags.PathFlag, Value: ".tag"},
+			&cli.StringFlag{Name: flags.SharedPathFlag, Value: "_shared"},
+			&cli.BoolFlag{Name: flags.NoHooksFlag},
+			&cli.BoolFlag{Name: flags.VerboseFlag},
+			&cli.StringSliceFlag{Name: flags.MetaFlag},
+			&cli.StringFlag{Name: flags.OnExistingFlag, Value: ""},
+		},
+	}
+
+	set := flag.NewFlagSet("test", flag.ContinueOnError)
+	for _, f := range cliApp.Flags {
+		require.NoError(t, f.Apply(set))
+	}
+	require.NoError(t, set.Set(flags.PathFlag, tmpDir))
+	require.NoError(t, set.Parse([]string{"greet", "world"}))
+	ctx := cli.NewContext(cliApp, set, nil)
+
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		return &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				return engine.GenerateResult{Created: 2, Skipped: 1}, nil
+			},
+		}, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "Generated:", "summary should be written to App.Writer")
+	assert.Contains(t, out, "2 created", "created count should be in output")
+	assert.Contains(t, out, "1 skipped", "skipped count should be in output")
+}
+
+func TestUT_PrintGenerateSummary_ZeroResults(t *testing.T) {
+	var buf bytes.Buffer
+	printGenerateSummary(&buf, engine.GenerateResult{}, false)
+	assert.Equal(t, "Generated: 0 created, 0 skipped, 0 overwritten, 0 modified\n", buf.String())
+}
+
+func TestUT_PrintGenerateSummary_SummaryLineFormat(t *testing.T) {
+	result := engine.GenerateResult{Created: 3, Skipped: 1, Overwritten: 2, Modified: 4}
+	var buf bytes.Buffer
+	printGenerateSummary(&buf, result, false)
+	assert.Equal(t, "Generated: 3 created, 1 skipped, 2 overwritten, 4 modified\n", buf.String())
 }

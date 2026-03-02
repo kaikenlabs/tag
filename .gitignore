@@ -35,4 +35,4 @@ bin
 .claude
 claudedocs
 docs/tickets
-tag
+taginternal/commands/.tag/

@@ -82,7 +82,7 @@ func TestUT_VariableCollector_DefaultsOnly(t *testing.T) {
 		NoInput: true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, "my_project", vars["project_name"])
@@ -116,7 +116,7 @@ func TestUT_VariableCollector_PriorityChain(t *testing.T) {
 		NoInput: true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, false)
 	require.NoError(t, err)
 
 	// var1: only default
@@ -141,7 +141,7 @@ func TestUT_VariableCollector_RequiredMissing(t *testing.T) {
 		NoInput: true,
 	}
 
-	_, err := collector.Collect(config, opts)
+	_, err := collector.Collect(config, opts, false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrRequiredVariableMissing)
 	assert.Contains(t, err.Error(), "required_var")
@@ -164,7 +164,7 @@ func TestUT_VariableCollector_RequiredMissing_MultipleVars(t *testing.T) {
 		NoInput: true,
 	}
 
-	_, err := collector.Collect(config, opts)
+	_, err := collector.Collect(config, opts, false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrRequiredVariableMissing)
 	// Both vars should be listed (sorted)
@@ -186,11 +186,9 @@ func TestUT_VariableCollector_PromptForRequired(t *testing.T) {
 		},
 	}
 
-	opts := Options{
-		IsTTY: true,
-	}
+	opts := Options{}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, "prompted_value", vars["project_name"])
@@ -208,11 +206,9 @@ func TestUT_VariableCollector_SkipPrivateVars(t *testing.T) {
 		},
 	}
 
-	opts := Options{
-		IsTTY: true,
-	}
+	opts := Options{}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	// Private var should get its default
@@ -235,11 +231,9 @@ func TestUT_VariableCollector_PromptForVarsWithDefaults(t *testing.T) {
 		},
 	}
 
-	opts := Options{
-		IsTTY: true,
-	}
+	opts := Options{}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	// Both variables should be prompted even though they have defaults
@@ -269,10 +263,9 @@ func TestUT_VariableCollector_ValuesFileSkipsPrompt(t *testing.T) {
 
 	opts := Options{
 		ValuesFile: valuesFile,
-		IsTTY:      true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	// file_var should come from values file (not prompted)
@@ -300,11 +293,9 @@ func TestUT_VariableCollector_SkipDerivedVars(t *testing.T) {
 		},
 	}
 
-	opts := Options{
-		IsTTY: true,
-	}
+	opts := Options{}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	// package_display_name should be prompted (user input)
@@ -329,11 +320,9 @@ func TestUT_VariableCollector_DerivedVarsWithMethodCalls(t *testing.T) {
 		},
 	}
 
-	opts := Options{
-		IsTTY: true,
-	}
+	opts := Options{}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	// project_name should be prompted
@@ -361,10 +350,9 @@ func TestUT_VariableCollector_MetaSkipsPrompt(t *testing.T) {
 		Meta: map[string]string{
 			"meta_var": "from_meta",
 		},
-		IsTTY: true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	// meta_var should come from --meta (not prompted)
@@ -394,10 +382,9 @@ func TestUT_VariableCollector_MetaSkipsPromptAllTypes(t *testing.T) {
 			"number_var": "42",
 			"choice_var": "b",
 		},
-		IsTTY: true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, true, vars["bool_var"])
@@ -429,7 +416,7 @@ func TestUT_VariableCollector_TypeCoercion(t *testing.T) {
 		NoInput: true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, true, vars["bool_var"])
@@ -453,7 +440,7 @@ func TestUT_VariableCollector_InvalidTypeCoercion(t *testing.T) {
 		NoInput: true,
 	}
 
-	_, err := collector.Collect(config, opts)
+	_, err := collector.Collect(config, opts, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "number_var")
 }
@@ -473,11 +460,9 @@ func TestUT_VariableCollector_ChoicePrompt(t *testing.T) {
 		},
 	}
 
-	opts := Options{
-		IsTTY: true,
-	}
+	opts := Options{}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, "MIT", vars["license"])
@@ -498,11 +483,9 @@ func TestUT_VariableCollector_BooleanPrompt(t *testing.T) {
 		},
 	}
 
-	opts := Options{
-		IsTTY: true,
-	}
+	opts := Options{}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, true, vars["use_docker"])
@@ -523,11 +506,9 @@ func TestUT_VariableCollector_NumberPrompt(t *testing.T) {
 		},
 	}
 
-	opts := Options{
-		IsTTY: true,
-	}
+	opts := Options{}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, float64(3000), vars["port"])
@@ -619,7 +600,7 @@ func TestUT_VariableCollector_ReplayPriority(t *testing.T) {
 		NoInput: true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, false)
 	require.NoError(t, err)
 
 	// var1: replay overwrites default
@@ -659,7 +640,7 @@ func TestUT_VariableCollector_ReplayOverridesDefaults(t *testing.T) {
 		NoInput:     true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, "replayed-project", vars["project_name"])
@@ -686,7 +667,7 @@ func TestUT_VariableCollector_ReplayNotFound(t *testing.T) {
 		NoInput:     true,
 	}
 
-	_, err := collector.Collect(config, opts)
+	_, err := collector.Collect(config, opts, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no saved replay data found")
 }
@@ -707,7 +688,7 @@ func TestUT_VariableCollector_ReplayWithoutTemplateRef(t *testing.T) {
 		NoInput:     true,
 	}
 
-	_, err := collector.Collect(config, opts)
+	_, err := collector.Collect(config, opts, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "template reference")
 }
@@ -738,10 +719,9 @@ func TestUT_VariableCollector_ReplayPromptsForNewVars(t *testing.T) {
 	opts := Options{
 		Replay:      true,
 		TemplateRef: templateRef,
-		IsTTY:       true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, true)
 	require.NoError(t, err)
 
 	// var1 should come from replay
@@ -781,7 +761,7 @@ func TestUT_VariableCollector_ReplayTypeCoercion(t *testing.T) {
 		NoInput:     true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, "string_value", vars["str_var"])
@@ -817,7 +797,7 @@ func TestUT_VariableCollector_ReplayIgnoresRemovedVars(t *testing.T) {
 		NoInput:     true,
 	}
 
-	vars, err := collector.Collect(config, opts)
+	vars, err := collector.Collect(config, opts, false)
 	require.NoError(t, err)
 
 	// current_var should be loaded from replay

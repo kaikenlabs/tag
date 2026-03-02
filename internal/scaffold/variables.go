@@ -15,7 +15,7 @@ import (
 
 // VariableCollector gathers variable values from all sources.
 type VariableCollector interface {
-	Collect(config *TemplateConfig, opts Options) (map[string]any, error)
+	Collect(config *TemplateConfig, opts Options, isTTY bool) (map[string]any, error)
 }
 
 // DefaultVariableCollector implements VariableCollector with the standard priority chain.
@@ -34,7 +34,7 @@ func NewVariableCollector(prompter Prompter) *DefaultVariableCollector {
 // Each layer overwrites the previous, with --meta having highest priority.
 //
 //nolint:gocognit,cyclop // orchestration function coordinates multiple input sources
-func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options) (map[string]any, error) {
+func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options, isTTY bool) (map[string]any, error) {
 	vars := make(map[string]any)
 	// Track which variables were explicitly provided (from replay or values file)
 	// These should not be re-prompted even in interactive mode
@@ -101,7 +101,7 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options)
 	// Step 4: Interactive prompts for variables (if TTY)
 	// Prompt for all non-private, non-derived variables, even if they have defaults.
 	// Skip only if the value was explicitly provided via replay or values file.
-	if opts.IsTTY && !opts.NoInput {
+	if isTTY && !opts.NoInput {
 		for _, name := range varNames {
 			def := config.Vars[name]
 
@@ -322,16 +322,18 @@ func coerceAnyValue(value any, varType VariableType) (any, error) {
 		return nil, nil //nolint:nilnil // nil value is not an error
 	}
 
+	// For string values, delegate to coerceValue to avoid duplication.
+	if s, ok := value.(string); ok {
+		return coerceValue(s, varType)
+	}
+
+	// Handle non-string native types.
 	switch varType {
 	case VarTypeBoolean:
-		switch v := value.(type) {
-		case bool:
+		if v, ok := value.(bool); ok {
 			return v, nil
-		case string:
-			return parseBool(v)
-		default:
-			return nil, fmt.Errorf("cannot convert %T to boolean", value)
 		}
+		return nil, fmt.Errorf("cannot convert %T to boolean", value)
 
 	case VarTypeNumber:
 		switch v := value.(type) {
@@ -339,19 +341,12 @@ func coerceAnyValue(value any, varType VariableType) (any, error) {
 			return v, nil
 		case int:
 			return float64(v), nil
-		case string:
-			return strconv.ParseFloat(v, 64)
 		default:
 			return nil, fmt.Errorf("cannot convert %T to number", value)
 		}
 
 	case VarTypeChoice, VarTypeString:
-		switch v := value.(type) {
-		case string:
-			return v, nil
-		default:
-			return fmt.Sprintf("%v", value), nil
-		}
+		return fmt.Sprintf("%v", value), nil
 
 	default:
 		return value, nil

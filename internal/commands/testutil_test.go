@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,6 +77,7 @@ func createTestCLIContext(t *testing.T, args []string, flagValues map[string]any
 	t.Helper()
 
 	app := &cli.App{
+		Writer: io.Discard,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: flags.DryRunFlag},
 			&cli.StringFlag{Name: flags.PathFlag, Value: ".tag"},
@@ -88,6 +90,7 @@ func createTestCLIContext(t *testing.T, args []string, flagValues map[string]any
 			&cli.StringFlag{Name: flags.InBundleFlag},
 			&cli.StringFlag{Name: flags.OnExistingFlag, Value: ""},
 			&cli.BoolFlag{Name: flags.VerboseFlag},
+			&cli.BoolFlag{Name: flags.NoHooksFlag},
 		},
 	}
 

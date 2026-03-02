@@ -168,7 +168,7 @@ func TestIT_ScaffoldCookiecutter(t *testing.T) {
 	s, err := scaffold.NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Compare against golden files (walk expected, check in actual)
@@ -245,7 +245,7 @@ func TestIT_GenerateCreate(t *testing.T) {
 
 	workDir := setupWorkDir(t, "")
 
-	gen, err := engine.NewGenerator(false, generatorDir, "")
+	gen, err := engine.NewGenerator(false, generatorDir, "", io.Discard)
 	require.NoError(t, err)
 
 	_, err = gen.Generate(engine.Data{Name: "user_service"})
@@ -264,7 +264,7 @@ func TestIT_GenerateInjectAfter(t *testing.T) {
 
 	workDir := setupWorkDir(t, preExistingDir)
 
-	gen, err := engine.NewGenerator(false, generatorDir, "")
+	gen, err := engine.NewGenerator(false, generatorDir, "", io.Discard)
 	require.NoError(t, err)
 
 	_, err = gen.Generate(engine.Data{Name: "users"})
@@ -283,7 +283,7 @@ func TestIT_GenerateInjectBefore(t *testing.T) {
 
 	workDir := setupWorkDir(t, preExistingDir)
 
-	gen, err := engine.NewGenerator(false, generatorDir, "")
+	gen, err := engine.NewGenerator(false, generatorDir, "", io.Discard)
 	require.NoError(t, err)
 
 	_, err = gen.Generate(engine.Data{Name: "users"})
@@ -302,7 +302,7 @@ func TestIT_GenerateAppend(t *testing.T) {
 
 	workDir := setupWorkDir(t, preExistingDir)
 
-	gen, err := engine.NewGenerator(false, generatorDir, "")
+	gen, err := engine.NewGenerator(false, generatorDir, "", io.Discard)
 	require.NoError(t, err)
 
 	_, err = gen.Generate(engine.Data{Name: "users"})
@@ -337,7 +337,7 @@ func TestIT_GenerateBundle(t *testing.T) {
 	for _, genRef := range bundle.Generators {
 		genDir := filepath.Join(generatorsDir, genRef.Name)
 
-		gen, err := engine.NewGeneratorWithEngine(tmplEngine, false, genDir, "")
+		gen, err := engine.NewGeneratorWithEngine(tmplEngine, false, genDir, "", io.Discard)
 		require.NoError(t, err)
 
 		_, err = gen.Generate(engine.Data{Name: "order"})
@@ -358,7 +358,7 @@ func TestIT_GenerateMixed(t *testing.T) {
 
 	workDir := setupWorkDir(t, preExistingDir)
 
-	gen, err := engine.NewGenerator(false, generatorDir, "")
+	gen, err := engine.NewGenerator(false, generatorDir, "", io.Discard)
 	require.NoError(t, err)
 
 	_, err = gen.Generate(engine.Data{Name: "auth"})
@@ -377,7 +377,7 @@ func TestIT_GenerateSharedTemplates(t *testing.T) {
 
 	workDir := setupWorkDir(t, "")
 
-	gen, err := engine.NewGenerator(false, generatorDir, sharedDir)
+	gen, err := engine.NewGenerator(false, generatorDir, sharedDir, io.Discard)
 	require.NoError(t, err)
 
 	_, err = gen.Generate(engine.Data{Name: "my_widget"})
@@ -393,7 +393,7 @@ func TestIT_GenerateDryRun(t *testing.T) {
 
 	workDir := setupWorkDir(t, "")
 
-	gen, err := engine.NewGenerator(true, generatorDir, "")
+	gen, err := engine.NewGenerator(true, generatorDir, "", io.Discard)
 	require.NoError(t, err)
 
 	_, err = gen.Generate(engine.Data{Name: "user_service"})
@@ -414,7 +414,7 @@ func TestIT_GenerateWithScaffoldVars(t *testing.T) {
 
 	workDir := setupWorkDir(t, "")
 
-	gen, err := engine.NewGenerator(false, generatorDir, "")
+	gen, err := engine.NewGenerator(false, generatorDir, "", io.Discard)
 	require.NoError(t, err)
 
 	_, err = gen.Generate(engine.Data{
@@ -447,7 +447,7 @@ func runGenWithRecorder(t *testing.T, tagDir, generatorDir, name string) {
 	require.NoError(t, err)
 
 	rec := history.NewRecorder(tagDir)
-	gen, err := engine.NewGeneratorWithRecorder(tmplEngine, false, generatorDir, "", rec)
+	gen, err := engine.NewGeneratorWithRecorder(tmplEngine, false, generatorDir, "", rec, io.Discard)
 	require.NoError(t, err)
 
 	_, genErr := gen.Generate(engine.Data{Name: name})

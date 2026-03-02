@@ -1,7 +1,6 @@
 package scaffold
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -107,7 +106,7 @@ func TestIT_Scaffold_LocalTemplate(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify output structure
@@ -180,7 +179,7 @@ choice: {{ vars.choice_var }}
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify output
@@ -229,7 +228,7 @@ func TestIT_Scaffold_PathPlaceholders(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify path placeholders were processed
@@ -261,7 +260,7 @@ func TestIT_Scaffold_GeneratesTagconfig(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify .tagconfig.json was generated
@@ -298,7 +297,7 @@ func TestIT_Scaffold_OutputExists_Error(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrOutputExists)
 }
@@ -325,7 +324,7 @@ func TestIT_Scaffold_OutputExists_Force(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Old file should be gone
@@ -342,7 +341,7 @@ func TestIT_Scaffold_TemplateNotFound(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrTemplateNotFound)
 }
@@ -360,7 +359,7 @@ func TestIT_Scaffold_ConfigNotFound(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrConfigNotFound)
 }
@@ -388,7 +387,7 @@ func TestIT_Scaffold_BinaryFileCopied(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify binary file was copied byte-for-byte
@@ -424,7 +423,7 @@ func TestIT_Scaffold_ProjectNameFromArg(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify project_name was used from CLI arg
@@ -456,7 +455,7 @@ func TestIT_Scaffold_DefaultOutputDir(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Should create directory named after project_name in current dir
@@ -509,7 +508,7 @@ func TestIT_Scaffold_PathTraversalPrevention(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	// Should fail due to path traversal detection
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "path traversal")
@@ -625,7 +624,7 @@ func TestIT_Scaffold_ExplicitOutputDir_KeepsNesting(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// With explicit output dir, the template's {{ vars.project_name }} directory
@@ -675,7 +674,7 @@ func TestIT_Scaffold_DerivedVariablesResolved(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Verify the derived variable was resolved in go.mod
@@ -693,46 +692,6 @@ func TestIT_Scaffold_DerivedVariablesResolved(t *testing.T) {
 		"direct variable should be rendered")
 	assert.Contains(t, string(readmeContent), "Slug: my-service",
 		"derived variable should be rendered as computed value")
-}
-
-func TestUT_DisplaySummary_WritesToOutput(t *testing.T) {
-	var buf bytes.Buffer
-	s := &Scaffold{output: &buf}
-
-	vars := map[string]any{
-		"project_name": "my-app",
-	}
-	opts := Options{
-		TemplateName:    "go-api",
-		TemplateRef:     "gh:user/go-api",
-		TemplateVersion: "1.0.0",
-	}
-
-	s.displaySummary("/tmp/my-app", t.TempDir(), vars, opts)
-
-	output := buf.String()
-	assert.Contains(t, output, "Scaffolding complete!")
-	assert.Contains(t, output, "Output: /tmp/my-app")
-	assert.Contains(t, output, "Project: my-app")
-	assert.Contains(t, output, "Template: gh:user/go-api (1.0.0)")
-	assert.Contains(t, output, "cd /tmp/my-app")
-}
-
-func TestUT_DisplaySummary_NoTemplateOrigin(t *testing.T) {
-	var buf bytes.Buffer
-	s := &Scaffold{output: &buf}
-
-	vars := map[string]any{
-		"project_name": "local-project",
-	}
-	opts := Options{} // No template name
-
-	s.displaySummary("/tmp/local-project", t.TempDir(), vars, opts)
-
-	output := buf.String()
-	assert.Contains(t, output, "Scaffolding complete!")
-	assert.Contains(t, output, "Output: /tmp/local-project")
-	assert.NotContains(t, output, "Template:")
 }
 
 func TestIT_Scaffold_DerivedVarsInWrapperDir(t *testing.T) {
@@ -777,7 +736,7 @@ func TestIT_Scaffold_DerivedVarsInWrapperDir(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	outputDir := filepath.Join(tempDir, "My-Service")
@@ -897,7 +856,7 @@ func TestIT_Scaffold_TagConfigInProjectWrapper(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// .tagconfig.json should be inside the wrapper directory
@@ -938,7 +897,7 @@ func TestIT_Scaffold_TagConfigWithoutWrapper(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Without a wrapper, .tagconfig.json goes to outputDir (no change)
@@ -967,7 +926,7 @@ func TestIT_Scaffold_TagConfigDefaultOutputDir(t *testing.T) {
 	s, err := NewScaffold(opts)
 	require.NoError(t, err)
 
-	err = s.Run(opts)
+	_, err = s.Run(opts)
 	require.NoError(t, err)
 
 	// Unwrapped: .tagconfig.json goes to outputDir (== projectRoot)

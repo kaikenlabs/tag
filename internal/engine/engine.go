@@ -17,18 +17,18 @@ import (
 
 // NewGenerator creates a Generator with the standard pipeline.
 // It creates a new template engine, loads templates, and wires up the parser and writer.
-func NewGenerator(dryRun bool, dirPath, sharedPath string) (Generator, error) {
+func NewGenerator(dryRun bool, dirPath, sharedPath string, out io.Writer) (Generator, error) {
 	tmplEngine, err := template.NewEngine()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create template engine: %w", err)
 	}
-	return NewGeneratorWithEngine(tmplEngine, dryRun, dirPath, sharedPath)
+	return NewGeneratorWithEngine(tmplEngine, dryRun, dirPath, sharedPath, out)
 }
 
 // NewGeneratorWithEngine creates a Generator using an existing template engine.
 // This allows sharing a template engine (and its cache) across multiple generators,
 // such as when running a bundle of generators.
-func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath string) (Generator, error) {
+func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath string, out io.Writer) (Generator, error) {
 	if dryRun {
 		slog.Info(chalk.Cyan("DRYRUN MODE"))
 	}
@@ -60,14 +60,14 @@ func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, s
 		return nil, fmt.Errorf("cannot create writer: %w", err)
 	}
 
-	core := NewCore(parser, w, os.Stdout)
+	core := NewCore(parser, w, out)
 	return &core, nil
 }
 
 // NewGeneratorWithRecorder creates a Generator that records file operations
 // into rec. It is identical to NewGeneratorWithEngine but wraps the FileWriter
 // with a history.RecordingFileWriter.
-func NewGeneratorWithRecorder(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath string, rec *history.Recorder) (Generator, error) {
+func NewGeneratorWithRecorder(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath string, rec *history.Recorder, out io.Writer) (Generator, error) {
 	if dryRun {
 		slog.Info(chalk.Cyan("DRYRUN MODE"))
 	}
@@ -100,7 +100,7 @@ func NewGeneratorWithRecorder(tmplEngine *template.Engine, dryRun bool, dirPath,
 		fw = history.NewRecordingFileWriter(w, rec)
 	}
 
-	core := NewCore(parser, fw, os.Stdout)
+	core := NewCore(parser, fw, out)
 	return &core, nil
 }
 
