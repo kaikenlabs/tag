@@ -21,6 +21,7 @@ import (
 func ScaffoldCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "scaffold",
+		Aliases:   []string{"s"},
 		Usage:     "Create a new project from a template",
 		ArgsUsage: "[template] [project-name]",
 		Description: `Scaffold a new project from a local, remote, or library template.

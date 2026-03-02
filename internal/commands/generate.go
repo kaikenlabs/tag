@@ -28,8 +28,9 @@ var newBundleEngine = engine.NewGeneratorWithEngine
 
 func GenerateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
-		Name:  "generate",
-		Usage: "Run a generator or bundle",
+		Name:    "generate",
+		Aliases: []string{"g"},
+		Usage:   "Run a generator or bundle",
 		Description: `Run a generator or bundle to create or modify files in an existing project.
 
 TAG auto-resolves generators from the library template first, then falls back
