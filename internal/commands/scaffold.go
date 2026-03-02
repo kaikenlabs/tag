@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
+	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/remote"
@@ -128,6 +129,8 @@ func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.En
 		return app.Errorf("failed to initialize scaffold: %w", err)
 	}
 
+	s.SetRecorder(history.NewRecorder(""))
+
 	if err := s.Run(opts); err != nil {
 		var ccErr *scaffold.CookiecutterDetectedError
 		if errors.As(err, &ccErr) {
@@ -194,6 +197,9 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	if err != nil {
 		return app.Errorf("failed to initialize scaffold: %w", err)
 	}
+
+	// Scaffold only creates new files (no inject/append), so tagDir for backups is unused.
+	s.SetRecorder(history.NewRecorder(""))
 
 	if err := s.Run(opts); err != nil {
 		var ccErr *scaffold.CookiecutterDetectedError
@@ -320,6 +326,7 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 	if err != nil {
 		return app.Errorf("failed to reinitialize scaffold: %w", err)
 	}
+	s.SetRecorder(history.NewRecorder(""))
 	if err := s.Run(opts); err != nil {
 		return app.Errorf("scaffolding failed: %w", err)
 	}

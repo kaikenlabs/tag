@@ -170,6 +170,9 @@ my-project/
 | `tag lib ls` | List installed templates |
 | `tag lib rm <name>` | Remove template |
 | `tag lib update [name]` | Update from source |
+| `tag undo` | Revert the last generation |
+| `tag undo --list` | Show generation history |
+| `tag undo --id <id>` | Revert a specific generation |
 | `tag update` | Self-update to latest release |
 | `tag version [--check]` | Print version, check for updates |
 

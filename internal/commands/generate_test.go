@@ -14,6 +14,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types/flags"
@@ -100,7 +101,7 @@ Hello {{ .Name }}`
 	// Use a mock to verify the engine is called correctly
 	var capturedData engine.Data
 	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				capturedData = data
@@ -137,7 +138,7 @@ Hello {{ .Name }}`
 
 	var capturedData engine.Data
 	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				capturedData = data
@@ -175,7 +176,7 @@ Hello {{ .Name }}`
 
 	var capturedData engine.Data
 	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				capturedData = data
@@ -211,7 +212,7 @@ Hello {{ .Name }}`
 	})
 
 	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				return errors.New("template execution failed")
@@ -246,7 +247,7 @@ Hello {{ .Name }}`
 	})
 
 	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		return nil, errors.New("failed to create engine")
 	}
 	t.Cleanup(func() { newEngine = originalNewEngine })
@@ -315,7 +316,7 @@ Hello {{ .Name }}`
 
 	var generateCalls int
 	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				generateCalls++
@@ -357,7 +358,7 @@ Hello {{ .Name }}`
 
 	var generateCalls int
 	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				generateCalls++
@@ -524,7 +525,7 @@ Hello {{ .Name }}`
 
 	var capturedDirPath, capturedSharedPath string
 	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		capturedDirPath = dirPath
 		capturedSharedPath = sharedPath
 		mock := &mockGenerator{
@@ -603,7 +604,7 @@ Hello {{ .Name }}`
 
 	var capturedSharedPath string
 	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		capturedSharedPath = sharedPath
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
@@ -731,7 +732,7 @@ Hello {{ .Name }}`
 
 	var capturedData engine.Data
 	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				capturedData = data
@@ -771,7 +772,7 @@ Hello {{ .Name }}`
 
 	var capturedData engine.Data
 	originalNewEngine := newEngine
-	newEngine = func(dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				capturedData = data
@@ -847,7 +848,7 @@ Hello {{ .Name }}`
 
 	var capturedData engine.Data
 	originalBundleEngine := newBundleEngine
-	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string) (engine.Generator, error) {
+	newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder) (engine.Generator, error) {
 		mock := &mockGenerator{
 			GenerateFunc: func(data engine.Data) error {
 				capturedData = data

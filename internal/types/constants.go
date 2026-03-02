@@ -34,6 +34,12 @@ const (
 
 	// TagIgnoreFile is the name of the gitignore-style exclusion file for templates.
 	TagIgnoreFile = ".tagignore"
+
+	// HistoryFile is the filename for the generation history manifest.
+	HistoryFile = "history.json"
+
+	// HistoryBackupsDir is the subdirectory inside TemplatesDir where backups are stored.
+	HistoryBackupsDir = "history/backups"
 )
 
 // InjectClause represents where to inject content relative to a marker.

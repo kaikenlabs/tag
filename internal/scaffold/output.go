@@ -14,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 
 	"github.com/kaikenlabs/tag/internal/fileutil"
+	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
 )
@@ -31,6 +32,13 @@ type DefaultOutputWriter struct {
 	allowRecursiveRender bool
 	derivedVarNames      map[string]bool
 	out                  io.Writer
+	recorder             *history.Recorder // optional; nil = no recording
+}
+
+// SetRecorder attaches a history recorder to this writer. When set, every
+// file written during scaffold is recorded as a "create" entry.
+func (w *DefaultOutputWriter) SetRecorder(r *history.Recorder) {
+	w.recorder = r
 }
 
 // NewOutputWriter creates a new output writer.
@@ -228,11 +236,19 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 			copy(fullContent, sample)
 			copy(fullContent[len(sample):], remainder)
 		}
-		return w.processTemplate(srcPath, destPath, fullContent, ctx, mode)
+		if err := w.processTemplate(srcPath, destPath, fullContent, ctx, mode); err != nil {
+			return err
+		}
+		w.recordCreate(destPath)
+		return nil
 	}
 
 	// Binary file: stream to destination using io.Copy
-	return streamBinaryFile(f, destPath, sample, mode)
+	if err := streamBinaryFile(f, destPath, sample, mode); err != nil {
+		return err
+	}
+	w.recordCreate(destPath)
+	return nil
 }
 
 // streamBinaryFile writes a binary file to destPath by first writing the already-read
@@ -327,6 +343,19 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 	}
 
 	return nil
+}
+
+// recordCreate records a newly written file with the history recorder, if set.
+func (w *DefaultOutputWriter) recordCreate(destPath string) {
+	if w.recorder == nil {
+		return
+	}
+	hashAfter, err := history.HashFile(destPath)
+	if err != nil {
+		fmt.Fprintf(w.out, "Warning: could not hash %s for history: %v\n", destPath, err)
+		return
+	}
+	w.recorder.RecordCreate(destPath, hashAfter)
 }
 
 // buildTemplateContext builds the template context from variables.

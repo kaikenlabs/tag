@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 
+	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/schema"
@@ -34,8 +35,18 @@ type Scaffold struct {
 	writer     OutputWriter
 	engine     template.TemplateRenderer
 	prompter   Prompter
-	hookRunner hooks.HookRunner // Executes pre/post scaffold hooks
-	output     io.Writer        // Destination for user-facing messages (default: os.Stdout)
+	hookRunner hooks.HookRunner  // Executes pre/post scaffold hooks
+	output     io.Writer         // Destination for user-facing messages (default: os.Stdout)
+	recorder   *history.Recorder // Optional history recorder; nil = no recording
+}
+
+// SetRecorder attaches a history recorder. When set, file operations during
+// scaffolding are recorded and a manifest entry is written on success.
+func (s *Scaffold) SetRecorder(r *history.Recorder) {
+	s.recorder = r
+	if w, ok := s.writer.(*DefaultOutputWriter); ok {
+		w.SetRecorder(r)
+	}
 }
 
 // NewScaffold creates a new scaffold instance with default dependencies.
@@ -295,6 +306,15 @@ func (s *Scaffold) executeScaffold(ctx *runContext) error {
 	// Save replay data and display summary
 	saveReplayData(s.output, ctx.opts, ctx.config, ctx.vars)
 	s.displaySummary(ctx.outputDir, ctx.templateDirAbs, ctx.vars, ctx.opts)
+
+	// Write history manifest entry to the output project's .tag/ directory.
+	if s.recorder != nil {
+		gen := s.recorder.Build(ctx.opts.TemplateName, "scaffold")
+		tagDir := filepath.Join(ctx.projectRoot, types.TemplatesDir)
+		if appendErr := history.Append(tagDir, gen); appendErr != nil {
+			fmt.Fprintf(s.output, "Warning: could not write history manifest: %v\n", appendErr)
+		}
+	}
 
 	success = true
 	return nil

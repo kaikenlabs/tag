@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
+	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -59,6 +60,46 @@ func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, s
 	}
 
 	core := NewCore(parser, w, os.Stdout)
+	return &core, nil
+}
+
+// NewGeneratorWithRecorder creates a Generator that records file operations
+// into rec. It is identical to NewGeneratorWithEngine but wraps the FileWriter
+// with a history.RecordingFileWriter.
+func NewGeneratorWithRecorder(tmplEngine *template.Engine, dryRun bool, dirPath, sharedPath string, rec *history.Recorder) (Generator, error) {
+	if dryRun {
+		slog.Info(chalk.Cyan("DRYRUN MODE"))
+	}
+
+	templates, err := LoadTemplateFiles(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load templates: %w", err)
+	}
+
+	sharedTemplates, sharedErr := LoadTemplateFiles(sharedPath)
+	if sharedErr != nil {
+		slog.Debug("shared templates not loaded", "path", sharedPath, "error", sharedErr)
+	}
+
+	if len(sharedTemplates) > 0 {
+		loader := template.CreateMemoryLoaderFromMap(sharedTemplates)
+		tmplEngine.SetLoader(loader)
+		tmplEngine.SetSharedContent(sharedTemplates)
+		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
+	}
+
+	parser := NewParserWithExecutor(tmplEngine, templates, sharedTemplates)
+	w, err := writer.NewFileWriter(dryRun)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create writer: %w", err)
+	}
+
+	fw := w
+	if rec != nil {
+		fw = history.NewRecordingFileWriter(w, rec)
+	}
+
+	core := NewCore(parser, fw, os.Stdout)
 	return &core, nil
 }
 
