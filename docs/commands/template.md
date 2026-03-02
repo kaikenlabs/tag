@@ -20,6 +20,7 @@ The `tag template` command group provides tools for managing templates, generato
 | `tag template new generator <name>` | Create a new generator |
 | `tag template new bundle <name>` | Create a new bundle |
 | `tag template info <template>` | Show template metadata and details |
+| `tag template lint [path]` | Validate template syntax, schema, and variable references |
 | `tag template list` | List available generators and bundles |
 
 ---
@@ -146,6 +147,64 @@ Generators:
 Bundles:
   crud                 Model + handler + service
 ```
+
+---
+
+### `tag template lint`
+
+Validate a scaffold template for correctness. Checks `tag.template.json` against the JSON Schema, parses all template files for Gonja syntax errors, and verifies that `{{ vars.* }}` references match declared variables.
+
+```bash
+tag template lint [path] [flags]
+```
+
+If `[path]` is omitted, the current directory is used.
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--format` | `-f` | `text` | Output format: `text` or `json` |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| `0` | All checks passed |
+| `1` | Lint errors found |
+| `2` | Usage error (bad arguments, missing config) |
+
+**Examples:**
+
+```bash
+# Lint the current directory
+tag template lint
+
+# Lint a specific template
+tag template lint ./path/to/template
+
+# Machine-readable output for CI
+tag template lint --format json
+```
+
+**Example text output:**
+
+```
+  tag.template.json  ERROR  config parse error: invalid JSON  (config-parse)
+  main.go.tmpl:5  ERROR  undefined variable "db_name"  (undefined-variable)
+
+  2 error(s)
+```
+
+**What is checked:**
+
+- **Schema validation** — `tag.template.json` is validated against the TAG JSON Schema.
+- **Config parsing** — The config file must be valid JSON and match the expected structure.
+- **Template syntax** — All text files are parsed by the Gonja engine (parse-only, no execution).
+- **Variable cross-reference** — Every `{{ vars.X }}` and `{% ... vars.X ... %}` reference is checked against the variables declared in `tag.template.json`.
+- **Derived variable defaults** — Derived variables referencing other undefined variables are flagged.
+- **Path placeholders** — Directory and file names containing `{{ vars.* }}` are checked.
+- **Binary files** — Automatically skipped.
+- **`.tagignore` patterns** — Ignored files are excluded from linting.
+- **Comments** — Template comments (`{# ... #}`) are stripped before variable scanning.
 
 ---
 

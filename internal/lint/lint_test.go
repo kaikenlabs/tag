@@ -1,0 +1,518 @@
+package lint
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// --- Helper ---
+
+// createTemplate creates a minimal template directory for testing.
+func createTemplate(t *testing.T, dir, config string, files map[string]string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte(config), 0o644))
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+}
+
+const validConfig = `{
+  "name": "test-template",
+  "description": "A test template",
+  "vars": {
+    "project_name": "my-project",
+    "use_docker": {
+      "type": "boolean",
+      "prompt": "Use Docker?",
+      "default": false
+    },
+    "_private_var": "internal",
+    "derived_var": "{{ vars.project_name | snake }}"
+  }
+}`
+
+// --- Schema Validation Tests ---
+
+func TestUT_LintSchema_ValidConfig(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, nil)
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.False(t, result.HasErrors())
+}
+
+func TestUT_LintSchema_InvalidConfig(t *testing.T) {
+	dir := t.TempDir()
+	// Invalid: vars must be an object, not an array
+	config := `{"name": "test", "vars": [1, 2, 3]}`
+	createTemplate(t, dir, config, nil)
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+
+	hasSchemaRule := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "schema-validation" || issue.Rule == "config-parse" {
+			hasSchemaRule = true
+			break
+		}
+	}
+	assert.True(t, hasSchemaRule, "expected schema-validation or config-parse rule in issues")
+}
+
+func TestUT_LintSchema_MalformedJSON(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte(`{not json`), 0o644))
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+}
+
+func TestUT_LintSchema_MissingConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := NewLinter(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tag.template.json not found")
+}
+
+// --- Template Syntax Tests ---
+
+func TestUT_LintTemplateFiles_ValidSyntax(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"README.md": "# {{ vars.project_name }}\nHello world",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.False(t, result.HasErrors())
+}
+
+func TestUT_LintTemplateFiles_InvalidSyntax(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"broken.txt": "Hello {{ vars.project_name }\nWorld",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+
+	hasSyntaxRule := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "template-syntax" {
+			hasSyntaxRule = true
+			assert.Equal(t, "broken.txt", issue.File)
+			break
+		}
+	}
+	assert.True(t, hasSyntaxRule, "expected template-syntax rule in issues")
+}
+
+func TestUT_LintTemplateFiles_BinarySkipped(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, nil)
+	// Write a binary file with null bytes
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "image.png"), []byte{0x89, 0x50, 0x4E, 0x47, 0x00, 0x00}, 0o644))
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.False(t, result.HasErrors())
+}
+
+func TestUT_LintTemplateFiles_TagignoreRespected(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		".tagignore":      "ignored/",
+		"ignored/bad.txt": "{{ vars.undefined_var }}",
+		"good.txt":        "{{ vars.project_name }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	// The ignored file with undefined var should not cause an error
+	assert.False(t, result.HasErrors())
+}
+
+func TestUT_LintTemplateFiles_SkipsConfigFiles(t *testing.T) {
+	dir := t.TempDir()
+	// tag.template.json itself uses valid Gonja syntax in the JSON, but we should
+	// NOT lint it as a template file. If we did, the JSON syntax would fail Gonja parsing.
+	createTemplate(t, dir, validConfig, map[string]string{
+		"hello.txt": "{{ vars.project_name }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	// If tag.template.json were linted as template, it would produce syntax errors
+	for _, issue := range result.Issues {
+		assert.NotEqual(t, "tag.template.json", issue.File, "should not lint config file as template")
+	}
+}
+
+// --- Variable Extraction Tests ---
+
+func TestUT_ExtractVarRefs_SimpleVar(t *testing.T) {
+	refs := extractVarRefs("{{ vars.name }}", 1)
+	require.Len(t, refs, 1)
+	assert.Equal(t, "name", refs[0].Name)
+}
+
+func TestUT_ExtractVarRefs_VarWithFilter(t *testing.T) {
+	refs := extractVarRefs("{{ vars.name | snake }}", 1)
+	require.Len(t, refs, 1)
+	assert.Equal(t, "name", refs[0].Name)
+}
+
+func TestUT_ExtractVarRefs_VarInIfBlock(t *testing.T) {
+	refs := extractVarRefs("{% if vars.use_docker %}", 1)
+	require.Len(t, refs, 1)
+	assert.Equal(t, "use_docker", refs[0].Name)
+}
+
+func TestUT_ExtractVarRefs_VarInForBlock(t *testing.T) {
+	refs := extractVarRefs("{% for item in vars.items %}", 1)
+	require.Len(t, refs, 1)
+	assert.Equal(t, "items", refs[0].Name)
+}
+
+func TestUT_ExtractVarRefs_NoVars(t *testing.T) {
+	refs := extractVarRefs("Hello world, no variables here", 1)
+	assert.Empty(t, refs)
+}
+
+func TestUT_ExtractVarRefs_MultipleVars(t *testing.T) {
+	refs := extractVarRefs("{{ vars.first }} and {{ vars.second }}", 1)
+	require.Len(t, refs, 2)
+	names := []string{refs[0].Name, refs[1].Name}
+	assert.Contains(t, names, "first")
+	assert.Contains(t, names, "second")
+}
+
+func TestUT_ExtractVarRefs_DuplicateVarDeduped(t *testing.T) {
+	refs := extractVarRefs("{{ vars.name }} {{ vars.name }}", 1)
+	require.Len(t, refs, 1)
+	assert.Equal(t, "name", refs[0].Name)
+}
+
+// --- Cross-Reference Tests ---
+
+func TestUT_CrossReference_AllDefined(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"readme.md": "# {{ vars.project_name }}\n{% if vars.use_docker %}Docker{% endif %}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.False(t, result.HasErrors())
+}
+
+func TestUT_CrossReference_UndefinedVar(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"readme.md": "{{ vars.nonexistent }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" && issue.File == "readme.md" {
+			found = true
+			assert.Equal(t, 1, issue.Line)
+			assert.Contains(t, issue.Message, "nonexistent")
+			break
+		}
+	}
+	assert.True(t, found, "expected undefined-variable issue for readme.md")
+}
+
+func TestUT_CrossReference_PrivateVar(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"test.txt": "{{ vars._private_var }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	// _private_var is declared, so no undefined-variable errors
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			t.Errorf("unexpected undefined-variable issue: %s", issue.Message)
+		}
+	}
+}
+
+func TestUT_CrossReference_DerivedVar(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"test.txt": "{{ vars.derived_var }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	// derived_var is declared, so no undefined-variable errors
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" && issue.File == "test.txt" {
+			t.Errorf("unexpected undefined-variable issue: %s", issue.Message)
+		}
+	}
+}
+
+func TestUT_CrossReference_DerivedVarDefault_UndefinedRef(t *testing.T) {
+	dir := t.TempDir()
+	config := `{
+  "name": "test",
+  "vars": {
+    "bad_derived": "{{ vars.nonexistent | snake }}"
+  }
+}`
+	createTemplate(t, dir, config, nil)
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" && issue.File == "tag.template.json" {
+			found = true
+			assert.Contains(t, issue.Message, "nonexistent")
+			break
+		}
+	}
+	assert.True(t, found, "expected undefined-variable issue for derived var default")
+}
+
+func TestUT_CrossReference_PathPlaceholders(t *testing.T) {
+	dir := t.TempDir()
+	config := `{
+  "name": "test",
+  "vars": {
+    "name": "myproject"
+  }
+}`
+	createTemplate(t, dir, config, map[string]string{
+		"{{ vars.unknown_path }}/file.txt": "content",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			found = true
+			assert.Contains(t, issue.Message, "unknown_path")
+			break
+		}
+	}
+	assert.True(t, found, "expected undefined-variable issue for path placeholder")
+}
+
+func TestUT_CrossReference_VarInComment_Ignored(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"test.txt": "{# {{ vars.nonexistent }} #}\n{{ vars.project_name }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			t.Errorf("unexpected undefined-variable issue: %s", issue.Message)
+		}
+	}
+}
+
+func TestUT_CrossReference_MultilineComment_Ignored(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"test.txt": "{# This comment\nspans {{ vars.nonexistent }}\nmultiple lines #}\n{{ vars.project_name }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	// The var in the comment should be ignored
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			t.Errorf("unexpected undefined-variable issue: %s", issue.Message)
+		}
+	}
+}
+
+// --- Multiple Errors Tests ---
+
+func TestUT_MultipleErrorsReported(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"file1.txt": "{{ vars.undefined_a }}",
+		"file2.txt": "{{ vars.undefined_b }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+
+	undefinedCount := 0
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			undefinedCount++
+		}
+	}
+	assert.GreaterOrEqual(t, undefinedCount, 2, "should report errors in multiple files")
+}
+
+// --- Result Tests ---
+
+func TestUT_Result_HasErrors(t *testing.T) {
+	r := &Result{}
+	assert.False(t, r.HasErrors())
+
+	r.Add(Issue{Severity: SeverityError, Message: "test"})
+	assert.True(t, r.HasErrors())
+}
+
+func TestUT_Result_HasErrors_WarningsOnly(t *testing.T) {
+	r := &Result{}
+	r.Add(Issue{Severity: SeverityWarning, Message: "just a warning"})
+	assert.False(t, r.HasErrors())
+}
+
+func TestUT_Result_Counts(t *testing.T) {
+	r := &Result{}
+	r.Add(Issue{Severity: SeverityError, Message: "e1"})
+	r.Add(Issue{Severity: SeverityError, Message: "e2"})
+	r.Add(Issue{Severity: SeverityWarning, Message: "w1"})
+	assert.Equal(t, 2, r.ErrorCount())
+	assert.Equal(t, 1, r.WarningCount())
+}
+
+// --- NewLinter Tests ---
+
+func TestUT_NewLinter_NonexistentPath(t *testing.T) {
+	_, err := NewLinter("/nonexistent/path")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+func TestUT_NewLinter_FileNotDir(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "file.txt")
+	require.NoError(t, os.WriteFile(f, []byte("test"), 0o644))
+
+	_, err := NewLinter(f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a directory")
+}
+
+// --- Format Tests ---
+
+func TestUT_WriteJSON_ValidOutput(t *testing.T) {
+	r := &Result{}
+	r.Add(Issue{File: "test.txt", Line: 5, Severity: SeverityError, Message: "bad", Rule: "test-rule"})
+
+	var buf strings.Builder
+	err := WriteJSON(&buf, r)
+	require.NoError(t, err)
+
+	var decoded Result
+	require.NoError(t, json.Unmarshal([]byte(buf.String()), &decoded))
+	require.Len(t, decoded.Issues, 1)
+	assert.Equal(t, "test.txt", decoded.Issues[0].File)
+	assert.Equal(t, 5, decoded.Issues[0].Line)
+}
+
+func TestUT_WriteJSON_EmptyResult(t *testing.T) {
+	r := &Result{}
+
+	var buf strings.Builder
+	err := WriteJSON(&buf, r)
+	require.NoError(t, err)
+
+	var decoded Result
+	require.NoError(t, json.Unmarshal([]byte(buf.String()), &decoded))
+	assert.NotNil(t, decoded.Issues, "should be [] not null")
+	assert.Empty(t, decoded.Issues)
+}
+
+func TestUT_WriteText_Output(t *testing.T) {
+	r := &Result{}
+	r.Add(Issue{File: "test.txt", Line: 5, Severity: SeverityError, Message: "bad var", Rule: "test-rule"})
+
+	var buf strings.Builder
+	WriteText(&buf, r)
+
+	output := buf.String()
+	assert.Contains(t, output, "test.txt:5")
+	assert.Contains(t, output, "ERROR")
+	assert.Contains(t, output, "bad var")
+	assert.Contains(t, output, "test-rule")
+	assert.Contains(t, output, "1 error(s)")
+}

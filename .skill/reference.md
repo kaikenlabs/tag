@@ -297,6 +297,21 @@ tag lib rm my-template                 # Remove
 
 Cookiecutter templates are auto-detected and converted when added.
 
+### Template Linting
+
+```bash
+tag template lint                      # Lint current directory
+tag template lint ./path/to/template   # Lint specific template
+tag template lint --format json        # Machine-readable output for CI
+```
+
+Validates:
+- `tag.template.json` against JSON Schema
+- Gonja template syntax (parse-only, no execution)
+- `{{ vars.* }}` references against declared variables
+
+Exit codes: `0` = pass, `1` = lint errors, `2` = usage error.
+
 ### Cache Management
 
 ```bash

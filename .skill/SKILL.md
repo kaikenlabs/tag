@@ -39,6 +39,9 @@ Generate code in existing project?
   Multiple related files? → bundle
   Distributable package? → self-contained bundle
 
+Validate template before publishing?
+  → tag template lint [path]
+
 Convert Cookiecutter?
   → tag convert cookiecutter <src> -o <dst>
   → Or just scaffold directly (auto-detects)
@@ -161,6 +164,7 @@ my-project/
 | `tag template new generator <name>` | Create generator (`--in-bundle`, `--lib`) |
 | `tag template new bundle <name>` | Create bundle (`--self-contained`, `--lib`) |
 | `tag template info <template>` | Show template details |
+| `tag template lint [path]` | Validate template (schema, syntax, vars) |
 | `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template |
 | `tag lib add <ref>` | Install template to library |
 | `tag lib ls` | List installed templates |
