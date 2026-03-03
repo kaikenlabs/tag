@@ -2,6 +2,7 @@ package writer
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -11,18 +12,43 @@ import (
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
+// writerConfig holds optional configuration for NewFileWriter.
+type writerConfig struct {
+	out   io.Writer
+	in    io.Reader
+	isTTY bool
+}
+
+// WriterOption configures NewFileWriter behaviour.
+type WriterOption func(*writerConfig)
+
+// WithDiffOutput enables enhanced dry-run diff display.
+// out receives the colored diff text; in is the source for interactive prompt
+// responses; isTTY controls whether a per-file y/n/a/q prompt is shown.
+func WithDiffOutput(out io.Writer, in io.Reader, isTTY bool) WriterOption {
+	return func(c *writerConfig) {
+		c.out = out
+		c.in = in
+		c.isTTY = isTTY
+	}
+}
+
 // NewFileWriter creates a new writer with a cached working directory,
 // returning the FileWriter interface for dependency injection.
 // The working directory is resolved once at construction time and reused
 // for path containment validation on every write operation.
-func NewFileWriter(dryRun bool) (FileWriter, error) {
+func NewFileWriter(dryRun bool, opts ...WriterOption) (FileWriter, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("cannot determine working directory: %w", err)
 	}
+	cfg := &writerConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	w := Write{
 		mx:  sync.Mutex{},
-		fs:  setFileWriter(dryRun),
+		fs:  setFileWriter(dryRun, cfg),
 		cwd: cwd,
 	}
 	return &w, nil
@@ -101,11 +127,18 @@ func (w *Write) InjectIntoFile(name string, data []byte, inject Inject) error {
 	return nil
 }
 
-// setFileWriter - return a writer based on the dry run flag.
-// If the dry fun flag is true, return a writer that logs to stdout,
-// otherwise return a file writer.
-func setFileWriter(dryrun bool) fileReadWrite {
+// setFileWriter returns a fileReadWrite implementation based on dryRun and opts.
+// When dryRun is true and cfg.out is non-nil, an enhanced diff writer is returned.
+// When dryRun is true and cfg.out is nil, a simple slog-based logger is returned.
+func setFileWriter(dryrun bool, cfg *writerConfig) fileReadWrite {
 	if dryrun {
+		if cfg.out != nil {
+			return &fileDiff{
+				out:   cfg.out,
+				in:    cfg.in,
+				isTTY: cfg.isTTY,
+			}
+		}
 		return &fileLog{}
 	}
 	return &fileWrite{}

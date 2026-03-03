@@ -108,6 +108,7 @@ func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
 	processor.SetAllowRecursiveRender(opts.AllowRecursiveRender)
 	writer := NewOutputWriter(s.engine, processor)
 	writer.SetAllowRecursiveRender(opts.AllowRecursiveRender)
+	writer.SetDryRun(opts.DryRun)
 
 	s.collector = collector
 	s.processor = processor

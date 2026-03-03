@@ -133,10 +133,29 @@ tag generate crud UserProfile "name:string"
 
 ### Dry Run Mode
 
+Dry run renders all templates and shows a colored unified diff for each file — green `+` lines for additions, red `-` lines for deletions — without writing anything to disk.
+
 ```bash
 # Preview what would be generated
 tag generate handler User --dry-run
 ```
+
+When connected to a TTY, each file's diff is followed by an interactive prompt:
+
+```
+[y]es/[n]o/[a]ll/[q]uit >
+```
+
+| Key | Behavior |
+|-----|----------|
+| `y` | Accept and show the next file's diff (nothing is written in dry-run) |
+| `n` | Skip and show the next file's diff |
+| `a` | Accept all — skip remaining prompts and show all remaining diffs |
+| `q` | Quit the review immediately; generation exits with no files written |
+
+When not connected to a TTY (e.g., CI pipelines), all diffs are printed without prompting.
+
+Hooks are not executed during dry-run.
 
 ### Handling Existing Files
 
@@ -371,6 +390,7 @@ notes: "Remember to register the handler in routes.go"
 | "template version mismatch" | Library template version differs from scaffold-time version | Consider re-scaffolding or running `tag lib update <name>` |
 | "cannot open bundle file" | Bundle file not found | Verify bundle exists in `_bundles/` |
 | "hook failed" | Pre/post hook returned error | Check hook command and permissions |
+| user quit (exit code 1) | User pressed `q` during `--dry-run` interactive review | Normal exit — no files were written |
 
 ## See Also
 

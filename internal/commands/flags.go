@@ -7,13 +7,14 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 )
 
 // reparseTrailingFlags rescans c.Args() for flag-like tokens that Go's flag
 // parser silently dropped (it stops at the first non-flag argument).
 // Recognised flags are applied via c.Set(); the remaining positional arguments
 // are returned.
-func reparseTrailingFlags(c *cli.Context, flags []cli.Flag) ([]string, error) {
+func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error) {
 	args := c.Args().Slice()
 
 	// Build lookup tables:
@@ -26,7 +27,7 @@ func reparseTrailingFlags(c *cli.Context, flags []cli.Flag) ([]string, error) {
 	boolFlags := make(map[string]bool)
 	canonical := make(map[string]string)
 
-	for _, f := range flags {
+	for _, f := range cliFlags {
 		names := f.Names()
 		if len(names) == 0 {
 			continue
@@ -141,6 +142,19 @@ func commonScaffoldFlags() []cli.Flag {
 			Name:  "allow-recursive-render",
 			Usage: "Allow template syntax in variable values to be rendered (SECURITY: enables recursive template rendering)",
 		},
+		&cli.BoolFlag{
+			Name:  flags.UpdateLockFlag,
+			Usage: "Refresh the lockfile entry for the template (accepts new version/checksum)",
+		},
+		&cli.BoolFlag{
+			Name:  flags.IgnoreLockFlag,
+			Usage: "Skip lockfile verification for this run (a warning will be printed)",
+		},
+		&cli.BoolFlag{
+			Name:    flags.DryRunFlag,
+			Aliases: []string{"d"},
+			Usage:   "Preview what would be written without creating any files",
+		},
 	}
 }
 
@@ -159,5 +173,8 @@ func buildScaffoldOpts(c *cli.Context, templateDir, projectName string, meta map
 		NoSave:               c.Bool("no-save"),
 		AcceptHooks:          c.Bool("accept-hooks"),
 		AllowRecursiveRender: c.Bool("allow-recursive-render"),
+		UpdateLock:           c.Bool(flags.UpdateLockFlag),
+		IgnoreLock:           c.Bool(flags.IgnoreLockFlag),
+		DryRun:               c.Bool(flags.DryRunFlag),
 	}
 }

@@ -43,6 +43,9 @@ When a template name is given without a path prefix or remote shorthand, TAG fir
 | `--replay` | | Reuse saved values from a previous scaffold |
 | `--no-save` | | Don't save values for future replay |
 | `--accept-hooks` | | Accept hooks without prompting (disabled by default for remote templates) |
+| `--dry-run` | `-d` | Preview which files would be written without creating the output directory |
+| `--update-lock` | | Update the lockfile with the current template version |
+| `--ignore-lock` | | Ignore the lockfile and scaffold from the current template state |
 
 ## Template Formats
 
@@ -175,6 +178,26 @@ tag scaffold gh:user/template my-project --force
 ```bash
 # Force re-fetch of a cached remote template
 tag scaffold gh:user/template --update
+```
+
+### Dry Run Mode
+
+Use `--dry-run` to preview which files a scaffold would create without writing anything to disk or creating the output directory. Each file that would be written is printed as:
+
+```
+(dry-run) would write: my-project/main.go
+(dry-run) would write: my-project/go.mod
+(dry-run) would write: my-project/Dockerfile
+```
+
+Binary files are listed the same way and are also skipped. No diff is shown for scaffold dry-run because these are new files with no existing content to compare against.
+
+```bash
+# Preview files before scaffolding
+tag scaffold gh:user/template my-project --dry-run
+
+# Useful before scaffolding from an unfamiliar remote template
+tag scaffold gh:user/template --dry-run --no-input
 ```
 
 ## Variable Input Priority

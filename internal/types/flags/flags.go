@@ -13,4 +13,6 @@ const (
 	OnExistingFlag    = "on-existing"
 	VerboseFlag       = "verbose"
 	NoHooksFlag       = "no-hooks"
+	UpdateLockFlag    = "update-lock"
+	IgnoreLockFlag    = "ignore-lock"
 )

@@ -326,8 +326,13 @@ tag cache clear --all                  # Clear entire cache
 |------|-------------|
 | `--on-existing <policy>` | How to handle create-action files that already exist: `fail` (default — atomic, no writes if any conflict), `skip` (silently skip existing files), `overwrite` (replace existing files) |
 | `-v` / `--verbose` | Print per-file operation details (created/skipped/overwritten/modified) after generation |
-| `--dry-run` / `-d` | Preview what would be written without touching the filesystem |
+| `--dry-run` / `-d` | Preview what would be written without touching the filesystem. Behavior differs by command — see below. |
 | `-m key=value` | Set variable values inline |
+
+**`--dry-run` behavior by command**:
+
+- **`tag generate --dry-run`**: Renders templates and displays a colored unified diff for each file (green `+` additions, red `-` deletions). On a TTY, each diff is followed by a `[y]es/[n]o/[a]ll/[q]uit` prompt. `y`/`n` advance to the next file; `a` skips remaining prompts; `q` exits immediately. Nothing is written regardless of input. Hooks are not executed.
+- **`tag scaffold --dry-run`**: Lists each file path that would be created as `(dry-run) would write: <path>`, including binary files. No output directory is created.
 
 **`--on-existing` behavior**:
 

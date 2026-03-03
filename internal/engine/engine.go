@@ -7,6 +7,8 @@ import (
 	"os"
 	"slices"
 
+	"github.com/mattn/go-isatty"
+
 	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/parse"
@@ -53,9 +55,11 @@ func NewGeneratorWithEngine(tmplEngine *template.Engine, dryRun bool, dirPath, s
 		slog.Debug("loaded shared templates", "count", len(sharedTemplates))
 	}
 
-	// Create parser and writer with injected dependencies
+	// Create parser and writer with injected dependencies.
+	// In dry-run mode, pass the output writer so diffs are shown alongside engine messages.
 	parser := NewParserWithExecutor(tmplEngine, templates, sharedTemplates)
-	w, err := writer.NewFileWriter(dryRun)
+	writerOpts := dryRunWriterOpts(dryRun, out)
+	w, err := writer.NewFileWriter(dryRun, writerOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create writer: %w", err)
 	}
@@ -90,7 +94,8 @@ func NewGeneratorWithRecorder(tmplEngine *template.Engine, dryRun bool, dirPath,
 	}
 
 	parser := NewParserWithExecutor(tmplEngine, templates, sharedTemplates)
-	w, err := writer.NewFileWriter(dryRun)
+	writerOpts := dryRunWriterOpts(dryRun, out)
+	w, err := writer.NewFileWriter(dryRun, writerOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create writer: %w", err)
 	}
@@ -112,6 +117,16 @@ func NewCore(parser TemplateParser, fwr writer.FileWriter, out io.Writer) Core {
 		fwr:    fwr,
 		out:    out,
 	}
+}
+
+// dryRunWriterOpts returns WriterOption slice for dry-run mode.
+// When dryRun is true, diff output is directed to out and TTY is auto-detected.
+func dryRunWriterOpts(dryRun bool, out io.Writer) []writer.WriterOption {
+	if !dryRun {
+		return nil
+	}
+	isTTY := isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
+	return []writer.WriterOption{writer.WithDiffOutput(out, os.Stdin, isTTY)}
 }
 
 // Generate generates code from templates using the Gonja-based engine.

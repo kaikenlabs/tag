@@ -16,6 +16,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/convert"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/library"
+	"github.com/kaikenlabs/tag/internal/lockfile"
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
@@ -202,6 +203,13 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	opts.IsRemote = isRemote
 	if isRemote {
 		opts.TemplateName = remote.DeriveName(templateRef)
+	}
+
+	// Verify template lockfile for remote templates.
+	if isRemote {
+		if lockErr := verifyTemplateLock(templateRef, templateDir, opts.UpdateLock, opts.IgnoreLock); lockErr != nil {
+			return app.Errorf("lockfile check failed: %w", lockErr)
+		}
 	}
 
 	// Create and run scaffold
@@ -497,4 +505,17 @@ func displayScaffoldSummary(w io.Writer, result scaffold.ScaffoldResult) {
 func hasSubdirScaffold(dir, subdir string) bool {
 	info, err := os.Stat(filepath.Join(dir, subdir))
 	return err == nil && info.IsDir()
+}
+
+// verifyTemplateLock checks or creates a lockfile entry for a remote template.
+// projectRoot is the current working directory where .tag/lock.json lives.
+func verifyTemplateLock(templateRef, templateDir string, updateLock, ignoreLock bool) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("cannot determine working directory: %w", err)
+	}
+	return lockfile.VerifyAndMaybeUpdate(cwd, templateRef, templateDir, lockfile.VerifyOptions{
+		UpdateLock: updateLock,
+		IgnoreLock: ignoreLock,
+	})
 }

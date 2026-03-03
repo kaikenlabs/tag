@@ -19,6 +19,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/internal/writer"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -69,6 +70,8 @@ FLAGS
                               Control behaviour when a file already exists (default: fail)
   --verbose, -v               Show per-file operation details in the summary
   --dry-run, -d               Preview changes without writing files (global flag)
+  --update-lock               Refresh the lockfile entry for the template
+  --ignore-lock               Skip lockfile verification for this run
 
 EXAMPLES
   tag generate model User
@@ -113,6 +116,14 @@ EXAMPLES
 				Name:    flags.VerboseFlag,
 				Aliases: []string{"v"},
 				Usage:   "Show per-file operation details in the summary",
+			},
+			&cli.BoolFlag{
+				Name:  flags.UpdateLockFlag,
+				Usage: "Refresh the lockfile entry for the template (accepts new version/checksum)",
+			},
+			&cli.BoolFlag{
+				Name:  flags.IgnoreLockFlag,
+				Usage: "Skip lockfile verification for this run (a warning will be printed)",
 			},
 		},
 	}
@@ -178,6 +189,10 @@ func generateWithHooks(c *cli.Context, cfg *config.Config, generatorName string,
 
 	result, err := fn(rec)
 	if err != nil {
+		if errors.Is(err, writer.ErrUserQuit) {
+			fmt.Fprintln(c.App.Writer, "\nDry-run review stopped.")
+			return nil
+		}
 		return err
 	}
 

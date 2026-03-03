@@ -39,6 +39,9 @@ type Options struct {
 	AllowRecursiveRender bool              // Allow recursive template rendering in variable values (--allow-recursive-render flag)
 	TemplateName         string            // Library name (set by tag scaffold)
 	TemplateVersion      string            // From tag.template.json (set after config load)
+	UpdateLock           bool              // Refresh lockfile entry for this template (--update-lock flag)
+	IgnoreLock           bool              // Skip lockfile verification (--ignore-lock flag)
+	DryRun               bool              // Preview changes without writing files (--dry-run flag)
 }
 
 // ScaffoldResult contains the output of a successful scaffold run.

@@ -34,6 +34,7 @@ type DefaultOutputWriter struct {
 	derivedVarNames      map[string]bool
 	out                  io.Writer
 	recorder             *history.Recorder // optional; nil = no recording
+	dryRun               bool              // when true, log file paths instead of writing
 }
 
 // SetRecorder attaches a history recorder to this writer. When set, every
@@ -56,6 +57,11 @@ func NewOutputWriter(engine template.TemplateRenderer, pathProcessor PathProcess
 // template delimiters in non-derived variable values are escaped to prevent SSTI.
 func (w *DefaultOutputWriter) SetAllowRecursiveRender(allow bool) {
 	w.allowRecursiveRender = allow
+}
+
+// SetDryRun enables dry-run mode, where file paths are logged instead of written.
+func (w *DefaultOutputWriter) SetDryRun(v bool) {
+	w.dryRun = v
 }
 
 // SetDerivedVarNames sets the derived variable names for SSTI protection.
@@ -176,6 +182,10 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 		}
 
 		if d.IsDir() {
+			// In dry-run mode, skip directory creation.
+			if w.dryRun {
+				return nil
+			}
 			// Create directory
 			if err := os.MkdirAll(destPath, types.DirMode); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", destPath, err)
@@ -198,9 +208,11 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 // Binary files are streamed via io.Copy to avoid loading large files entirely into memory.
 // Text detection uses an 8KB sample from the beginning of the file.
 func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template.Context, _ fs.DirEntry) error {
-	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
-		return fmt.Errorf("failed to create parent directory: %w", err)
+	// Ensure parent directory exists (skip in dry-run).
+	if !w.dryRun {
+		if err := os.MkdirAll(filepath.Dir(destPath), types.DirMode); err != nil {
+			return fmt.Errorf("failed to create parent directory: %w", err)
+		}
 	}
 
 	// TOCTOU-safe file open: verify the file is regular (not a symlink) using
@@ -222,22 +234,12 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 	}
 
 	if fileutil.IsTextContent(sample) {
-		// Text file: read the full content and process as template
-		var fullContent []byte
-		if readErr == io.EOF {
-			// Entire file fit in the sample
-			fullContent = sample
-		} else {
-			// Combine sample with the remaining content
-			fullContent, err = io.ReadAll(io.MultiReader(bytes.NewReader(sample), f))
-			if err != nil {
-				return fmt.Errorf("failed to read file %s: %w", srcPath, err)
-			}
-		}
-		if err := w.processTemplate(srcPath, destPath, fullContent, ctx, mode); err != nil {
-			return err
-		}
-		w.recordCreate(destPath)
+		return w.processTextFile(srcPath, destPath, sample, f, readErr, ctx, mode)
+	}
+
+	// Binary file: in dry-run mode, print path and skip the write.
+	if w.dryRun {
+		fmt.Fprintf(w.out, "  (dry-run) would write: %s\n", destPath)
 		return nil
 	}
 
@@ -246,6 +248,29 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 		return err
 	}
 	w.recordCreate(destPath)
+	return nil
+}
+
+// processTextFile reads full content from an already-sampled source file,
+// renders it as a template, and writes (or dry-run logs) the result.
+func (w *DefaultOutputWriter) processTextFile(srcPath, destPath string, sample []byte, f *os.File, readErr error, ctx template.Context, mode fs.FileMode) error {
+	var fullContent []byte
+	if errors.Is(readErr, io.EOF) {
+		// Entire file fit in the sample.
+		fullContent = sample
+	} else {
+		var err error
+		fullContent, err = io.ReadAll(io.MultiReader(bytes.NewReader(sample), f))
+		if err != nil {
+			return fmt.Errorf("failed to read file %s: %w", srcPath, err)
+		}
+	}
+	if err := w.processTemplate(srcPath, destPath, fullContent, ctx, mode); err != nil {
+		return err
+	}
+	if !w.dryRun {
+		w.recordCreate(destPath)
+	}
 	return nil
 }
 
@@ -333,6 +358,12 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 	// in the output rather than being executed by the template engine.
 	if !w.allowRecursiveRender {
 		result = unescapeTemplateSyntax(result)
+	}
+
+	// In dry-run mode, print the destination path and skip the write.
+	if w.dryRun {
+		fmt.Fprintf(w.out, "  (dry-run) would write: %s\n", destPath) //nolint:gosec // G705: destPath is sanitized by validatePathWithinDir; log injection not a concern in a CLI tool
+		return nil
 	}
 
 	// Write output
