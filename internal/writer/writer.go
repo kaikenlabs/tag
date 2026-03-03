@@ -61,12 +61,12 @@ func (w *Write) AppendFile(name string, data []byte) error {
 	if file != nil {
 		defer func() {
 			if err := file.Close(); err != nil {
-				slog.Error("cannot close file", "file", file.Name(), "error", err)
+				slog.Error("cannot close file", "file", file.Name(), "error", err) //nolint:gosec // G706: slog structured logging; log injection not a concern in a CLI tool
 			}
 		}()
 	}
 	if _, err := w.fs.Write(file, data); err != nil {
-		slog.Error("cannot append data to file", "file", file, "error", err)
+		slog.Error("cannot append data to file", "file", file, "error", err) //nolint:gosec // G706: slog structured logging; log injection not a concern in a CLI tool
 		return err
 	}
 	return nil

@@ -107,7 +107,7 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			slog.Warn("error closing file", "error", closeErr.Error())
+			slog.Warn("error closing file", "error", closeErr.Error()) //nolint:gosec // G706: slog structured logging; log injection not a concern in a CLI tool
 		}
 	}()
 

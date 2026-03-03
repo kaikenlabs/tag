@@ -61,7 +61,7 @@ func CopyFile(src, dst string) error {
 	// from untrusted template sources.
 	mode := srcInfo.Mode() &^ (os.ModeSetuid | os.ModeSetgid | os.ModeSticky)
 
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) //nolint:gosec // G703: dst is resolved by scaffold's path processor before reaching here
 	if err != nil {
 		return err
 	}

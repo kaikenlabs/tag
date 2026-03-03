@@ -102,7 +102,7 @@ func (u *Updater) downloadFile(ctx context.Context, url, dest string) error {
 		return fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := u.client.Do(req)
+	resp, err := u.client.Do(req) //nolint:gosec // G704: URL is a fixed GitHub releases endpoint, not user-supplied
 	if err != nil {
 		return fmt.Errorf("network request failed: %w", err)
 	}

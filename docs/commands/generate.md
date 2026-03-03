@@ -55,6 +55,7 @@ When a project was scaffolded from a template, the scaffold-time variables (e.g.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--meta <key=value>` | `-m` | Pass metadata to templates (repeatable) |
+| `--on-existing <policy>` | | How to handle create-action files that already exist: `fail` (default), `skip`, `overwrite` |
 | `--no-hooks` | | Skip execution of pre and post hooks |
 | `--dry-run` | `-d` | Preview output without writing files |
 
@@ -136,6 +137,23 @@ tag generate crud UserProfile "name:string"
 # Preview what would be generated
 tag generate handler User --dry-run
 ```
+
+### Handling Existing Files
+
+By default, `tag generate` fails atomically if any `create`-action file already exists — no files are written.
+
+```bash
+# Fail if any output file exists (default)
+tag generate handler User
+
+# Skip files that already exist (others are still created)
+tag generate handler User --on-existing skip
+
+# Overwrite existing files (pre-modification backup recorded for undo)
+tag generate handler User --on-existing overwrite
+```
+
+A post-generation summary shows how many files were created, skipped, or overwritten.
 
 ### Using Different Template Paths
 
@@ -290,6 +308,9 @@ The `---` block at the top of every generator file controls how and where the ou
 Templates support three actions via metadata:
 
 ### Create (default)
+
+Creates a new file. Fails if the file already exists — use `--on-existing` to change this behavior.
+
 ```
 ---
 to: path/to/file.go

@@ -149,7 +149,7 @@ func (f *ZipFetcher) download(ctx context.Context, url string) (string, error) {
 		return "", fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := f.client.Do(req)
+	resp, err := f.client.Do(req) //nolint:gosec // G704: URL is validated by the caller's reference parser
 	if err != nil {
 		return "", fmt.Errorf("download: %w", err)
 	}
@@ -173,11 +173,11 @@ func (f *ZipFetcher) download(ctx context.Context, url string) (string, error) {
 	closeErr := tmpFile.Close()
 
 	if err != nil {
-		os.Remove(tmpPath)
+		os.Remove(tmpPath) //nolint:gosec // G703: tmpPath is from os.CreateTemp, not user-controlled
 		return "", fmt.Errorf("write file: %w", err)
 	}
 	if closeErr != nil {
-		os.Remove(tmpPath)
+		os.Remove(tmpPath) //nolint:gosec // G703: tmpPath is from os.CreateTemp, not user-controlled
 		return "", fmt.Errorf("close temp file: %w", closeErr)
 	}
 

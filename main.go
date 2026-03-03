@@ -94,7 +94,7 @@ func main() {
 
 		// Don't log user-initiated cancellation (Ctrl+C)
 		if exitCode != app.ExitInterrupted {
-			slog.Error(err.Error())
+			slog.Error(err.Error()) //nolint:gosec // G706: slog structured logging; log injection not a concern in a CLI tool
 		}
 		os.Exit(exitCode)
 	}

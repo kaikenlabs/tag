@@ -168,7 +168,7 @@ func (p *NoopPrompter) Number(label string, defaultValue float64) (float64, erro
 
 // IsTTY checks if stdin is connected to a terminal.
 func IsTTY() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
+	return term.IsTerminal(int(os.Stdin.Fd())) //nolint:gosec // G115: Stdin.Fd()→int is safe on all Go-supported platforms
 }
 
 // GetPrompter returns an appropriate prompter based on TTY status and noInput flag.
