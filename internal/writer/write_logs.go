@@ -29,6 +29,6 @@ func (f *fileLog) OpenFile(name string, flag int, perm fs.FileMode) (*os.File, e
 }
 
 func (f *fileLog) Write(file *os.File, b []byte) (n int, err error) {
-	slog.Info("logging to console", "file", file.Name(), "data", "\n"+string(b))
+	slog.Info("logging to console", "file", file.Name(), "data", "\n"+string(b)) //nolint:gosec // G706: slog structured logging; log injection not a concern in a CLI tool
 	return len(b), nil
 }

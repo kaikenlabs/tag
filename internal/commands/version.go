@@ -100,7 +100,7 @@ func fetchLatestVersion(ctx context.Context, repoURL string) (string, error) {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704: URL is a fixed GitHub releases endpoint, not user-supplied
 	if err != nil {
 		return "", fmt.Errorf("network request failed: %w", err)
 	}

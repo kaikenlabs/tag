@@ -345,7 +345,7 @@ func defaultEditorSource() *editorSource {
 		loadConfig: config.LoadGlobalConfig,
 		saveConfig: config.SaveGlobalConfig,
 		getenv:     os.Getenv,
-		isTTY:      func() bool { return term.IsTerminal(int(os.Stdin.Fd())) },
+		isTTY:      func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }, //nolint:gosec // G115: Stdin.Fd()→int is safe on all Go-supported platforms
 		prompt:     promptEditorInput,
 	}
 }

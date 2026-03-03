@@ -336,7 +336,7 @@ func (w *DefaultOutputWriter) processTemplate(srcPath, destPath string, content 
 	}
 
 	// Write output
-	if err := os.WriteFile(destPath, []byte(result), mode); err != nil {
+	if err := os.WriteFile(destPath, []byte(result), mode); err != nil { //nolint:gosec // G703: destPath is sanitized by path placeholder processing
 		return NewFileProcessingError(srcPath, "failed to write output", err)
 	}
 
