@@ -19,6 +19,20 @@
       "description": "Template version",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?(\\+[a-zA-Z0-9.-]+)?$"
     },
+    "keywords": {
+      "type": "array",
+      "description": "Topic keywords for discoverability (all lowercase, hyphen-separated)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "categories": {
+      "type": "array",
+      "description": "High-level category buckets (e.g. backend, cli, data)",
+      "items": {
+        "type": "string"
+      }
+    },
     "vars": {
       "type": "object",
       "description": "Variable definitions",

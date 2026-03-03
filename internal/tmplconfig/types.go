@@ -6,12 +6,17 @@ import (
 
 // TemplateConfig represents the structure of tag.template.json.
 type TemplateConfig struct {
-	Name        string                 `json:"name,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	Version     string                 `json:"version,omitempty"`
-	Vars        map[string]VariableDef `json:"-"` // Custom unmarshaling needed
-	RawVars     map[string]any         `json:"vars"`
-	Hooks       *types.HooksConfig     `json:"hooks,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Version     string `json:"version,omitempty"`
+	// Keywords lists topic keywords for discoverability in 'tag lib search'.
+	// Mirrors the GitHub topic convention: all lowercase, hyphen-separated.
+	Keywords []string `json:"keywords,omitempty"`
+	// Categories groups this template into high-level buckets (e.g. "backend", "cli", "data").
+	Categories []string               `json:"categories,omitempty"`
+	Vars       map[string]VariableDef `json:"-"` // Custom unmarshaling needed
+	RawVars    map[string]any         `json:"vars"`
+	Hooks      *types.HooksConfig     `json:"hooks,omitempty"`
 }
 
 // VariableType represents the type of a template variable.

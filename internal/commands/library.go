@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/google/shlex"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/library"
+	"github.com/kaikenlabs/tag/internal/search"
 	"github.com/kaikenlabs/tag/internal/xdg"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
@@ -46,6 +49,7 @@ EXAMPLES:
   # Remove a template
   tag lib rm go-api`,
 		Subcommands: []*cli.Command{
+			libSearchCommand(),
 			libAddCommand(),
 			libListCommand(),
 			libRemoveCommand(),
@@ -432,4 +436,96 @@ func promptEditorInput() (string, error) {
 // using POSIX shell quoting rules. For example, "code --wait" becomes ["code", "--wait"].
 func splitEditorArgs(editor string) ([]string, error) {
 	return shlex.Split(editor)
+}
+
+func libSearchCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "search",
+		Usage:     "Search for templates on GitHub",
+		ArgsUsage: "[query]",
+		Description: `Search GitHub for TAG-compatible templates tagged with the "tag-template" topic.
+
+EXAMPLES:
+  # Search all TAG templates (sorted by stars)
+  tag lib search
+
+  # Search for Go API templates
+  tag lib search go api
+
+  # Search sorted by recently updated
+  tag lib search --sort updated
+
+  # Add a found template
+  tag lib add gh:<owner>/<repo>`,
+		Flags: []cli.Flag{
+			&cli.IntFlag{
+				Name:  "limit",
+				Usage: "Maximum number of results (1-100)",
+				Value: 10,
+			},
+			&cli.StringFlag{
+				Name:  "sort",
+				Usage: "Sort by: stars, forks, or updated",
+				Value: "stars",
+			},
+			&cli.StringFlag{
+				Name:  "order",
+				Usage: "Order: asc or desc",
+				Value: "desc",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			query := strings.Join(c.Args().Slice(), " ")
+			return runLibSearch(c, query)
+		},
+	}
+}
+
+func runLibSearch(c *cli.Context, query string) error {
+	token := os.Getenv("GITHUB_TOKEN")
+	opts := search.Options{
+		Limit: c.Int("limit"),
+		Sort:  c.String("sort"),
+		Order: c.String("order"),
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	results, err := search.SearchGitHub(c.Context, client, query, "", token, opts)
+	if err != nil {
+		return app.Errorf("search failed: %w", err)
+	}
+
+	if len(results) == 0 {
+		fmt.Fprintln(c.App.Writer, "No templates found.")
+		fmt.Fprintln(c.App.Writer)
+		if strings.TrimSpace(query) != "" {
+			fmt.Fprintf(c.App.Writer, "No results for %q. Try a different query or leave it empty to list all templates.\n", query)
+		} else {
+			fmt.Fprintln(c.App.Writer, `No templates with topic "tag-template" found on GitHub yet.`)
+		}
+		return nil
+	}
+
+	printSearchResults(c.App.Writer, results)
+	return nil
+}
+
+func printSearchResults(w io.Writer, results []search.SearchResult) {
+	fmt.Fprintf(w, "Found %d template(s):\n\n", len(results))
+	fmt.Fprintf(w, "%-40s %-6s %-12s %s\n", "REPOSITORY", "STARS", "UPDATED", "DESCRIPTION")
+	fmt.Fprintf(w, "%-40s %-6s %-12s %s\n", "----------", "-----", "-------", "-----------")
+
+	for _, r := range results {
+		updated := r.UpdatedAt.Format("2006-01-02")
+		fmt.Fprintf(w, "%-40s %-6d %-12s %s\n",
+			truncate(r.FullName, 40),
+			r.Stars,
+			updated,
+			truncate(r.Description, 40),
+		)
+	}
+
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "To install a template:")
+	fmt.Fprintln(w, "  tag lib add gh:<owner>/<repo>")
 }
