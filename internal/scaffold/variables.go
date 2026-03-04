@@ -11,6 +11,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/tmplconfig"
 )
 
 // VariableCollector gathers variable values from all sources.
@@ -21,11 +22,19 @@ type VariableCollector interface {
 // DefaultVariableCollector implements VariableCollector with the standard priority chain.
 type DefaultVariableCollector struct {
 	prompter Prompter
+	engine   template.TemplateRenderer // optional; resolves expression defaults before prompting
 }
 
 // NewVariableCollector creates a new variable collector with the given prompter.
 func NewVariableCollector(prompter Prompter) *DefaultVariableCollector {
 	return &DefaultVariableCollector{prompter: prompter}
+}
+
+// WithEngine sets the template engine used to resolve expression defaults at
+// prompt time for evaluated-default variables (expanded form with prompt +
+// template-expression default).
+func (c *DefaultVariableCollector) WithEngine(engine template.TemplateRenderer) {
+	c.engine = engine
 }
 
 // Collect gathers variables following the priority chain:
@@ -102,34 +111,8 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options,
 	// Prompt for all non-private, non-derived variables, even if they have defaults.
 	// Skip only if the value was explicitly provided via replay or values file.
 	if isTTY && !opts.NoInput {
-		for _, name := range varNames {
-			def := config.Vars[name]
-
-			// Skip private/computed variables (start with _)
-			if def.IsPrivate(name) {
-				continue
-			}
-
-			// Skip derived variables (default contains template expression)
-			// These are computed from other variables, following Cookiecutter behavior
-			if def.IsDerived() {
-				continue
-			}
-
-			// Skip if explicitly provided via replay, values file, or --meta flag
-			if explicitlyProvided[name] {
-				continue
-			}
-			if _, hasMeta := opts.Meta[name]; hasMeta {
-				continue
-			}
-
-			// Prompt for the variable (default will be pre-filled)
-			value, err := c.promptForVariable(name, def)
-			if err != nil {
-				return nil, err
-			}
-			vars[name] = value
+		if err := c.promptAll(varNames, config, opts, explicitlyProvided, vars); err != nil {
+			return nil, err
 		}
 	}
 
@@ -160,30 +143,116 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options,
 	return vars, nil
 }
 
-// ResolveDerivedVars evaluates derived variable defaults through the template engine.
-// Derived variables have template expressions as defaults (e.g., "{{ vars.name | lower }}").
-// After collection, these hold the raw expression string; this function renders each
-// expression to compute the actual value.
+// promptAll iterates over variable names and prompts for each eligible variable,
+// resolving evaluated-default expressions beforehand.
+func (c *DefaultVariableCollector) promptAll(
+	varNames []string,
+	config *TemplateConfig,
+	opts Options,
+	explicitlyProvided map[string]bool,
+	vars map[string]any,
+) error {
+	for _, name := range varNames {
+		def := config.Vars[name]
+
+		// Skip private/computed variables (start with _)
+		if def.IsPrivate(name) {
+			continue
+		}
+
+		// Skip derived variables (default contains template expression)
+		// These are computed from other variables, following Cookiecutter behavior.
+		if def.IsDerived() {
+			continue
+		}
+
+		// Skip if explicitly provided via replay, values file, or --meta flag
+		if explicitlyProvided[name] {
+			continue
+		}
+		if _, hasMeta := opts.Meta[name]; hasMeta {
+			continue
+		}
+
+		// For evaluated-default variables (expanded form + prompt + expression default),
+		// resolve the expression with currently collected vars so the prompt shows
+		// a concrete suggested value instead of the raw template expression.
+		defToPrompt := c.resolveEvaluatedDefault(def, vars)
+
+		// Prompt for the variable (default will be pre-filled)
+		value, err := c.promptForVariable(name, defToPrompt)
+		if err != nil {
+			return err
+		}
+		vars[name] = value
+	}
+	return nil
+}
+
+// resolveEvaluatedDefault returns a copy of def with its expression default
+// resolved using the current vars. If the variable is not an evaluated default,
+// the engine is unavailable, or resolution fails, the original def is returned.
+func (c *DefaultVariableCollector) resolveEvaluatedDefault(def VariableDef, vars map[string]any) VariableDef {
+	if !def.IsEvaluatedDefault() || c.engine == nil {
+		return def
+	}
+	defaultStr, ok := def.Default.(string)
+	if !ok {
+		return def
+	}
+	ctx := template.NewContextBuilder().WithVars(vars).Build()
+	resolved, err := c.engine.ExecuteToString(defaultStr, ctx)
+	if err != nil {
+		// Resolution failed (dependency not yet collected); fall back to raw expression.
+		return def
+	}
+	def.Default = resolved
+	return def
+}
+
+// ResolveDerivedVars evaluates derived and evaluated-default variable expressions
+// through the template engine.
 //
-// Variables are processed in sorted order so that derived variables referencing
-// other derived variables see already-resolved values.
+// Derived variables (minimal form, no explicit prompt) always resolve from their
+// expression default. Evaluated-default variables (expanded form with explicit
+// prompt) resolve only if their current value is still a raw template expression
+// — meaning they were not collected via an interactive prompt, values file, or
+// --meta flag (e.g. non-TTY mode or --no-input).
+//
+// Variables are processed in sorted order so that expressions referencing other
+// derived variables see already-resolved values.
 func ResolveDerivedVars(engine template.TemplateRenderer, config *TemplateConfig, vars map[string]any) error {
 	varNames := getSortedVarNames(config.Vars)
 	for _, name := range varNames {
 		def := config.Vars[name]
-		if !def.IsDerived() {
+
+		var exprToResolve string
+		switch {
+		case def.IsDerived():
+			// Classic derived: always resolve from the expression default.
+			defaultStr, ok := def.Default.(string)
+			if !ok {
+				continue
+			}
+			exprToResolve = defaultStr
+
+		case def.IsEvaluatedDefault():
+			// Evaluated default: only resolve if the value is still a raw template
+			// expression (i.e., was not overridden by a prompt or explicit value).
+			currentStr, ok := vars[name].(string)
+			if !ok || !tmplconfig.ContainsTemplateExpression(currentStr) {
+				continue
+			}
+			exprToResolve = currentStr
+
+		default:
 			continue
 		}
 
-		defaultStr, ok := def.Default.(string)
-		if !ok {
-			continue
-		}
-
-		// Build context with current vars (including previously resolved derived vars)
+		// Build context with current vars (including previously resolved vars)
 		ctx := template.NewContextBuilder().WithVars(vars).Build()
 
-		rendered, err := engine.ExecuteToString(defaultStr, ctx)
+		rendered, err := engine.ExecuteToString(exprToResolve, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to evaluate derived variable %q: %w", name, err)
 		}

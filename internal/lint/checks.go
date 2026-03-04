@@ -84,12 +84,13 @@ func (l *Linter) lintSchema() {
 	l.config = config
 }
 
-// lintDerivedDefaults checks derived variable defaults for references to undefined vars.
+// lintDerivedDefaults checks derived and evaluated-default variable expressions
+// for references to undefined variables.
 func (l *Linter) lintDerivedDefaults() {
 	names := sortedKeys(l.config.Vars)
 	for _, name := range names {
 		def := l.config.Vars[name]
-		if !def.IsDerived() {
+		if !def.IsDerived() && !def.IsEvaluatedDefault() {
 			continue
 		}
 		defaultStr, ok := def.Default.(string)

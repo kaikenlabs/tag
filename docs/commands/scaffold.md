@@ -270,6 +270,31 @@ Enter value for package_display_name [My Package]: Awesome Library
 
 This ensures users only need to provide "input" values, while computed values are derived automatically.
 
+### Evaluated-Default Variables
+
+For a smart default that users can still override, use the **expanded form** with an explicit `prompt` and a template-expression default:
+
+```json
+{
+  "vars": {
+    "project_name": "my-service",
+    "module_path": {
+      "type": "string",
+      "prompt": "Go module path",
+      "default": "bitbucket.org/myorg/{{ vars.project_name }}"
+    }
+  }
+}
+```
+
+**User experience:**
+```
+Enter value for project_name [my-service]: my-service
+Go module path [bitbucket.org/myorg/my-service]: ⏎
+```
+
+The expression is resolved from already-collected variables and shown as the suggested default. Pressing Enter accepts it; typing replaces it. In non-TTY mode (`--no-input`), the expression resolves silently.
+
 ## File Exclusion (.tagignore)
 
 Templates can include a `.tagignore` file at the template root to exclude files and directories from scaffold output using gitignore-style patterns. This is useful for excluding template-authoring tools (IDE configs, AI assistant files) that shouldn't appear in generated projects.

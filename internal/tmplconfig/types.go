@@ -47,9 +47,37 @@ func (v VariableDef) IsPrivate(name string) bool {
 }
 
 // IsDerived returns true if the variable's default is a template expression
-// that references other variables. Derived variables are not prompted;
-// their values are computed from other variables during rendering.
+// that references other variables, AND the variable has no explicit prompt.
+// Derived variables are not prompted; their values are computed from other
+// variables during rendering.
+//
+// Variables in expanded form with an explicit prompt are NOT derived — they
+// are "evaluated defaults" and will be prompted interactively with the
+// resolved expression as the suggested default (see IsEvaluatedDefault).
 func (v VariableDef) IsDerived() bool {
+	if v.Default == nil {
+		return false
+	}
+	defaultStr, ok := v.Default.(string)
+	if !ok {
+		return false
+	}
+	if !ContainsTemplateExpression(defaultStr) {
+		return false
+	}
+	// Variables with an explicit prompt use evaluated-default behavior instead.
+	return v.Prompt == ""
+}
+
+// IsEvaluatedDefault returns true if the variable has an explicit prompt and
+// a template-expression default. Such variables are prompted interactively
+// with the resolved expression as the suggested default (rather than being
+// silently derived). In non-TTY mode their expression is resolved the same
+// way as derived variables.
+func (v VariableDef) IsEvaluatedDefault() bool {
+	if v.Prompt == "" {
+		return false
+	}
 	if v.Default == nil {
 		return false
 	}

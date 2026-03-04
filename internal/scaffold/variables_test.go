@@ -923,3 +923,133 @@ func TestUT_ResolveDerivedVars_MethodCallSyntax(t *testing.T) {
 
 	assert.Equal(t, "my_package", vars["_slug"])
 }
+
+// TestUT_EvaluatedDefault_PromptShownWithResolvedDefault verifies that an
+// evaluated-default variable (expanded form with explicit prompt + expression
+// default) is prompted interactively, and the prompt receives the resolved
+// expression as its suggested default.
+func TestUT_EvaluatedDefault_PromptShownWithResolvedDefault(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "my-service"},
+			"module_path": {
+				Type:    VarTypeString,
+				Prompt:  "Go module path",
+				Default: "bitbucket.org/whalar/{{ vars.project_name }}",
+			},
+		},
+	}
+
+	// MockPrompter.Input returns defaultValue when no explicit result is registered,
+	// simulating the user pressing Enter to accept the suggested default.
+	vars, err := collector.Collect(config, Options{}, true)
+	require.NoError(t, err)
+
+	// Verify module_path was resolved before prompting and stored correctly.
+	assert.Equal(t, "bitbucket.org/whalar/my-service", vars["module_path"])
+	// Verify the prompt was actually called (variable was not silently derived).
+	assert.Equal(t, 2, mockPrompter.CallCount["Input"]) // project_name + module_path
+}
+
+// TestUT_EvaluatedDefault_UserCanOverride verifies that the user can provide
+// a custom value to override the resolved expression default.
+func TestUT_EvaluatedDefault_UserCanOverride(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	mockPrompter.InputResults["Go module path"] = "github.com/myorg/my-service"
+	collector := NewVariableCollector(mockPrompter)
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "my-service"},
+			"module_path": {
+				Type:    VarTypeString,
+				Prompt:  "Go module path",
+				Default: "bitbucket.org/whalar/{{ vars.project_name }}",
+			},
+		},
+	}
+
+	vars, err := collector.Collect(config, Options{}, true)
+	require.NoError(t, err)
+
+	// User overrode the resolved default.
+	assert.Equal(t, "github.com/myorg/my-service", vars["module_path"])
+}
+
+// TestUT_EvaluatedDefault_NonTTYResolvesExpression verifies that in non-TTY
+// mode (no interactive prompt), the expression default is resolved by
+// ResolveDerivedVars just like a classic derived variable.
+func TestUT_EvaluatedDefault_NonTTYResolvesExpression(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "my-service"},
+			"module_path": {
+				Type:    VarTypeString,
+				Prompt:  "Go module path",
+				Default: "bitbucket.org/whalar/{{ vars.project_name }}",
+			},
+		},
+	}
+
+	// Non-TTY: isTTY=false, no prompts fired.
+	vars, err := collector.Collect(config, Options{}, false)
+	require.NoError(t, err)
+
+	// After Collect(), module_path still holds the raw expression (not prompted).
+	// ResolveDerivedVars should resolve it.
+	err = ResolveDerivedVars(engine, config, vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, "bitbucket.org/whalar/my-service", vars["module_path"])
+	// No prompts should have fired.
+	assert.Equal(t, 0, mockPrompter.CallCount["Input"])
+}
+
+// TestUT_ResolveDerivedVars_EvaluatedDefaultSkipsResolvedValue verifies that
+// ResolveDerivedVars does NOT overwrite an evaluated-default variable that was
+// already resolved interactively (i.e., its value is no longer a template expression).
+func TestUT_ResolveDerivedVars_EvaluatedDefaultSkipsResolvedValue(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "my-service"},
+			"module_path": {
+				Type:    VarTypeString,
+				Prompt:  "Go module path",
+				Default: "bitbucket.org/whalar/{{ vars.project_name }}",
+			},
+		},
+	}
+
+	// Simulate post-prompt state: module_path already has a concrete user-provided value.
+	vars := map[string]any{
+		"project_name": "my-service",
+		"module_path":  "github.com/myorg/my-service", // user overrode
+	}
+
+	err = ResolveDerivedVars(engine, config, vars)
+	require.NoError(t, err)
+
+	// Should not be overwritten.
+	assert.Equal(t, "github.com/myorg/my-service", vars["module_path"])
+}
