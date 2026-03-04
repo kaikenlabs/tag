@@ -31,7 +31,7 @@ func Test_mergeOutputs(t *testing.T) {
 					Clause:  types.InjectBefore,
 				},
 			},
-			want:    []byte("fall of  fart\n// token"),
+			want:    []byte("fart\nfall of  // token"),
 			wantErr: false,
 		},
 		{
@@ -119,8 +119,8 @@ func TestUT_InjectBefore_PreservesAllContent(t *testing.T) {
 	got, err := mergeInjection(source, data, inject)
 
 	require.NoError(t, err)
-	// All content before the matcher must be preserved (no dropped characters)
-	assert.Equal(t, "hello world INJECTED\n// marker", string(got))
+	// Inject before the entire line containing the marker
+	assert.Equal(t, "INJECTED\nhello world // marker", string(got))
 }
 
 func TestUT_InjectBefore_MultipleMatchers(t *testing.T) {

@@ -39,8 +39,15 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 	var before, after string
 	switch inject.Clause {
 	case types.InjectBefore:
-		before = src[:idx]
-		after = src[idx:]
+		// Back up to the start of the line containing the marker so that
+		// the marker's leading whitespace stays with the marker, not with
+		// the injected content.
+		lineStart := idx
+		for lineStart > 0 && src[lineStart-1] != '\n' {
+			lineStart--
+		}
+		before = src[:lineStart]
+		after = src[lineStart:]
 	case types.InjectAfter:
 		end := idx + len(inject.Matcher)
 		// Advance past the newline following the marker so injected
