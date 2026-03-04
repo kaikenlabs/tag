@@ -81,9 +81,13 @@ EXAMPLES
   tag generate crud Product --dry-run
   tag generate crud Product --on-existing=skip
   tag generate crud Product --on-existing=overwrite --verbose
-  tag generate list                    # List available generators and bundles`,
+  tag generate list                    # List available generators and bundles
+  tag generate info model              # Show JSON metadata for a generator or bundle
+  tag generate agent-file claude       # Generate AI agent reference file`,
 		Subcommands: []*cli.Command{
 			generateListCommand(cfg),
+			generateInfoCommand(cfg),
+			generateAgentFileCommand(cfg),
 		},
 		Args:      true,
 		ArgsUsage: "<bundle-or-generator> <name> [args]",
