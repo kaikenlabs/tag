@@ -89,9 +89,12 @@ func buildAgentContent(lists generatorLists) string {
 	var b strings.Builder
 
 	b.WriteString(agentMarkerStart)
-	b.WriteString("\n## Code Generators\n\n")
-	b.WriteString("This project uses [tag](https://github.com/kaikenlabs/tag) for code generation.\n")
-	b.WriteString("Run `tag generate info <name>` for full details (JSON output).\n\n")
+	b.WriteString("\nThis project uses [tag](https://github.com/kaikenlabs/tag) for code generation.\n")
+	b.WriteString("Use `tag skill` to learn how to use `tag` efficiently.\n\n")
+	b.WriteString("Use `tag generate info <name>` to retrieve full metadata (variables, files, hooks) ")
+	b.WriteString("for any generator or bundle as structured JSON — ")
+	b.WriteString("useful for understanding inputs before running a generator.\n\n")
+	b.WriteString("## Code Generators\n\n")
 
 	b.WriteString("| Name | Type | Description |\n")
 	b.WriteString("|------|------|-------------|\n")
