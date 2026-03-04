@@ -23,6 +23,26 @@ func (i *Inject) Validate() error {
 	return nil
 }
 
+// lineStartOffset returns the index of the beginning of the line containing pos.
+func lineStartOffset(s string, pos int) int {
+	i := pos
+	for i > 0 && s[i-1] != '\n' {
+		i--
+	}
+	return i
+}
+
+// advancePastNewline returns pos advanced past the newline at that position, if any.
+func advancePastNewline(s string, pos int) int {
+	if pos < len(s) && s[pos] == '\n' {
+		return pos + 1
+	}
+	if pos+1 < len(s) && s[pos] == '\r' && s[pos+1] == '\n' {
+		return pos + 2
+	}
+	return pos
+}
+
 // mergeInjection injects data before or after the first occurrence of a matcher within source.
 // If the matcher is not found, the source is returned unchanged with an error.
 func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error) {
@@ -39,24 +59,15 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 	var before, after string
 	switch inject.Clause {
 	case types.InjectBefore:
-		// Back up to the start of the line containing the marker so that
-		// the marker's leading whitespace stays with the marker, not with
-		// the injected content.
-		lineStart := idx
-		for lineStart > 0 && src[lineStart-1] != '\n' {
-			lineStart--
-		}
+		// Split at the start of the line containing the marker so that
+		// the marker's leading whitespace stays with the marker.
+		lineStart := lineStartOffset(src, idx)
 		before = src[:lineStart]
 		after = src[lineStart:]
 	case types.InjectAfter:
-		end := idx + len(inject.Matcher)
 		// Advance past the newline following the marker so injected
 		// content starts on the next line, not appended to the marker line.
-		if end < len(src) && src[end] == '\n' {
-			end++
-		} else if end+1 < len(src) && src[end] == '\r' && src[end+1] == '\n' {
-			end += 2
-		}
+		end := advancePastNewline(src, idx+len(inject.Matcher))
 		before = src[:end]
 		after = src[end:]
 	}
