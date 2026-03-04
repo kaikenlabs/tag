@@ -1,5 +1,6 @@
 [tools]
-go = "1.26.0"
+# TODO: upgrade to 1.26.0 when golangci-lint and deadcode support it
+go = "1.25.6"
 golangci-lint = "2.10.1"
 "go:golang.org/x/tools/cmd/deadcode" = "latest"
 
