@@ -375,6 +375,49 @@ generator "service" requires the following variables to be enabled:
 
 `tag generate list` and `tag template list` hide items with unmet requirements by default. Use `--all` to show everything. Items with requirements display them as `[requires: x, y]` in the list output.
 
+### Generator Info
+
+```bash
+tag generate info <name>
+```
+
+Outputs JSON metadata for a generator or bundle. Useful for AI agents and tooling.
+
+**Generator output** includes: name, type (`"generator"`), description, source (`"template"` or `"local"`), variables (with types, prompts, defaults, options), hooks, template files (with `to` paths and actions), requires, and usage string.
+
+**Bundle output** includes: name, type (`"bundle"`), description, generators list, self_contained flag, requires, and usage string.
+
+Template file `to` paths contain raw template expressions (e.g. `{{ name | snake }}.go`) since no target name is available at info time.
+
+### Agent File
+
+```bash
+tag generate agent-file <format> [-o <path>]
+```
+
+Generates a reference file for AI coding agents listing available generators and bundles.
+
+**Formats**:
+
+| Format | Default path |
+|--------|-------------|
+| `claude` | `CLAUDE.md` |
+| `cursor` | `.cursorrules` |
+| `windsurf` | `.windsurfrules` |
+| `copilot` | `.github/copilot-instructions.md` |
+
+**Flags**:
+
+| Flag | Description |
+|------|-------------|
+| `-o <path>` | Override default output path |
+
+**Behavior**:
+- Creates file with `<!-- tag:generators:start -->` / `<!-- tag:generators:end -->` markers
+- Re-running replaces content between markers (idempotent)
+- Appending to existing file without markers preserves existing content
+- Creates parent directories if needed (e.g. `.github/` for copilot format)
+
 ### Code Generation Flags
 
 | Flag | Description |
