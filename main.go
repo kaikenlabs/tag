@@ -53,6 +53,7 @@ func main() {
 			commands.VersionCommand(Version),
 			commands.UpdateCommand(Version),
 			commands.DoctorCommand(Version),
+			commands.SkillCommand(Version),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
