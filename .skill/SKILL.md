@@ -186,6 +186,8 @@ my-project/
 | `tag scaffold [template] [name]` | Create project (no args = picker). Alias: `tag s` |
 | `tag generate <gen-or-bundle> <name>` | Run generator or bundle. Alias: `tag g` |
 | `tag generate list [--all]` | List generators and bundles. Alias: `tag g list` |
+| `tag generate info <name>` | Show JSON metadata for a generator or bundle |
+| `tag generate agent-file <format>` | Generate AI agent reference file |
 | `tag template init` | Initialize `.tag/` structure |
 | `tag template new generator <name>` | Create generator (`--in-bundle`, `--lib`) |
 | `tag template new bundle <name>` | Create bundle (`--self-contained`, `--lib`) |
