@@ -117,6 +117,7 @@ main.go                         CLI entry point (urfave/cli/v2)
     │       ├── generate.go         - Code generation command + execution
     │       ├── generate_list.go    - Generator/bundle discovery and display
     │       ├── generate_resolve.go - Generator/bundle path resolution + auto-resolve
+    │       ├── prereq.go           - Prerequisite checking (requires field)
     │       ├── lint.go              - Template linting command
     │       ├── scaffold.go         - Project scaffolding + library picker
     │       ├── convert.go          - Cookiecutter conversion command

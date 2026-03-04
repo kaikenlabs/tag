@@ -17,6 +17,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/internal/writer"
@@ -224,6 +225,15 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 		return app.Errorf("cannot decode bundle file: %w", err)
 	}
 
+	// Check bundle prerequisites before running any generators.
+	vars := make(map[string]any)
+	if cfg.Variables != nil {
+		vars = cfg.Variables
+	}
+	if reqErr := checkRequirements(generatorName, "bundle", bundle.Requires, vars); reqErr != nil {
+		return reqErr
+	}
+
 	tmplEngine, err := template.NewEngine()
 	if err != nil {
 		return app.Errorf("cannot create template engine: %w", err)
@@ -283,6 +293,20 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 }
 
 func generateTemplate(c *cli.Context, cfg *config.Config, fac generatorFactories, generatorName, targetName, dirPath, sharedPath string, onExisting engine.OnExistingPolicy) error {
+	// Check generator prerequisites from tag.template.json if present.
+	vars := make(map[string]any)
+	if cfg.Variables != nil {
+		vars = cfg.Variables
+	}
+	configPath := filepath.Join(dirPath, types.TemplateConfigFile)
+	if data, readErr := os.ReadFile(configPath); readErr == nil {
+		if tc, parseErr := tmplconfig.ParseTemplateConfig(data); parseErr == nil {
+			if reqErr := checkRequirements(generatorName, "generator", tc.Requires, vars); reqErr != nil {
+				return reqErr
+			}
+		}
+	}
+
 	slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
 	return generateWithHooks(c, cfg, generatorName, func(rec *history.Recorder) (engine.GenerateResult, error) {
 		gen, err := fac.newEngine(c.Bool(flags.DryRunFlag), dirPath, sharedPath, rec, c.App.Writer)

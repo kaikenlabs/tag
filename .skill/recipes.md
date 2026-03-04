@@ -98,10 +98,11 @@ desc: Inject route registration
 	r.Get("/{{ name | kebab | plural }}", {{ name | camel }}Handler.Get)
 ```
 
-**Bundle** — `.tag/_bundles/resource.json`:
+**Bundle** — `.tag/_bundles/resource/resource.json`:
 ```json
 {
   "name": "resource",
+  "requires": ["use_db"],
   "generators": [
     { "name": "model" },
     { "name": "repository" },
@@ -110,6 +111,8 @@ desc: Inject route registration
   ]
 }
 ```
+
+The `requires` field ensures this bundle only runs when the project's `.tagconfig.json` has `"use_db": true`. Without it, `tag generate list` hides the bundle and `tag generate resource product` aborts with a clear error.
 
 **Usage**: `tag generate resource product` creates all 4 files.
 

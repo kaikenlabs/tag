@@ -983,7 +983,7 @@ func TestUT_GenerateList_NoGenerators(t *testing.T) {
 	cfg := createTestConfig(t, tmpDir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, &buf)
+	err := generateList(cfg, true, &buf)
 
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "No generators found.")
@@ -1001,7 +1001,7 @@ func TestUT_GenerateList_LocalGenerators(t *testing.T) {
 	cfg := createTestConfig(t, tmpDir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, &buf)
+	err := generateList(cfg, true, &buf)
 
 	require.NoError(t, err)
 	output := buf.String()
@@ -1022,7 +1022,7 @@ func TestUT_GenerateList_GeneratorWithDescription(t *testing.T) {
 
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg, io.Discard)
+	err := generateList(cfg, true, io.Discard)
 
 	require.NoError(t, err)
 }
@@ -1038,7 +1038,7 @@ func TestUT_GenerateList_WithBundles(t *testing.T) {
 
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg, io.Discard)
+	err := generateList(cfg, true, io.Discard)
 
 	require.NoError(t, err)
 }
@@ -1055,14 +1055,14 @@ func TestUT_GenerateList_BundleDescriptionShown(t *testing.T) {
 	cfg := createTestConfig(t, tmpDir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, &buf)
+	err := generateList(cfg, true, &buf)
 
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "Scaffolds a full feature")
 }
 
 func TestUT_GenerateList_NoConfig(t *testing.T) {
-	err := generateList(nil, io.Discard)
+	err := generateList(nil, true, io.Discard)
 
 	require.Error(t, err)
 }
@@ -1167,7 +1167,7 @@ func TestUT_GenerateList_FrontmatterDescShown(t *testing.T) {
 	cfg := createTestConfig(t, tmpDir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, &buf)
+	err := generateList(cfg, true, &buf)
 
 	require.NoError(t, err)
 	output := buf.String()
@@ -1383,4 +1383,384 @@ func TestUT_PrintGenerateSummary_SummaryLineFormat(t *testing.T) {
 	var buf bytes.Buffer
 	printGenerateSummary(&buf, result, false)
 	assert.Equal(t, "Generated: 3 created, 1 skipped, 2 overwritten, 4 modified\n", buf.String())
+}
+
+// --- Prerequisites tests ---
+
+func TestUT_GenerateBundle_RequirementsMet(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","requires":["use_postgres"],"generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": true,
+	}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	var generateCalls int
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				generateCalls++
+				return engine.GenerateResult{}, nil
+			},
+		}
+		return mock, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, generateCalls, "generator should run when requirements are met")
+}
+
+func TestUT_GenerateBundle_RequirementsUnmet(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","requires":["use_postgres"],"generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": false,
+	}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "use_postgres")
+}
+
+func TestUT_GenerateBundle_RequirementsPartiallyMet(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","requires":["use_postgres","use_amqp"],"generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": true,
+		"use_amqp":     false,
+	}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "use_amqp")
+	assert.NotContains(t, err.Error(), "use_postgres")
+}
+
+func TestUT_GenerateBundle_NoRequirements_BackwardCompat(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	// Bundle without "requires" field — should work unchanged.
+	bundleJSON := `{"name":"mybundle","generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": false,
+	}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	var generateCalls int
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(tmplEngine *template.Engine, dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				generateCalls++
+				return engine.GenerateResult{}, nil
+			},
+		}
+		return mock, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, generateCalls, "generator should run when no requirements are specified")
+}
+
+func TestUT_GenerateBundle_RequirementsMissing_NoConfig(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","requires":["use_postgres"],"generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	// No variables set at all.
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "use_postgres")
+	assert.Contains(t, err.Error(), "not set")
+}
+
+func TestUT_GenerateList_FiltersUnmetRequirements(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	createGenerator(t, tmpDir, "domain", `---
+to: output/{{ .Name }}.txt
+desc: Domain generator
+---
+Hello`)
+
+	// Create a bundle with requirements
+	bundleJSON := `{"name":"crud","description":"CRUD bundle","requires":["use_postgres"],"generators":[{"name":"domain"}]}`
+	createBundle(t, tmpDir, "crud", bundleJSON)
+
+	// Create a bundle without requirements
+	bundleJSON2 := `{"name":"bdd","description":"BDD bundle","generators":[{"name":"domain"}]}`
+	createBundle(t, tmpDir, "bdd", bundleJSON2)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": false,
+	}
+
+	var buf bytes.Buffer
+	err := generateList(cfg, false, &buf)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.NotContains(t, output, "crud", "bundle with unmet requirements should be filtered out")
+	assert.Contains(t, output, "bdd", "bundle without requirements should be shown")
+}
+
+func TestUT_GenerateList_AllFlagShowsEverything(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	createGenerator(t, tmpDir, "domain", `---
+to: output/{{ .Name }}.txt
+desc: Domain generator
+---
+Hello`)
+
+	bundleJSON := `{"name":"crud","description":"CRUD bundle","requires":["use_postgres"],"generators":[{"name":"domain"}]}`
+	createBundle(t, tmpDir, "crud", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": false,
+	}
+
+	var buf bytes.Buffer
+	err := generateList(cfg, true, &buf)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "crud", "bundle should be shown with --all flag even if requirements unmet")
+	assert.Contains(t, output, "[requires: use_postgres]", "requirements should be displayed")
+}
+
+func TestUT_GenerateList_RequirementsShownInOutput(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	createGenerator(t, tmpDir, "domain", `---
+to: output/{{ .Name }}.txt
+---
+Hello`)
+
+	bundleJSON := `{"name":"crud","description":"CRUD bundle","requires":["use_postgres","use_amqp"],"generators":[{"name":"domain"}]}`
+	createBundle(t, tmpDir, "crud", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": true,
+		"use_amqp":     true,
+	}
+
+	var buf bytes.Buffer
+	err := generateList(cfg, false, &buf)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "[requires: use_postgres, use_amqp]")
+}
+
+func TestUT_GenerateTemplate_RequirementsMet(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "postgres-adapter", templateContent)
+	createSharedDir(t, tmpDir)
+
+	// Write a tag.template.json with requires into the generator directory.
+	genConfigPath := filepath.Join(tmpDir, "postgres-adapter", "tag.template.json")
+	require.NoError(t, os.WriteFile(genConfigPath, []byte(`{"requires":["use_postgres"]}`), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": true,
+	}
+
+	ctx := createTestCLIContext(t, []string{"postgres-adapter", "orders"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	var generateCalls int
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				generateCalls++
+				return engine.GenerateResult{}, nil
+			},
+		}
+		return mock, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, generateCalls, "generator should run when requirements are met")
+}
+
+func TestUT_GenerateTemplate_RequirementsUnmet(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "postgres-adapter", templateContent)
+	createSharedDir(t, tmpDir)
+
+	// Write a tag.template.json with requires into the generator directory.
+	genConfigPath := filepath.Join(tmpDir, "postgres-adapter", "tag.template.json")
+	require.NoError(t, os.WriteFile(genConfigPath, []byte(`{"requires":["use_postgres"]}`), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": false,
+	}
+
+	ctx := createTestCLIContext(t, []string{"postgres-adapter", "orders"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	err := generateAction(ctx, cfg, defaultGeneratorFactories())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "use_postgres")
+	assert.Contains(t, err.Error(), "generator")
+}
+
+func TestUT_GenerateTemplate_NoRequirements_BackwardCompat(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := `---
+to: output/{{ .Name }}.txt
+---
+Hello {{ .Name }}`
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	// Generator without tag.template.json — should work unchanged.
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"use_postgres": false,
+	}
+
+	ctx := createTestCLIContext(t, []string{"hello", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+	})
+
+	var generateCalls int
+	fac := defaultGeneratorFactories()
+	fac.newEngine = func(dryRun bool, dirPath string, sharedPath string, rec *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		mock := &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				generateCalls++
+				return engine.GenerateResult{}, nil
+			},
+		}
+		return mock, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, generateCalls, "generator should run when no tag.template.json exists")
 }

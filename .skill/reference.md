@@ -339,6 +339,42 @@ tag cache clear                        # Clear expired entries
 tag cache clear --all                  # Clear entire cache
 ```
 
+### Bundle Prerequisites
+
+Bundles and generators can declare a `requires` field — an array of `.tagconfig.json` variable names that must be present and truthy for the generator/bundle to run.
+
+**In a bundle manifest** (`.tag/_bundles/<name>/<name>.json`):
+
+```json
+{
+  "name": "crud",
+  "requires": ["use_db"],
+  "generators": [
+    { "name": "model" },
+    { "name": "repository" }
+  ]
+}
+```
+
+**In a generator config** (`tag.template.json` inside the generator directory):
+
+```json
+{
+  "requires": ["use_docker"],
+  "vars": { "port": 8080 }
+}
+```
+
+When `tag generate` is invoked and requirements are unmet, it aborts with a message listing each unmet variable and whether it is "not set" or "currently disabled":
+
+```
+generator "service" requires the following variables to be enabled:
+  - use_db (not set in .tagconfig.json)
+  hint: re-scaffold with the required variables enabled to use this generator
+```
+
+`tag generate list` and `tag template list` hide items with unmet requirements by default. Use `--all` to show everything. Items with requirements display them as `[requires: x, y]` in the list output.
+
 ### Code Generation Flags
 
 | Flag | Description |
