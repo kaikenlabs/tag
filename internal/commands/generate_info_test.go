@@ -66,10 +66,10 @@ func TestUT_GenerateInfo_Generator(t *testing.T) {
 	var hasCreate, hasInject bool
 	for _, f := range info.Files {
 		switch f.Action {
-		case "create":
+		case actionCreate:
 			hasCreate = true
 			assert.Contains(t, f.To, "handlers")
-		case "inject":
+		case actionInject:
 			hasInject = true
 			assert.Equal(t, "// routes", f.After)
 		}
@@ -177,13 +177,13 @@ func TestUT_ExtractFileInfos(t *testing.T) {
 	actions := map[string]bool{}
 	for _, f := range files {
 		actions[f.Action] = true
-		if f.Action == "inject" {
+		if f.Action == actionInject {
 			assert.Equal(t, "// end", f.Before)
 		}
 	}
-	assert.True(t, actions["create"])
-	assert.True(t, actions["append"])
-	assert.True(t, actions["inject"])
+	assert.True(t, actions[actionCreate])
+	assert.True(t, actions[actionAppend])
+	assert.True(t, actions[actionInject])
 }
 
 func TestUT_ConvertVariables(t *testing.T) {

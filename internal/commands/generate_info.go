@@ -17,7 +17,12 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
-const sourceLocal = "local"
+const (
+	sourceLocal  = "local"
+	actionCreate = "create"
+	actionAppend = "append"
+	actionInject = "inject"
+)
 
 // generatorInfoJSON is the top-level JSON output for `tag generate info`.
 type generatorInfoJSON struct {
@@ -224,7 +229,7 @@ func extractFileInfos(genDir string) ([]fileInfoJSON, error) {
 // parseRawFrontmatter parses raw frontmatter key:value lines to extract
 // file info without rendering template expressions.
 func parseRawFrontmatter(metaRaw string) fileInfoJSON {
-	fi := fileInfoJSON{Action: "create"}
+	fi := fileInfoJSON{Action: actionCreate}
 	for line := range strings.SplitSeq(metaRaw, "\n") {
 		rawKey, rawValue, found := strings.Cut(strings.TrimSpace(line), ":")
 		if !found {
@@ -237,11 +242,11 @@ func parseRawFrontmatter(metaRaw string) fileInfoJSON {
 			fi.To = value
 		case "append":
 			if strings.EqualFold(value, "true") {
-				fi.Action = "append"
+				fi.Action = actionAppend
 			}
 		case "inject":
 			if strings.EqualFold(value, "true") {
-				fi.Action = "inject"
+				fi.Action = actionInject
 			}
 		case "after":
 			fi.After = value
