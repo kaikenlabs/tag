@@ -279,7 +279,39 @@ Enter value for package_display_name [My Package]: Awesome Library
 
 The `package_name` will be computed as `awesome_library` and `github_repo` will also be `awesome_library`.
 
-**Detection rules:** A variable is considered derived if its default value is a string containing `{{ vars.` (TAG's variable namespace).
+**Detection rules:** A variable is considered derived if it uses the **minimal form** (bare string value) and its default contains `{{ vars.` (TAG's variable namespace).
+
+### Evaluated-Default Variables
+
+Expanded-form variables with an explicit `prompt` and a template-expression default are prompted interactively. The expression is resolved from previously collected variables and shown as the suggested default, which the user can accept or override.
+
+```json
+{
+  "vars": {
+    "project_name": "my-service",
+    "module_path": {
+      "type": "string",
+      "prompt": "Go module path",
+      "default": "bitbucket.org/myorg/{{ vars.project_name }}"
+    }
+  }
+}
+```
+
+**User prompt sequence:**
+```
+Enter value for project_name [my-service]: my-service
+Go module path [bitbucket.org/myorg/my-service]: ⏎
+```
+
+The key distinction from derived variables is the explicit `prompt` field:
+
+| Variable form | `prompt` set? | Behaviour |
+|---|---|---|
+| `"pkg": "{{ vars.x }}"` | No | Derived — silent, never prompted |
+| `{"prompt": "…", "default": "{{ vars.x }}"}` | Yes | Prompted with resolved suggestion |
+
+In non-TTY mode the expression is resolved silently, the same as a derived variable.
 
 ## Hooks Configuration
 

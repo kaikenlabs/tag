@@ -149,9 +149,41 @@ In this example:
 - `package_name` will NOT be prompted (derived from `project_name`)
 - `docker_image` will NOT be prompted (derived from `project_name`)
 
-**Detection rules:** A variable is considered derived if its default value is a string containing `{{ vars.`.
+**Detection rules:** A variable is considered derived if it uses the **minimal form** (bare string value) and its default contains `{{ vars.`.
 
 > **Note**: Derived variables are passed through as template expressions and evaluated during rendering. This allows complex computations like `{{ vars.name.lower().replace(' ', '_') }}`.
+
+### Evaluated-Default Variables
+
+Sometimes you want a smart, context-aware default while still letting the user change it. Use the **expanded form** with an explicit `prompt` alongside a template-expression default:
+
+```json
+{
+  "vars": {
+    "project_name": "my-service",
+    "module_path": {
+      "type": "string",
+      "prompt": "Go module path",
+      "default": "bitbucket.org/myorg/{{ vars.project_name }}"
+    }
+  }
+}
+```
+
+**User experience:**
+```
+Enter value for project_name [my-service]: my-service
+Go module path [bitbucket.org/myorg/my-service]: ⏎
+```
+
+The user can press Enter to accept the resolved default, or type a custom value. This is distinct from derived variables—the difference is the explicit `prompt` key:
+
+| Form | Prompt? | Default |
+|------|---------|---------|
+| `"module_path": "{{ vars.x }}"` | No — silently computed | Expression |
+| `{"prompt": "...", "default": "{{ vars.x }}"}` | Yes — with resolved suggestion | Expression |
+
+In non-TTY mode (`--no-input` or piped), the expression is resolved automatically just like a derived variable.
 
 ## Path Placeholders
 

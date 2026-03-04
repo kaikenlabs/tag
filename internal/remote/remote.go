@@ -69,9 +69,13 @@ func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOption
 		return r.fetchAndReturn(ctx, ref)
 	}
 
-	// 3. Check cache (unless force update)
+	// 3. Check cache unless:
+	//    - ForceUpdate is explicitly requested, OR
+	//    - the ref is floating (no pinned version/tag/commit), in which case we
+	//      always fetch to pick up upstream changes
 	cacheKey := ref.CacheKey()
-	if !opts.ForceUpdate {
+	skipCache := opts.ForceUpdate || ref.Version == ""
+	if !skipCache {
 		if path, found, err := r.cache.Get(cacheKey); err == nil && found { //nolint:govet // shadow in if-init is idiomatic
 			// Apply subpath to cached path
 			return r.applySubPath(path, ref.SubPath)

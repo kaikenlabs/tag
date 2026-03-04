@@ -309,11 +309,71 @@ func TestUT_VariableDef_IsDerived(t *testing.T) {
 			def:      VariableDef{Default: "{% now 'utc', '%Y' %}"},
 			expected: false,
 		},
+		{
+			name:     "expression default with explicit prompt - not derived (evaluated default)",
+			def:      VariableDef{Prompt: "Go module path", Default: "{{ vars.project_name }}"},
+			expected: false,
+		},
+		{
+			name:     "expression default with prompt and filter - not derived (evaluated default)",
+			def:      VariableDef{Prompt: "Module path", Default: "org/{{ vars.name | snake }}"},
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.def.IsDerived())
+		})
+	}
+}
+
+func TestUT_VariableDef_IsEvaluatedDefault(t *testing.T) {
+	tests := []struct {
+		name     string
+		def      VariableDef
+		expected bool
+	}{
+		{
+			name:     "expression default with explicit prompt - evaluated default",
+			def:      VariableDef{Prompt: "Go module path", Default: "bitbucket.org/whalar/{{ vars.project_name }}"},
+			expected: true,
+		},
+		{
+			name:     "expression default with prompt and filter - evaluated default",
+			def:      VariableDef{Prompt: "Module path", Default: "{{ vars.name | snake }}"},
+			expected: true,
+		},
+		{
+			name:     "expression default without prompt - not evaluated default (derived)",
+			def:      VariableDef{Default: "{{ vars.project_name }}"},
+			expected: false,
+		},
+		{
+			name:     "static default with prompt - not evaluated default",
+			def:      VariableDef{Prompt: "Project name", Default: "my-project"},
+			expected: false,
+		},
+		{
+			name:     "nil default with prompt - not evaluated default",
+			def:      VariableDef{Prompt: "Name", Default: nil},
+			expected: false,
+		},
+		{
+			name:     "no prompt, no default - not evaluated default",
+			def:      VariableDef{},
+			expected: false,
+		},
+		{
+			name:     "boolean default with prompt - not evaluated default",
+			def:      VariableDef{Prompt: "Enable?", Default: true},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.def.IsEvaluatedDefault())
 		})
 	}
 }

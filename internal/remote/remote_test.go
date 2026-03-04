@@ -81,11 +81,11 @@ func TestUT_Resolver_CacheHit(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "tag.template.json"), []byte(`{}`), 0o644))
 
-	// Cache it
-	_, err = cache.Set("gh_user_repo", srcDir, &CacheMeta{
-		OriginalRef: "gh:user/repo",
+	// Cache it under the pinned key
+	_, err = cache.Set("gh_user_repo@v1.0.0", srcDir, &CacheMeta{
+		OriginalRef: "gh:user/repo@v1.0.0",
 		FetchedAt:   time.Now(),
-		Version:     "v1.0.0", // Pinned, won't expire
+		Version:     "v1.0.0",
 	})
 	require.NoError(t, err)
 
@@ -93,21 +93,63 @@ func TestUT_Resolver_CacheHit(t *testing.T) {
 	resolver, err := NewResolverWithOptions(cacheDir, nil)
 	require.NoError(t, err)
 
-	// Mock fetcher that should NOT be called
+	// Mock fetcher that should NOT be called for a pinned ref
 	mockFetcher := &mockFetcher{
 		fetchFunc: func(ctx context.Context, ref *Reference) (string, error) {
-			t.Fatal("Fetcher should not be called for cache hit")
+			t.Fatal("Fetcher should not be called for pinned cache hit")
 			return "", nil
 		},
 	}
 	resolver.fetchers[ReferenceTypeGit] = mockFetcher
 
-	// Resolve - should hit cache
+	// Resolve pinned ref - should hit cache
 	ctx := context.Background()
-	path, err := resolver.Resolve(ctx, "gh:user/repo", ResolveOptions{})
+	path, err := resolver.Resolve(ctx, "gh:user/repo@v1.0.0", ResolveOptions{})
 	require.NoError(t, err)
 
-	assert.Equal(t, filepath.Join(cacheDir, "gh_user_repo"), path)
+	assert.Equal(t, filepath.Join(cacheDir, "gh_user_repo@v1.0.0"), path)
+}
+
+func TestUT_Resolver_FloatingRefAlwaysFetches(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheDir := filepath.Join(tmpDir, "cache")
+
+	// Pre-populate cache as if a previous fetch happened
+	cache, err := NewFSCache(cacheDir)
+	require.NoError(t, err)
+
+	srcDir := filepath.Join(tmpDir, "src")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "tag.template.json"), []byte(`{}`), 0o644))
+
+	_, err = cache.Set("gh_user_repo", srcDir, &CacheMeta{
+		OriginalRef: "gh:user/repo",
+		FetchedAt:   time.Now(),
+	})
+	require.NoError(t, err)
+
+	resolver, err := NewResolverWithOptions(cacheDir, nil)
+	require.NoError(t, err)
+
+	fetchCalled := false
+	newContent := filepath.Join(tmpDir, "new")
+	require.NoError(t, os.MkdirAll(newContent, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(newContent, "tag.template.json"), []byte(`{}`), 0o644))
+
+	mockFetcher := &mockFetcher{
+		fetchFunc: func(ctx context.Context, ref *Reference) (string, error) {
+			fetchCalled = true
+			return newContent, nil
+		},
+	}
+	resolver.fetchers[ReferenceTypeGit] = mockFetcher
+
+	// Floating ref (no version) - must always fetch even with a cached entry
+	ctx := context.Background()
+	_, err = resolver.Resolve(ctx, "gh:user/repo", ResolveOptions{})
+	require.NoError(t, err)
+
+	assert.True(t, fetchCalled, "Fetcher must be called for floating refs regardless of cache")
 }
 
 func TestUT_Resolver_ForceUpdate(t *testing.T) {

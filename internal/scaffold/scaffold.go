@@ -104,6 +104,7 @@ func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
 
 	// Build remaining components from the (possibly injected) engine
 	collector := NewVariableCollector(prompter)
+	collector.WithEngine(s.engine)
 	processor := NewPathProcessor(s.engine)
 	processor.SetAllowRecursiveRender(opts.AllowRecursiveRender)
 	writer := NewOutputWriter(s.engine, processor)

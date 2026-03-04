@@ -280,6 +280,7 @@ Full scaffold with variables, conditionals, hooks, and bundled generators.
     "go_module": {
       "type": "string",
       "prompt": "Go module path",
+      "default": "github.com/myorg/{{ vars.project_name | kebab }}",
       "required": true
     },
     "port": { "type": "number", "default": 8080 },
@@ -431,3 +432,54 @@ my-template/
 └── _generators/
     └── handler/handler.go
 ```
+
+---
+
+## Recipe 11: Evaluated-Default Variables
+
+Offer a smart, context-aware default while still letting the user change it.
+Use the **expanded form** with an explicit `prompt` and a template-expression `default`.
+
+**tag.template.json**:
+```json
+{
+  "vars": {
+    "project_name": "my-service",
+    "module_path": {
+      "type": "string",
+      "prompt": "Go module path",
+      "default": "bitbucket.org/myorg/{{ vars.project_name | kebab }}"
+    },
+    "docker_registry": {
+      "type": "string",
+      "prompt": "Docker image",
+      "default": "registry.myorg.com/{{ vars.project_name | kebab }}"
+    },
+    "_slug": "{{ vars.project_name | snake }}"
+  }
+}
+```
+
+**User experience** (user accepts all suggested defaults):
+```
+Enter value for project_name [my-service]: ⏎
+Go module path [bitbucket.org/myorg/my-service]: ⏎
+Docker image [registry.myorg.com/my-service]: ⏎
+```
+
+**With user override**:
+```
+Enter value for project_name [my-service]: payments-api
+Go module path [bitbucket.org/myorg/payments-api]: github.com/acme/payments-api
+Docker image [registry.myorg.com/payments-api]: ⏎
+```
+
+**Disambiguation** — the `prompt` field is the switch:
+
+| Definition | Prompted? | Behaviour |
+|---|---|---|
+| `"slug": "{{ vars.x }}"` | No | Derived — silent |
+| `{"prompt": "…", "default": "{{ vars.x }}"}` | Yes | Evaluated default — prompted with resolved suggestion |
+| `"_internal": "{{ vars.x }}"` | No | Private — silent |
+
+In non-TTY / `--no-input` mode, all three resolve silently.

@@ -171,7 +171,7 @@ Shared fragments in `_shared/` resolve by basename:
 { "_internal_slug": "{{ vars.project_name | snake }}" }
 ```
 
-**Derived**: Default contains `{{ vars.* }}`. Not prompted, computed from other variables.
+**Derived**: Minimal form with expression default. Not prompted, computed from other variables.
 
 ```json
 {
@@ -181,6 +181,21 @@ Shared fragments in `_shared/` resolve by basename:
 ```
 
 Only `display_name` is prompted; `package_name` is computed.
+
+**Evaluated default**: Expanded form with explicit `prompt` AND an expression default. Prompted interactively — the expression is resolved first and shown as the suggested default. User can accept or override.
+
+```json
+{
+  "project_name": "my-service",
+  "module_path": {
+    "type": "string",
+    "prompt": "Go module path",
+    "default": "bitbucket.org/myorg/{{ vars.project_name }}"
+  }
+}
+```
+
+In non-TTY mode the expression is resolved silently (same as derived).
 
 ### Variable Resolution Priority
 
