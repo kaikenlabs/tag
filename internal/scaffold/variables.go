@@ -1,10 +1,12 @@
 package scaffold
 
 import (
+	"container/heap"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,19 +40,27 @@ func (c *DefaultVariableCollector) WithEngine(engine template.TemplateRenderer) 
 }
 
 // Collect gathers variables following the priority chain:
-// defaults -> --replay -> --values file -> prompts -> --meta flags
+// defaults -> --replay -> --values file -> --meta flags -> prompts
 //
-// Each layer overwrites the previous, with --meta having highest priority.
+// Meta overrides are applied before prompts so that evaluated defaults
+// (expressions like "{{ vars.project_name | kebab }}") see CLI-provided
+// values instead of static defaults. Variables are prompted in dependency
+// order (topological sort) so that evaluated defaults can reference
+// previously-prompted values.
 //
 //nolint:gocognit,cyclop // orchestration function coordinates multiple input sources
 func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options, isTTY bool) (map[string]any, error) {
 	vars := make(map[string]any)
-	// Track which variables were explicitly provided (from replay or values file)
+	// Track which variables were explicitly provided (from replay, values file, or meta)
 	// These should not be re-prompted even in interactive mode
 	explicitlyProvided := make(map[string]bool)
 
-	// Get sorted variable names for deterministic ordering
-	varNames := getSortedVarNames(config.Vars)
+	// Get dependency-aware variable ordering (topological sort with
+	// lexicographic tie-breaking for independent variables).
+	varNames, err := topologicalSortVars(config.Vars)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve variable ordering: %w", err)
+	}
 
 	// Step 1: Apply defaults (but don't mark them as explicitly provided)
 	for _, name := range varNames {
@@ -107,16 +117,9 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options,
 		}
 	}
 
-	// Step 4: Interactive prompts for variables (if TTY)
-	// Prompt for all non-private, non-derived variables, even if they have defaults.
-	// Skip only if the value was explicitly provided via replay or values file.
-	if isTTY && !opts.NoInput {
-		if err := c.promptAll(varNames, config, opts, explicitlyProvided, vars); err != nil {
-			return nil, err
-		}
-	}
-
-	// Step 5: Apply --meta overrides (highest priority)
+	// Step 4: Apply --meta overrides early (highest priority, before prompts)
+	// This ensures evaluated defaults see CLI-provided values (e.g., positional
+	// project_name) instead of static defaults when resolving expressions.
 	for k, v := range opts.Meta {
 		// Try to coerce value to the expected type if we know it
 		if def, ok := config.Vars[k]; ok {
@@ -128,6 +131,18 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options,
 		} else {
 			// Unknown variable, store as string
 			vars[k] = v
+		}
+		explicitlyProvided[k] = true
+	}
+
+	// Step 5: Interactive prompts for variables (if TTY)
+	// Prompt for all non-private, non-derived variables, even if they have defaults.
+	// Skip only if the value was explicitly provided via replay, values file, or meta.
+	// Variables are iterated in dependency order (topological sort) so that
+	// evaluated defaults can reference previously-prompted or meta-provided values.
+	if isTTY && !opts.NoInput {
+		if err := c.promptAll(varNames, config, explicitlyProvided, vars); err != nil {
+			return nil, err
 		}
 	}
 
@@ -148,7 +163,6 @@ func (c *DefaultVariableCollector) Collect(config *TemplateConfig, opts Options,
 func (c *DefaultVariableCollector) promptAll(
 	varNames []string,
 	config *TemplateConfig,
-	opts Options,
 	explicitlyProvided map[string]bool,
 	vars map[string]any,
 ) error {
@@ -168,9 +182,6 @@ func (c *DefaultVariableCollector) promptAll(
 
 		// Skip if explicitly provided via replay, values file, or --meta flag
 		if explicitlyProvided[name] {
-			continue
-		}
-		if _, hasMeta := opts.Meta[name]; hasMeta {
 			continue
 		}
 
@@ -219,10 +230,13 @@ func (c *DefaultVariableCollector) resolveEvaluatedDefault(def VariableDef, vars
 // — meaning they were not collected via an interactive prompt, values file, or
 // --meta flag (e.g. non-TTY mode or --no-input).
 //
-// Variables are processed in sorted order so that expressions referencing other
-// derived variables see already-resolved values.
+// Variables are processed in dependency order (topological sort) so that
+// expressions referencing other derived variables see already-resolved values.
 func ResolveDerivedVars(engine template.TemplateRenderer, config *TemplateConfig, vars map[string]any) error {
-	varNames := getSortedVarNames(config.Vars)
+	varNames, err := topologicalSortVars(config.Vars)
+	if err != nil {
+		return fmt.Errorf("failed to resolve variable ordering: %w", err)
+	}
 	for _, name := range varNames {
 		def := config.Vars[name]
 
@@ -454,12 +468,115 @@ func isEmptyValue(val any) bool {
 	}
 }
 
-// getSortedVarNames returns variable names in sorted order for deterministic processing.
-func getSortedVarNames(vars map[string]VariableDef) []string {
-	names := make([]string, 0, len(vars))
-	for name := range vars {
-		names = append(names, name)
+// varRefPattern matches {{ vars.<name> }} references, capturing the variable name.
+// It handles optional filters (|), method calls (.), and whitespace.
+var varRefPattern = regexp.MustCompile(`\{\{[\s]*vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
+
+// extractVarRefs extracts variable names referenced via {{ vars.<name> }} in a
+// template expression. Returns a deduplicated, sorted slice.
+func extractVarRefs(expr string) []string {
+	matches := varRefPattern.FindAllStringSubmatch(expr, -1)
+	if len(matches) == 0 {
+		return nil
 	}
-	slices.Sort(names)
-	return names
+	seen := make(map[string]bool, len(matches))
+	var refs []string
+	for _, m := range matches {
+		name := m[1]
+		if !seen[name] {
+			seen[name] = true
+			refs = append(refs, name)
+		}
+	}
+	slices.Sort(refs)
+	return refs
+}
+
+// ErrCircularDependency is returned when variable defaults form a circular dependency.
+var ErrCircularDependency = errors.New("circular variable dependency")
+
+// topologicalSortVars returns variable names ordered so that dependencies come
+// before dependents. Dependencies are extracted from default template expressions
+// ({{ vars.* }}). Independent variables are sorted lexicographically for
+// deterministic ordering. Returns an error if a circular dependency is detected.
+func topologicalSortVars(vars map[string]VariableDef) ([]string, error) {
+	// Build adjacency list and in-degree map.
+	// Edge: dependency → dependent (dep must come before dependent).
+	inDegree := make(map[string]int, len(vars))
+	dependents := make(map[string][]string, len(vars)) // dep → list of vars that depend on it
+
+	for name := range vars {
+		inDegree[name] = 0
+	}
+
+	for name, def := range vars {
+		defaultStr, ok := def.Default.(string)
+		if !ok {
+			continue
+		}
+		refs := extractVarRefs(defaultStr)
+		for _, ref := range refs {
+			// Only consider references to known variables.
+			if _, exists := vars[ref]; !exists {
+				continue
+			}
+			// Self-reference is a cycle.
+			if ref == name {
+				return nil, fmt.Errorf("%w: variable %q references itself", ErrCircularDependency, name)
+			}
+			dependents[ref] = append(dependents[ref], name)
+			inDegree[name]++
+		}
+	}
+
+	// Kahn's algorithm with a min-heap for lexicographic tie-breaking.
+	h := &stringHeap{}
+	heap.Init(h)
+	for name, deg := range inDegree {
+		if deg == 0 {
+			heap.Push(h, name)
+		}
+	}
+
+	sorted := make([]string, 0, len(vars))
+	for h.Len() > 0 {
+		name := heap.Pop(h).(string)
+		sorted = append(sorted, name)
+		for _, dep := range dependents[name] {
+			inDegree[dep]--
+			if inDegree[dep] == 0 {
+				heap.Push(h, dep)
+			}
+		}
+	}
+
+	if len(sorted) != len(vars) {
+		// Find the cycle for a useful error message.
+		var cycleVars []string
+		for name, deg := range inDegree {
+			if deg > 0 {
+				cycleVars = append(cycleVars, name)
+			}
+		}
+		slices.Sort(cycleVars)
+		return nil, fmt.Errorf("%w: variables involved: %s",
+			ErrCircularDependency, strings.Join(cycleVars, ", "))
+	}
+
+	return sorted, nil
+}
+
+// stringHeap implements heap.Interface for a min-heap of strings.
+type stringHeap []string
+
+func (h stringHeap) Len() int            { return len(h) }
+func (h stringHeap) Less(i, j int) bool   { return h[i] < h[j] }
+func (h stringHeap) Swap(i, j int)        { h[i], h[j] = h[j], h[i] }
+func (h *stringHeap) Push(x any)          { *h = append(*h, x.(string)) }
+func (h *stringHeap) Pop() any {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[:n-1]
+	return x
 }
