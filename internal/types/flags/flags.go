@@ -15,4 +15,5 @@ const (
 	NoHooksFlag       = "no-hooks"
 	UpdateLockFlag    = "update-lock"
 	IgnoreLockFlag    = "ignore-lock"
+	AllFlag           = "all"
 )

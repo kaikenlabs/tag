@@ -17,6 +17,9 @@ type TemplateConfig struct {
 	Vars       map[string]VariableDef `json:"-"` // Custom unmarshaling needed
 	RawVars    map[string]any         `json:"vars"`
 	Hooks      *types.HooksConfig     `json:"hooks,omitempty"`
+	// Requires lists template variable names that must be truthy in the project's
+	// .tagconfig.json for this generator to run. Used for prerequisite checking.
+	Requires []string `json:"requires,omitempty"`
 }
 
 // VariableType represents the type of a template variable.

@@ -117,6 +117,32 @@ Bundles run multiple generators sequentially. Stored as JSON in `.tag/_bundles/`
 }
 ```
 
+### Bundle Prerequisites
+
+Bundles and generators can declare `requires` — a list of `.tagconfig.json` variable names that must be present and truthy. If unmet, `tag generate` aborts with an error listing the missing variables.
+
+```json
+{
+  "name": "crud",
+  "requires": ["use_db"],
+  "generators": [
+    { "name": "model" },
+    { "name": "repository" }
+  ]
+}
+```
+
+For generators, add `requires` in the generator's `tag.template.json`:
+
+```json
+{
+  "requires": ["use_docker"],
+  "vars": { "port": 8080 }
+}
+```
+
+`tag generate list` hides generators/bundles with unmet requirements by default. Use `--all` to show everything.
+
 Generators and bundles are **auto-resolved** — no `--bundle` flag needed.
 
 ### Self-Contained Bundles
@@ -159,7 +185,7 @@ my-project/
 |---------|-------------|
 | `tag scaffold [template] [name]` | Create project (no args = picker). Alias: `tag s` |
 | `tag generate <gen-or-bundle> <name>` | Run generator or bundle. Alias: `tag g` |
-| `tag generate list` | List generators and bundles. Alias: `tag g list` |
+| `tag generate list [--all]` | List generators and bundles. Alias: `tag g list` |
 | `tag template init` | Initialize `.tag/` structure |
 | `tag template new generator <name>` | Create generator (`--in-bundle`, `--lib`) |
 | `tag template new bundle <name>` | Create bundle (`--self-contained`, `--lib`) |
@@ -189,6 +215,7 @@ my-project/
 | `-B` / `--in-bundle` | template new generator | Create inside bundle |
 | `-s` / `--self-contained` | template new bundle | Self-contained bundle |
 | `--dry-run` / `-d` | scaffold, generate, convert | Preview without writing |
+| `--all` | generate list, template list | Show all generators/bundles, including those with unmet requirements |
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |
 | `--force` | scaffold | Overwrite existing output |

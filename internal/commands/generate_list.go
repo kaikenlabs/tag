@@ -15,6 +15,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 
 	"github.com/urfave/cli/v2"
 )
@@ -24,8 +25,14 @@ func generateListCommand(cfg *config.Config) *cli.Command {
 		Name:    "list",
 		Aliases: []string{"ls"},
 		Usage:   "List available generators and bundles",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  flags.AllFlag,
+				Usage: "Show all generators and bundles, including those with unmet requirements",
+			},
+		},
 		Action: func(c *cli.Context) error {
-			return generateList(cfg, os.Stdout)
+			return generateList(cfg, c.Bool(flags.AllFlag), os.Stdout)
 		},
 	}
 }
@@ -35,6 +42,7 @@ type generatorInfo struct {
 	Name        string
 	Description string
 	Source      string // "template" or "local"
+	Requires    []string
 }
 
 // generatorLists holds all collected generator/bundle data for a project.
@@ -70,12 +78,24 @@ func collectGeneratorLists(cfg *config.Config) generatorLists {
 	return lists
 }
 
-func generateList(cfg *config.Config, w io.Writer) error {
+func generateList(cfg *config.Config, showAll bool, w io.Writer) error {
 	if err := config.CheckConfig(cfg); err != nil {
 		return err
 	}
 
 	lists := collectGeneratorLists(cfg)
+
+	// Filter out generators/bundles with unmet requirements unless --all is set.
+	vars := make(map[string]any)
+	if cfg.Variables != nil {
+		vars = cfg.Variables
+	}
+	if !showAll {
+		lists.templateGens = filterByRequirements(lists.templateGens, vars)
+		lists.localGens = filterByRequirements(lists.localGens, vars)
+		lists.templateBundles = filterByRequirements(lists.templateBundles, vars)
+		lists.localBundles = filterByRequirements(lists.localBundles, vars)
+	}
 
 	// Check if there's anything to show
 	if len(lists.templateGens) == 0 && len(lists.localGens) == 0 && len(lists.templateBundles) == 0 && len(lists.localBundles) == 0 {
@@ -135,10 +155,14 @@ func generateList(cfg *config.Config, w io.Writer) error {
 }
 
 func printGeneratorLine(w io.Writer, g generatorInfo) {
+	reqSuffix := ""
+	if len(g.Requires) > 0 {
+		reqSuffix = " [requires: " + strings.Join(g.Requires, ", ") + "]"
+	}
 	if g.Description != "" {
-		fmt.Fprintf(w, "  %-20s %s\n", g.Name, g.Description)
+		fmt.Fprintf(w, "  %-20s %s%s\n", g.Name, g.Description, reqSuffix)
 	} else {
-		fmt.Fprintf(w, "  %s\n", g.Name)
+		fmt.Fprintf(w, "  %s%s\n", g.Name, reqSuffix)
 	}
 }
 
@@ -169,6 +193,7 @@ func scanDirEntries(dir string) []generatorInfo {
 		if readErr == nil {
 			if tc, parseErr := scaffold.ParseTemplateConfig(data); parseErr == nil {
 				info.Description = tc.Description
+				info.Requires = tc.Requires
 			}
 		}
 
@@ -206,13 +231,14 @@ func scanBundles(dir string) []generatorInfo {
 
 		info := generatorInfo{Name: name}
 
-		// Read description from bundle manifest (<name>/<name>.json).
+		// Read description and requires from bundle manifest (<name>/<name>.json).
 		manifestPath := filepath.Join(dir, name, name+types.BundleExtension)
 		data, readErr := os.ReadFile(manifestPath)
 		if readErr == nil {
 			var bundle engine.Bundle
 			if jsonErr := json.Unmarshal(data, &bundle); jsonErr == nil {
 				info.Description = bundle.Description
+				info.Requires = bundle.Requires
 			}
 		}
 
@@ -255,4 +281,16 @@ func readFrontmatterDesc(genDir string) string {
 	}
 
 	return ""
+}
+
+// filterByRequirements returns only generators/bundles whose requirements
+// are all met by the given variables. Items with no requirements pass through.
+func filterByRequirements(items []generatorInfo, vars map[string]any) []generatorInfo {
+	var filtered []generatorInfo
+	for _, item := range items {
+		if requirementsMet(item.Requires, vars) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }

@@ -58,6 +58,7 @@ When a project was scaffolded from a template, the scaffold-time variables (e.g.
 | `--on-existing <policy>` | | How to handle create-action files that already exist: `fail` (default), `skip`, `overwrite` |
 | `--no-hooks` | | Skip execution of pre and post hooks |
 | `--dry-run` | `-d` | Preview output without writing files |
+| `--all` | | (`list` subcommand only) Show all generators/bundles, including those with unmet requirements |
 
 ## Global Flags
 
@@ -75,11 +76,14 @@ List all available generators and bundles for the current project.
 ```bash
 tag generate list
 tag generate ls    # alias
+tag generate list --all   # include generators/bundles with unmet requirements
 ```
 
 This is equivalent to `tag template list` — both show the same output.
 
-Output shows generators grouped by source (template library vs local project) and bundles. Each generator's description is read from its `tag.template.json` file (if present).
+By default, generators and bundles whose `requires` prerequisites are not met by the current `.tagconfig.json` variables are hidden. Pass `--all` to show everything.
+
+Output shows generators grouped by source (template library vs local project) and bundles. Each generator's description is read from its `tag.template.json` file (if present). Generators or bundles with prerequisites display them as `[requires: x, y]` after the description.
 
 Example output:
 ```
@@ -233,6 +237,20 @@ func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
 }
 ```
 
+Bundles support an optional `requires` field listing `.tagconfig.json` variable names that must be truthy for the bundle to run:
+
+```json
+{
+  "requires": ["use_db"],
+  "generators": [
+    { "name": "model" },
+    { "name": "repository" }
+  ]
+}
+```
+
+Individual generators can also declare `requires` in their `tag.template.json`. See [Prerequisites](#prerequisites) below.
+
 ## Configuration
 
 Generator behavior is configured via `.tagconfig.json` in your project root. This file is created automatically by `tag template init` or `tag scaffold`.
@@ -380,6 +398,40 @@ notes: "Remember to register the handler in routes.go"
 ---
 ```
 
+## Prerequisites
+
+Generators and bundles can declare prerequisites via the `requires` field — an array of variable names that must exist and be truthy in the project's `.tagconfig.json`.
+
+**Generator prerequisites** are declared in the generator's `tag.template.json`:
+
+```json
+{
+  "requires": ["use_docker"],
+  "vars": { "port": 8080 }
+}
+```
+
+**Bundle prerequisites** are declared in the bundle manifest (`<name>.json`):
+
+```json
+{
+  "requires": ["use_db"],
+  "generators": [{ "name": "model" }, { "name": "repository" }]
+}
+```
+
+When `tag generate` encounters unmet requirements, it aborts with a message listing each missing or disabled variable:
+
+```
+bundle "crud" requires the following variables to be enabled:
+  - use_db (not set in .tagconfig.json)
+  hint: re-scaffold with the required variables enabled to use this bundle
+```
+
+A variable is considered "truthy" if it is a non-empty string, `true`, or a non-zero number. `false`, `0`, `""`, and absent variables are all considered unmet.
+
+**Listing behavior**: `tag generate list` hides generators and bundles with unmet requirements by default. Use `--all` to include them. Items with prerequisites show `[requires: x, y]` after their description.
+
 ## Error Handling
 
 | Error | Cause | Solution |
@@ -388,6 +440,7 @@ notes: "Remember to register the handler in routes.go"
 | "generator not found in .tag" | Generator not found locally (no library template configured) | Create the generator in `.tag/` |
 | "template not found in library" | `.tagconfig.json` references a template that isn't installed | Run `tag lib add <ref>` to install the template |
 | "template version mismatch" | Library template version differs from scaffold-time version | Consider re-scaffolding or running `tag lib update <name>` |
+| "<kind> \"name\" requires the following variables to be enabled" | Prerequisites in `requires` not met by `.tagconfig.json` | Re-scaffold with the required variables enabled, or set them manually in `.tagconfig.json` |
 | "cannot open bundle file" | Bundle file not found | Verify bundle exists in `_bundles/` |
 | "hook failed" | Pre/post hook returned error | Check hook command and permissions |
 | user quit (exit code 1) | User pressed `q` during `--dry-run` interactive review | Normal exit — no files were written |

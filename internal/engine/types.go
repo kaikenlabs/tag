@@ -92,5 +92,6 @@ type Bundle struct {
 	Name          string         `json:"name" yaml:"name"`
 	Description   string         `json:"description,omitempty" yaml:"description,omitempty"`
 	SelfContained bool           `json:"self_contained,omitempty" yaml:"self_contained,omitempty"`
+	Requires      []string       `json:"requires,omitempty" yaml:"requires,omitempty"`
 	Generators    []GeneratorRef `json:"generators" yaml:"generators"`
 }
