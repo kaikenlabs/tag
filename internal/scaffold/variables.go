@@ -470,7 +470,7 @@ func isEmptyValue(val any) bool {
 
 // varRefPattern matches {{ vars.<name> }} references, capturing the variable name.
 // It handles optional filters (|), method calls (.), and whitespace.
-var varRefPattern = regexp.MustCompile(`\{\{[\s]*vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
+var varRefPattern = regexp.MustCompile(`\{\{\s*vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
 
 // extractVarRefs extracts variable names referenced via {{ vars.<name> }} in a
 // template expression. Returns a deduplicated, sorted slice.
@@ -540,7 +540,7 @@ func topologicalSortVars(vars map[string]VariableDef) ([]string, error) {
 
 	sorted := make([]string, 0, len(vars))
 	for h.Len() > 0 {
-		name := heap.Pop(h).(string)
+		name, _ := heap.Pop(h).(string)
 		sorted = append(sorted, name)
 		for _, dep := range dependents[name] {
 			inDegree[dep]--
@@ -569,10 +569,15 @@ func topologicalSortVars(vars map[string]VariableDef) ([]string, error) {
 // stringHeap implements heap.Interface for a min-heap of strings.
 type stringHeap []string
 
-func (h stringHeap) Len() int            { return len(h) }
-func (h stringHeap) Less(i, j int) bool   { return h[i] < h[j] }
-func (h stringHeap) Swap(i, j int)        { h[i], h[j] = h[j], h[i] }
-func (h *stringHeap) Push(x any)          { *h = append(*h, x.(string)) }
+func (h *stringHeap) Len() int           { return len(*h) }
+func (h *stringHeap) Less(i, j int) bool { return (*h)[i] < (*h)[j] }
+func (h *stringHeap) Swap(i, j int)      { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
+
+func (h *stringHeap) Push(x any) {
+	s, _ := x.(string)
+	*h = append(*h, s)
+}
+
 func (h *stringHeap) Pop() any {
 	old := *h
 	n := len(old)
