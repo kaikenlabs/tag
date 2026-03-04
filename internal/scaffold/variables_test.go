@@ -1053,3 +1053,420 @@ func TestUT_ResolveDerivedVars_EvaluatedDefaultSkipsResolvedValue(t *testing.T) 
 	// Should not be overwritten.
 	assert.Equal(t, "github.com/myorg/my-service", vars["module_path"])
 }
+
+// TestUT_EvaluatedDefault_SeesPositionalProjectName verifies that an
+// evaluated-default expression resolves using the positional project_name
+// argument (routed through opts.Meta), not the static default.
+func TestUT_EvaluatedDefault_SeesPositionalProjectName(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "my-service"},
+			"module_path": {
+				Type:    VarTypeString,
+				Prompt:  "Go module path",
+				Default: "example.com/myorg/{{ vars.project_name | kebab }}",
+			},
+		},
+	}
+
+	// Positional project_name is routed through opts.Meta by collectVars.
+	opts := Options{
+		Meta: map[string]string{"project_name": "hello-world"},
+	}
+
+	vars, err := collector.Collect(config, opts, true)
+	require.NoError(t, err)
+
+	// The evaluated default should see "hello-world", not "my-service".
+	assert.Equal(t, "hello-world", vars["project_name"])
+	assert.Equal(t, "example.com/myorg/hello-world", vars["module_path"])
+}
+
+// TestUT_EvaluatedDefault_SeesMetaOverride verifies that evaluated defaults
+// see explicit -m flag overrides, not just static defaults.
+func TestUT_EvaluatedDefault_SeesMetaOverride(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"org_name":     {Type: VarTypeString, Default: "default-org"},
+			"project_name": {Type: VarTypeString, Default: "my-service"},
+			"repo_url": {
+				Type:    VarTypeString,
+				Prompt:  "Repository URL",
+				Default: "github.com/{{ vars.org_name }}/{{ vars.project_name }}",
+			},
+		},
+	}
+
+	opts := Options{
+		Meta: map[string]string{
+			"org_name":     "mycompany",
+			"project_name": "cool-app",
+		},
+	}
+
+	vars, err := collector.Collect(config, opts, true)
+	require.NoError(t, err)
+
+	assert.Equal(t, "github.com/mycompany/cool-app", vars["repo_url"])
+}
+
+// TestUT_VariableCollector_DependencyOrdering verifies that a variable whose
+// default references another variable is prompted after its dependency,
+// regardless of alphabetical order.
+func TestUT_VariableCollector_DependencyOrdering(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	// Track prompt order via a wrapper prompter.
+	promptOrder := []string{}
+	collector := NewVariableCollector(&orderTrackingPrompter{
+		inner:       NewMockPrompter(),
+		promptOrder: &promptOrder,
+	})
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			// "aaa_module" sorts before "zzz_name" alphabetically,
+			// but aaa_module depends on zzz_name.
+			"aaa_module": {
+				Type:    VarTypeString,
+				Prompt:  "Module path",
+				Default: "example.com/{{ vars.zzz_name }}",
+			},
+			"zzz_name": {Type: VarTypeString, Default: "my-project", Prompt: "Project name"},
+		},
+	}
+
+	vars, err := collector.Collect(config, Options{}, true)
+	require.NoError(t, err)
+
+	// zzz_name should be prompted before aaa_module despite alphabetical order.
+	require.Len(t, promptOrder, 2)
+	assert.Equal(t, "Project name", promptOrder[0])
+	assert.Equal(t, "Module path", promptOrder[1])
+	assert.Equal(t, "example.com/my-project", vars["aaa_module"])
+}
+
+// TestUT_VariableCollector_CircularDependencyError verifies that circular
+// variable dependencies (A → B → A) produce a clear error.
+func TestUT_VariableCollector_CircularDependencyError(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"var_a": {
+				Type:    VarTypeString,
+				Prompt:  "Variable A",
+				Default: "{{ vars.var_b }}",
+			},
+			"var_b": {
+				Type:    VarTypeString,
+				Prompt:  "Variable B",
+				Default: "{{ vars.var_a }}",
+			},
+		},
+	}
+
+	_, err = collector.Collect(config, Options{}, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular")
+}
+
+// TestUT_VariableCollector_SelfReferenceError verifies that a variable
+// referencing itself in its default produces a circular dependency error.
+func TestUT_VariableCollector_SelfReferenceError(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"name": {
+				Type:    VarTypeString,
+				Prompt:  "Name",
+				Default: "prefix-{{ vars.name }}",
+			},
+		},
+	}
+
+	_, err = collector.Collect(config, Options{}, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular")
+}
+
+// TestUT_VariableCollector_MultiHopDependencyChain verifies that a chain
+// A → B → C is resolved in correct order (C first, then B, then A).
+func TestUT_VariableCollector_MultiHopDependencyChain(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	promptOrder := []string{}
+	collector := NewVariableCollector(&orderTrackingPrompter{
+		inner:       NewMockPrompter(),
+		promptOrder: &promptOrder,
+	})
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"full_path": {
+				Type:    VarTypeString,
+				Prompt:  "Full path",
+				Default: "{{ vars.module_path }}/cmd",
+			},
+			"module_path": {
+				Type:    VarTypeString,
+				Prompt:  "Module",
+				Default: "example.com/{{ vars.project_name }}",
+			},
+			"project_name": {Type: VarTypeString, Default: "svc", Prompt: "Project"},
+		},
+	}
+
+	vars, err := collector.Collect(config, Options{}, true)
+	require.NoError(t, err)
+
+	// Order must be: project_name → module_path → full_path
+	require.Len(t, promptOrder, 3)
+	assert.Equal(t, "Project", promptOrder[0])
+	assert.Equal(t, "Module", promptOrder[1])
+	assert.Equal(t, "Full path", promptOrder[2])
+	assert.Equal(t, "example.com/svc/cmd", vars["full_path"])
+}
+
+// TestUT_VariableCollector_DeterministicTieBreak verifies that independent
+// variables (no dependencies between them) are sorted lexicographically.
+func TestUT_VariableCollector_DeterministicTieBreak(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	promptOrder := []string{}
+	collector := NewVariableCollector(&orderTrackingPrompter{
+		inner:       NewMockPrompter(),
+		promptOrder: &promptOrder,
+	})
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"charlie": {Type: VarTypeString, Default: "c", Prompt: "charlie"},
+			"alpha":   {Type: VarTypeString, Default: "a", Prompt: "alpha"},
+			"bravo":   {Type: VarTypeString, Default: "b", Prompt: "bravo"},
+		},
+	}
+
+	_, err = collector.Collect(config, Options{}, true)
+	require.NoError(t, err)
+
+	// Independent vars should maintain lexicographic order.
+	require.Len(t, promptOrder, 3)
+	assert.Equal(t, "alpha", promptOrder[0])
+	assert.Equal(t, "bravo", promptOrder[1])
+	assert.Equal(t, "charlie", promptOrder[2])
+}
+
+// TestUT_EvaluatedDefault_NonTTY_MetaOverride verifies that non-interactive
+// mode correctly resolves evaluated defaults when meta overrides are provided.
+func TestUT_EvaluatedDefault_NonTTY_MetaOverride(t *testing.T) {
+	engine, err := template.NewEngine()
+	require.NoError(t, err)
+
+	mockPrompter := NewMockPrompter()
+	collector := NewVariableCollector(mockPrompter)
+	collector.WithEngine(engine)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"project_name": {Type: VarTypeString, Default: "my-service"},
+			"module_path": {
+				Type:    VarTypeString,
+				Prompt:  "Go module path",
+				Default: "example.com/myorg/{{ vars.project_name }}",
+			},
+		},
+	}
+
+	opts := Options{
+		Meta: map[string]string{"project_name": "hello-world"},
+	}
+
+	// Non-TTY mode
+	vars, err := collector.Collect(config, opts, false)
+	require.NoError(t, err)
+
+	// After Collect, module_path should still have the expression (not prompted).
+	// ResolveDerivedVars should then resolve it with the meta-overridden project_name.
+	err = ResolveDerivedVars(engine, config, vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, "hello-world", vars["project_name"])
+	assert.Equal(t, "example.com/myorg/hello-world", vars["module_path"])
+	assert.Equal(t, 0, mockPrompter.CallCount["Input"])
+}
+
+// TestUT_ExtractVarRefs verifies that variable references are correctly
+// extracted from template expressions.
+func TestUT_ExtractVarRefs(t *testing.T) {
+	tests := []struct {
+		name     string
+		expr     string
+		expected []string
+	}{
+		{
+			name:     "single reference",
+			expr:     "{{ vars.project_name }}",
+			expected: []string{"project_name"},
+		},
+		{
+			name:     "reference with filter",
+			expr:     "{{ vars.project_name | kebab }}",
+			expected: []string{"project_name"},
+		},
+		{
+			name:     "multiple references",
+			expr:     "{{ vars.org }}/{{ vars.project_name }}",
+			expected: []string{"org", "project_name"},
+		},
+		{
+			name:     "duplicate references deduplicated",
+			expr:     "{{ vars.name }}-{{ vars.name }}",
+			expected: []string{"name"},
+		},
+		{
+			name:     "no references",
+			expr:     "static-value",
+			expected: nil,
+		},
+		{
+			name:     "underscore and digits in name",
+			expr:     "{{ vars._private_var2 }}",
+			expected: []string{"_private_var2"},
+		},
+		{
+			name:     "method call syntax",
+			expr:     "{{ vars.name.lower() }}",
+			expected: []string{"name"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			refs := extractVarRefs(tt.expr)
+			assert.Equal(t, tt.expected, refs)
+		})
+	}
+}
+
+// TestUT_TopologicalSortVars_Basic verifies correct topological ordering.
+func TestUT_TopologicalSortVars_Basic(t *testing.T) {
+	vars := map[string]VariableDef{
+		"module_path": {
+			Type:    VarTypeString,
+			Prompt:  "Module",
+			Default: "example.com/{{ vars.project_name }}",
+		},
+		"project_name": {Type: VarTypeString, Default: "svc"},
+	}
+
+	sorted, err := topologicalSortVars(vars)
+	require.NoError(t, err)
+
+	// project_name must come before module_path
+	nameIdx := indexOf(sorted, "project_name")
+	pathIdx := indexOf(sorted, "module_path")
+	assert.True(t, nameIdx < pathIdx, "project_name should come before module_path, got %v", sorted)
+}
+
+// TestUT_TopologicalSortVars_CircularDependency verifies cycle detection.
+func TestUT_TopologicalSortVars_CircularDependency(t *testing.T) {
+	vars := map[string]VariableDef{
+		"a": {
+			Type:    VarTypeString,
+			Prompt:  "A",
+			Default: "{{ vars.b }}",
+		},
+		"b": {
+			Type:    VarTypeString,
+			Prompt:  "B",
+			Default: "{{ vars.a }}",
+		},
+	}
+
+	_, err := topologicalSortVars(vars)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular")
+}
+
+// TestUT_TopologicalSortVars_DeterministicTieBreak verifies that independent
+// nodes are sorted lexicographically for deterministic output.
+func TestUT_TopologicalSortVars_DeterministicTieBreak(t *testing.T) {
+	vars := map[string]VariableDef{
+		"zebra": {Type: VarTypeString, Default: "z"},
+		"alpha": {Type: VarTypeString, Default: "a"},
+		"mango": {Type: VarTypeString, Default: "m"},
+	}
+
+	sorted, err := topologicalSortVars(vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"alpha", "mango", "zebra"}, sorted)
+}
+
+// orderTrackingPrompter wraps a Prompter and records the order of prompts.
+type orderTrackingPrompter struct {
+	inner       Prompter
+	promptOrder *[]string
+}
+
+func (p *orderTrackingPrompter) Input(label, defaultValue string, secret bool) (string, error) {
+	*p.promptOrder = append(*p.promptOrder, label)
+	return p.inner.Input(label, defaultValue, secret)
+}
+
+func (p *orderTrackingPrompter) Select(label string, options []string, defaultIndex int) (string, error) {
+	*p.promptOrder = append(*p.promptOrder, label)
+	return p.inner.Select(label, options, defaultIndex)
+}
+
+func (p *orderTrackingPrompter) Confirm(label string, defaultValue bool) (bool, error) {
+	*p.promptOrder = append(*p.promptOrder, label)
+	return p.inner.Confirm(label, defaultValue)
+}
+
+func (p *orderTrackingPrompter) Number(label string, defaultValue float64) (float64, error) {
+	*p.promptOrder = append(*p.promptOrder, label)
+	return p.inner.Number(label, defaultValue)
+}
+
+// indexOf returns the index of s in slice, or -1.
+func indexOf(slice []string, s string) int {
+	for i, v := range slice {
+		if v == s {
+			return i
+		}
+	}
+	return -1
+}

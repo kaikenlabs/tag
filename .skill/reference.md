@@ -197,6 +197,10 @@ Only `display_name` is prompted; `package_name` is computed.
 
 In non-TTY mode the expression is resolved silently (same as derived).
 
+**Dependency ordering**: Variables are prompted in dependency order — if `module_path`'s default references `{{ vars.project_name }}`, then `project_name` is prompted first regardless of alphabetical order. Positional arguments and `--meta` overrides are applied before prompting, so evaluated defaults see CLI-provided values.
+
+**Circular dependencies**: If variable defaults form a cycle (e.g., `A` references `B` and `B` references `A`), TAG reports a clear error.
+
 ### Variable Resolution Priority
 
 From lowest to highest:
