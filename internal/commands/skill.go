@@ -4,55 +4,64 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/urfave/cli/v2"
 )
 
-func SkillCommand(version string) *cli.Command {
+// SkillDocs holds embedded skill documentation content.
+type SkillDocs struct {
+	Skill     string
+	Reference string
+	Recipes   string
+}
+
+func SkillCommand(version string, docs SkillDocs) *cli.Command {
 	return &cli.Command{
 		Name:  "skills",
 		Usage: "Print AI coding assistant reference for TAG",
-		Description: `Prints a markdown-formatted guide for AI coding assistants.
+		Description: `Prints embedded skill documentation for AI coding assistants.
 
-Includes links to TAG's skill, reference, and recipes documentation
-so that agents can fetch and load them as context.
-
-Example:
-  tag skills`,
+Use subcommands to view specific documentation:
+  tag skills           Overview and quick start
+  tag skills skill     Full skill guide (decision tree, CLI reference, pitfalls)
+  tag skills reference Complete syntax, filters, variable system, hooks
+  tag skills recipes   Real-world patterns and examples`,
 		Action: func(c *cli.Context) error {
-			return skillAction(c, os.Stdout, version)
+			return skillOverviewAction(c, os.Stdout, version)
+		},
+		Subcommands: []*cli.Command{
+			skillDocCommand("skill", "Print the skill guide (decision tree, CLI reference, pitfalls)", docs.Skill),
+			skillDocCommand("reference", "Print the full reference (syntax, filters, variables, hooks)", docs.Reference),
+			skillDocCommand("recipes", "Print recipes (real-world patterns and examples)", docs.Recipes),
 		},
 	}
 }
 
-func skillAction(_ *cli.Context, w io.Writer, version string) error {
-	ref := "refs/heads/main"
-	if version != "" && version != "dev" && !strings.HasPrefix(version, "dev-") {
-		v := version
-		if !strings.HasPrefix(v, "v") {
-			v = "v" + v
-		}
-		ref = "refs/tags/" + v
+func skillDocCommand(name, usage, content string) *cli.Command {
+	return &cli.Command{
+		Name:  name,
+		Usage: usage,
+		Action: func(_ *cli.Context) error {
+			_, err := fmt.Fprint(os.Stdout, content)
+			return err
+		},
 	}
+}
 
-	base := fmt.Sprintf("https://raw.githubusercontent.com/kaikenlabs/tag/%s/.skill", ref)
-
+func skillOverviewAction(_ *cli.Context, w io.Writer, version string) error {
 	msg := fmt.Sprintf(`---
 
-## TAG - Reference for AI Coding Assistants
+## TAG %s - Reference for AI Coding Assistants
 
 TAG is a CLI for template-driven code generation and project scaffolding.
 
-### TAG Skills for AI Coding Assistants
+### Available Documentation
 
-Learn how to use TAG by loading the skills in these URLs:
-
-| File | Description |
-|------|-------------|
-| [SKILL.md](%[1]s/SKILL.md) | Decision tree, generator/bundle anatomy, CLI quick reference, pitfalls |
-| [reference.md](%[1]s/reference.md) | Full syntax, filters, variable system, hooks, remote templates |
-| [recipes.md](%[1]s/recipes.md) | Real-world patterns: CRUD bundles, inject patterns, scaffolds |
+| Subcommand          | Description                                              |
+|---------------------|----------------------------------------------------------|
+| tag skills skill    | Decision tree, generator/bundle anatomy, CLI quick ref   |
+| tag skills reference| Full syntax, filters, variable system, hooks, remotes    |
+| tag skills recipes  | Real-world patterns: CRUD bundles, inject, scaffolds     |
 
 ### Quick Start
 
@@ -64,9 +73,8 @@ tag template info <template>             # Show template metadata
 `+"```"+`
 
 Run `+"`tag --help`"+` for the full command reference.
-`, base)
+`, version)
 
 	_, err := fmt.Fprint(w, msg)
-
 	return err
 }
