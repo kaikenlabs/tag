@@ -2,6 +2,7 @@ package lint
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,11 +14,13 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 
+	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/schema"
 	tmpl "github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/internal/types"
+	"github.com/kaikenlabs/tag/internal/validate"
 )
 
 // varExprRegex matches {{ vars.NAME ... }} expressions, capturing the variable name.
@@ -327,6 +330,80 @@ func isSkippedEntry(relPath, name string) bool {
 	}
 
 	return false
+}
+
+// lintGeneratorNames checks generator and bundle names against reserved subcommand names.
+func (l *Linter) lintGeneratorNames() {
+	l.lintGeneratorDirNames()
+	l.lintBundleNames()
+}
+
+// lintGeneratorDirNames scans _generators/ for directories whose names conflict with subcommands.
+func (l *Linter) lintGeneratorDirNames() {
+	genDir := filepath.Join(l.root, types.GeneratorsDir)
+	entries, err := os.ReadDir(genDir)
+	if err != nil {
+		return // _generators/ may not exist
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == types.BundlesDir || name == types.SharedDir {
+			continue
+		}
+		if err := validate.GeneratorName(name); err != nil {
+			l.result.Add(Issue{
+				File:     filepath.Join(types.GeneratorsDir, name),
+				Severity: SeverityError,
+				Message:  fmt.Sprintf("generator name %q conflicts with a \"tag generate\" subcommand", name),
+				Rule:     "reserved-name",
+			})
+		}
+	}
+}
+
+// lintBundleNames scans _bundles/ for bundle JSON files and checks names.
+func (l *Linter) lintBundleNames() {
+	bundleDir := filepath.Join(l.root, types.GeneratorsDir, types.BundlesDir)
+	entries, err := os.ReadDir(bundleDir)
+	if err != nil {
+		return // _bundles/ may not exist
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		bundleFile := filepath.Join(bundleDir, entry.Name(), entry.Name()+types.BundleExtension)
+		data, readErr := os.ReadFile(bundleFile)
+		if readErr != nil {
+			continue
+		}
+		var bundle engine.Bundle
+		if jsonErr := json.Unmarshal(data, &bundle); jsonErr != nil {
+			continue
+		}
+		relPath := filepath.Join(types.GeneratorsDir, types.BundlesDir, entry.Name(), entry.Name()+types.BundleExtension)
+		if err := validate.GeneratorName(bundle.Name); err != nil {
+			l.result.Add(Issue{
+				File:     relPath,
+				Severity: SeverityError,
+				Message:  fmt.Sprintf("bundle name %q conflicts with a \"tag generate\" subcommand", bundle.Name),
+				Rule:     "reserved-name",
+			})
+		}
+		for _, gen := range bundle.Generators {
+			if err := validate.GeneratorName(gen.Name); err != nil {
+				l.result.Add(Issue{
+					File:     relPath,
+					Severity: SeverityError,
+					Message:  fmt.Sprintf("generator reference %q in bundle conflicts with a \"tag generate\" subcommand", gen.Name),
+					Rule:     "reserved-name",
+				})
+			}
+		}
+	}
 }
 
 // sortedKeys returns the keys of a map in sorted order.

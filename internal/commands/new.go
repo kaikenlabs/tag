@@ -13,6 +13,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/internal/validate"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -76,6 +77,10 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if err := ValidateNameSafe(generator); err != nil {
+		return app.Errorf("invalid generator name: %w", err)
+	}
+
+	if err := validate.GeneratorName(generator); err != nil {
 		return app.Errorf("invalid generator name: %w", err)
 	}
 

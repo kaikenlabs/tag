@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUT_PathSegmentSafe(t *testing.T) {
@@ -64,6 +65,37 @@ func TestUT_TemplateName(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.True(t, errors.Is(err, ErrInvalidName))
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestUT_GeneratorName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+		errMsg  string
+	}{
+		{"valid name", "my-generator", false, ""},
+		{"valid name with numbers", "gen123", false, ""},
+		{"reserved list", "list", true, "reserved name"},
+		{"reserved ls", "ls", true, "reserved name"},
+		{"reserved info", "info", true, "reserved name"},
+		{"reserved agent-file", "agent-file", true, "reserved name"},
+		{"empty string", "", true, "must not be empty"},
+		{"path traversal", "../hack", true, "path traversal"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := GeneratorName(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, ErrInvalidName)
+				assert.Contains(t, err.Error(), tt.errMsg)
 			} else {
 				assert.NoError(t, err)
 			}
