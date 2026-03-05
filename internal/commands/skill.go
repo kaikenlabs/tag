@@ -29,18 +29,24 @@ Example:
 func skillAction(_ *cli.Context, w io.Writer, version string) error {
 	ref := "refs/heads/main"
 	if version != "" && version != "dev" && !strings.HasPrefix(version, "dev-") {
-		ref = "refs/tags/" + version
+		v := version
+		if !strings.HasPrefix(v, "v") {
+			v = "v" + v
+		}
+		ref = "refs/tags/" + v
 	}
 
 	base := fmt.Sprintf("https://raw.githubusercontent.com/kaikenlabs/tag/%s/.skill", ref)
 
-	msg := fmt.Sprintf(`# TAG — AI Coding Assistant Reference
+	msg := fmt.Sprintf(`---
 
-TAG is a Go-based CLI for template-driven code generation and project scaffolding.
+## TAG - Reference for AI Coding Assistants
 
-## Skill Files
+TAG is a CLI for template-driven code generation and project scaffolding.
 
-Load these URLs as context to understand TAG's capabilities:
+### TAG Skills for AI Coding Assistants
+
+Learn how to use TAG by loading the skills in these URLs:
 
 | File | Description |
 |------|-------------|
@@ -48,7 +54,7 @@ Load these URLs as context to understand TAG's capabilities:
 | [reference.md](%[1]s/reference.md) | Full syntax, filters, variable system, hooks, remote templates |
 | [recipes.md](%[1]s/recipes.md) | Real-world patterns: CRUD bundles, inject patterns, scaffolds |
 
-## Quick Start
+### Quick Start
 
 `+"```"+`
 tag scaffold [template] [project-name]   # Create a new project
