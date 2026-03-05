@@ -1,0 +1,6 @@
+{
+  "name": "full-endpoint",
+  "generators": [
+    { "name": "endpoint" }
+  ]
+}

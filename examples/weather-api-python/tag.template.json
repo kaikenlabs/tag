@@ -1,0 +1,28 @@
+{
+  "name": "Weather API (Python)",
+  "description": "A simple weather API built with Flask",
+  "version": "1.0.0",
+  "vars": {
+    "project_name": "weather-api",
+    "description": {
+      "type": "string",
+      "prompt": "Project description",
+      "default": "A simple weather API"
+    },
+    "api_provider": {
+      "type": "choice",
+      "prompt": "Weather data provider",
+      "options": ["Mock", "OpenWeatherMap", "WeatherAPI"],
+      "default": "Mock"
+    },
+    "use_docker": {
+      "type": "boolean",
+      "prompt": "Include Dockerfile?",
+      "default": false
+    },
+    "_package_name": "{{ vars.project_name | snake }}"
+  },
+  "hooks": {
+    "post_scaffold": ["pip install -r requirements.txt"]
+  }
+}
