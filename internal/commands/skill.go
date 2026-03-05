@@ -11,7 +11,7 @@ import (
 
 func SkillCommand(version string) *cli.Command {
 	return &cli.Command{
-		Name:  "skill",
+		Name:  "skills",
 		Usage: "Print AI coding assistant reference for TAG",
 		Description: `Prints a markdown-formatted guide for AI coding assistants.
 
@@ -19,7 +19,7 @@ Includes links to TAG's skill, reference, and recipes documentation
 so that agents can fetch and load them as context.
 
 Example:
-  tag skill`,
+  tag skills`,
 		Action: func(c *cli.Context) error {
 			return skillAction(c, os.Stdout, version)
 		},

@@ -90,7 +90,7 @@ func buildAgentContent(lists generatorLists) string {
 
 	b.WriteString(agentMarkerStart)
 	b.WriteString("\nThis project uses [tag](https://github.com/kaikenlabs/tag) for code generation.\n")
-	b.WriteString("Use `tag skill` to learn how to use `tag` efficiently.\n\n")
+	b.WriteString("Use `tag skills` to learn how to use `tag` efficiently.\n\n")
 	b.WriteString("Use `tag generate info <name>` to retrieve full metadata (variables, files, hooks) ")
 	b.WriteString("for any generator or bundle as structured JSON — ")
 	b.WriteString("useful for understanding inputs before running a generator.\n\n")
