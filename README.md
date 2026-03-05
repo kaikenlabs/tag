@@ -68,6 +68,7 @@ tag generate handler UserAuth
 | Guide | Description |
 |-------|-------------|
 | [Getting Started](docs/getting-started.md) | Installation and first steps |
+| [Tutorials](docs/tutorials/README.md) | Step-by-step guides with working examples |
 | [Scaffold Command](docs/commands/scaffold.md) | Project scaffolding reference |
 | [Generate Command](docs/commands/generate.md) | Code generation reference |
 | [Convert Command](docs/commands/convert.md) | Cookiecutter migration |

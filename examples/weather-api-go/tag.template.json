@@ -1,0 +1,32 @@
+{
+  "name": "Weather API (Go)",
+  "description": "A simple weather API built with net/http",
+  "version": "1.0.0",
+  "vars": {
+    "project_name": "weather-api",
+    "description": {
+      "type": "string",
+      "prompt": "Project description",
+      "default": "A simple weather API"
+    },
+    "api_provider": {
+      "type": "choice",
+      "prompt": "Weather data provider",
+      "options": ["Mock", "OpenWeatherMap", "WeatherAPI"],
+      "default": "Mock"
+    },
+    "use_docker": {
+      "type": "boolean",
+      "prompt": "Include Dockerfile?",
+      "default": false
+    },
+    "module_path": {
+      "type": "string",
+      "prompt": "Go module path",
+      "default": "github.com/example/{{ vars.project_name | kebab }}"
+    }
+  },
+  "hooks": {
+    "post_scaffold": ["go mod tidy"]
+  }
+}

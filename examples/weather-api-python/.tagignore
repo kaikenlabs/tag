@@ -1,0 +1,6 @@
+# Exclude template authoring files from scaffold output
+CLAUDE.md
+.serena/
+.mcp.json
+.vscode/
+*.log

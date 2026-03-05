@@ -1,0 +1,4 @@
+flask>=3.0
+{% if vars.api_provider != "Mock" %}
+requests>=2.31
+{% endif %}
