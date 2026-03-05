@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"log/slog"
 	"os"
@@ -24,6 +25,15 @@ var (
 	CommitHash string
 	BuildDate  string
 )
+
+//go:embed .skill/SKILL.md
+var skillDoc string
+
+//go:embed .skill/reference.md
+var referenceDoc string
+
+//go:embed .skill/recipes.md
+var recipesDoc string
 
 func main() {
 	if Version == "" {
@@ -54,7 +64,11 @@ func main() {
 			commands.VersionCommand(Version),
 			commands.UpdateCommand(Version),
 			commands.DoctorCommand(Version),
-			commands.SkillCommand(Version),
+			commands.SkillCommand(Version, commands.SkillDocs{
+				Skill:     skillDoc,
+				Reference: referenceDoc,
+				Recipes:   recipesDoc,
+			}),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
