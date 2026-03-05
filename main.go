@@ -41,6 +41,7 @@ func main() {
 	tag := &cli.App{
 		Version:              Version,
 		Name:                 AppName,
+		Usage:                "Template-driven code generation and project scaffolding",
 		EnableBashCompletion: true,
 		Commands: []*cli.Command{
 			commands.GenerateCommand(cfg),
