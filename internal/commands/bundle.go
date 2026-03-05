@@ -15,6 +15,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/internal/validate"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -69,6 +70,10 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 	bundleName := c.Args().Get(0)
 
 	if err := ValidateNameSafe(bundleName); err != nil {
+		return app.Errorf("invalid bundle name: %w", err)
+	}
+
+	if err := validate.GeneratorName(bundleName); err != nil {
 		return app.Errorf("invalid bundle name: %w", err)
 	}
 

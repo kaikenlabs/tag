@@ -3,6 +3,7 @@ package validate
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -11,6 +12,10 @@ const MaxNameLen = 255
 
 // ErrInvalidName indicates a name failed validation.
 var ErrInvalidName = errors.New("invalid name")
+
+// ReservedGeneratorNames are names that conflict with "tag generate" subcommands
+// and cannot be used as generator or bundle names.
+var ReservedGeneratorNames = []string{"list", "ls", "info", "agent-file"}
 
 // PathSegmentSafe checks that a string is safe to use as a single path segment.
 // It rejects empty/whitespace-only values, "." and "..", path separators, and
@@ -48,6 +53,19 @@ func TemplateName(name string) error {
 		if r < 0x20 || r == 0x7F {
 			return fmt.Errorf("%w: contains control character", ErrInvalidName)
 		}
+	}
+	return nil
+}
+
+// GeneratorName validates a name for use as a generator or bundle name.
+// It applies PathSegmentSafe checks and rejects names that conflict with
+// "tag generate" subcommands (list, ls, info, agent-file).
+func GeneratorName(name string) error {
+	if err := PathSegmentSafe(name); err != nil {
+		return err
+	}
+	if slices.Contains(ReservedGeneratorNames, name) {
+		return fmt.Errorf("%w: %q is a reserved name (conflicts with \"tag generate %s\" subcommand)", ErrInvalidName, name, name)
 	}
 	return nil
 }

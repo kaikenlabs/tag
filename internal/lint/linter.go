@@ -80,7 +80,10 @@ func (l *Linter) Run() (*Result, error) {
 		l.lintDerivedDefaults()
 	}
 
-	// Phase 2: Walk and lint template files
+	// Phase 2: Check generator/bundle names for reserved subcommand conflicts
+	l.lintGeneratorNames()
+
+	// Phase 3: Walk and lint template files
 	if err := l.lintTemplateFiles(); err != nil {
 		return nil, fmt.Errorf("walk template files: %w", err)
 	}

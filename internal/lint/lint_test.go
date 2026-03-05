@@ -516,3 +516,124 @@ func TestUT_WriteText_Output(t *testing.T) {
 	assert.Contains(t, output, "test-rule")
 	assert.Contains(t, output, "1 error(s)")
 }
+
+// --- Reserved Generator Name Tests ---
+
+func TestUT_LintGeneratorNames_ReservedName(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, nil)
+
+	// Create a generator directory with a reserved name
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "_generators", "list"), 0o755))
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "reserved-name" {
+			found = true
+			assert.Contains(t, issue.Message, "list")
+			assert.Equal(t, filepath.Join("_generators", "list"), issue.File)
+			break
+		}
+	}
+	assert.True(t, found, "expected reserved-name issue for generator named 'list'")
+}
+
+func TestUT_LintGeneratorNames_ValidName(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, nil)
+
+	// Create a generator directory with a valid name
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "_generators", "my-model"), 0o755))
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+
+	for _, issue := range result.Issues {
+		if issue.Rule == "reserved-name" {
+			t.Errorf("unexpected reserved-name issue: %s", issue.Message)
+		}
+	}
+}
+
+func TestUT_LintGeneratorNames_NoGeneratorsDir(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, nil)
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+
+	for _, issue := range result.Issues {
+		if issue.Rule == "reserved-name" {
+			t.Errorf("unexpected reserved-name issue: %s", issue.Message)
+		}
+	}
+}
+
+func TestUT_LintBundleNames_ReservedName(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, nil)
+
+	// Create a bundle with a reserved name
+	bundleDir := filepath.Join(dir, "_generators", "_bundles", "mybundle")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	bundleJSON := `{"name": "list", "generators": [{"name": "model"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "mybundle.json"), []byte(bundleJSON), 0o644))
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "reserved-name" && strings.Contains(issue.Message, "bundle name") {
+			found = true
+			assert.Contains(t, issue.Message, "list")
+			break
+		}
+	}
+	assert.True(t, found, "expected reserved-name issue for bundle named 'list'")
+}
+
+func TestUT_LintBundleNames_ReservedGeneratorRef(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, nil)
+
+	// Create a bundle with a generator ref that has a reserved name
+	bundleDir := filepath.Join(dir, "_generators", "_bundles", "mybundle")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	bundleJSON := `{"name": "mybundle", "generators": [{"name": "info"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "mybundle.json"), []byte(bundleJSON), 0o644))
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.True(t, result.HasErrors())
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "reserved-name" && strings.Contains(issue.Message, "generator reference") {
+			found = true
+			assert.Contains(t, issue.Message, "info")
+			break
+		}
+	}
+	assert.True(t, found, "expected reserved-name issue for generator ref named 'info'")
+}
