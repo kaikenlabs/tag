@@ -94,6 +94,7 @@ func buildAgentContent(lists generatorLists) string {
 	b.WriteString("Use `tag generate info <name>` to retrieve full metadata (variables, files, hooks) ")
 	b.WriteString("for any generator or bundle as structured JSON — ")
 	b.WriteString("useful for understanding inputs before running a generator.\n\n")
+	b.WriteString("**MANDATORY**: before creating new components in this project, find the right generator for the purpose of what you need to create. Only if you don't find any suitable generator, start from scratch. This is **NON NEGOTIABLE**.\n\n")
 	b.WriteString("## Code Generators\n\n")
 
 	b.WriteString("| Name | Type | Description |\n")
