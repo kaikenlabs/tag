@@ -38,14 +38,17 @@ EXAMPLES:
   tag extract internal/handler/user_handler.go --name user --as handler -i`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     flags.NameFlag,
-				Required: true,
-				Usage:    "Entity name to parameterize (e.g. user, order, product)",
+				Name:  flags.NameFlag,
+				Usage: "Entity name to parameterize (e.g. user, order, product)",
 			},
 			&cli.StringFlag{
-				Name:     flags.AsFlag,
-				Required: true,
-				Usage:    "Generator name (output directory under .tag/)",
+				Name:  flags.AsFlag,
+				Usage: "Generator name (output directory under .tag/)",
+			},
+			&cli.BoolFlag{
+				Name:    flags.DryRunFlag,
+				Aliases: []string{"d"},
+				Usage:   "Preview what would be written without creating any files",
 			},
 			&cli.BoolFlag{
 				Name:    flags.InteractiveFlag,
@@ -65,6 +68,13 @@ func extractAction(c *cli.Context) error {
 	sourcePath := c.Args().Get(0)
 	name := c.String(flags.NameFlag)
 	as := c.String(flags.AsFlag)
+
+	if name == "" {
+		return app.UsageErrorf("--name flag is required\n\nUsage: tag extract <source-file> --name <name> --as <generator>")
+	}
+	if as == "" {
+		return app.UsageErrorf("--as flag is required\n\nUsage: tag extract <source-file> --name <name> --as <generator>")
+	}
 
 	// Validate generator name for path safety.
 	if err := ValidateNameSafe(as); err != nil {

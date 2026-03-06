@@ -30,6 +30,32 @@ func TestUT_ExtractCommand_MissingSourceFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "source file is required")
 }
 
+func TestUT_ExtractCommand_MissingNameFlag(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "test.go")
+	require.NoError(t, os.WriteFile(src, []byte("package main"), 0o644))
+
+	app := newExtractTestApp()
+
+	err := app.Run([]string{"tag", "extract", src, "--as", "handler"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--name flag is required")
+}
+
+func TestUT_ExtractCommand_MissingAsFlag(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "test.go")
+	require.NoError(t, os.WriteFile(src, []byte("package main"), 0o644))
+
+	app := newExtractTestApp()
+
+	err := app.Run([]string{"tag", "extract", "--name", "user", src})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--as flag is required")
+}
+
 func TestUT_ExtractCommand_NonExistentFile(t *testing.T) {
 	app := newExtractTestApp()
 
