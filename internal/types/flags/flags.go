@@ -16,4 +16,6 @@ const (
 	UpdateLockFlag    = "update-lock"
 	IgnoreLockFlag    = "ignore-lock"
 	AllFlag           = "all"
+	AsFlag            = "as"
+	InteractiveFlag   = "interactive"
 )
