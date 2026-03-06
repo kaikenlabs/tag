@@ -29,13 +29,13 @@ ARGUMENTS:
 
 EXAMPLES:
   # Extract a handler template from an existing Go file
-  tag extract internal/handler/user_handler.go --name user --as handler
+  tag extract --name user --as handler internal/handler/user_handler.go
 
   # Preview without writing files
-  tag extract internal/handler/user_handler.go --name user --as handler --dry-run
+  tag extract --name user --as handler --dry-run internal/handler/user_handler.go
 
   # Interactively confirm each replacement
-  tag extract internal/handler/user_handler.go --name user --as handler -i`,
+  tag extract --name user --as handler -i internal/handler/user_handler.go`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  flags.NameFlag,
@@ -62,7 +62,7 @@ EXAMPLES:
 
 func extractAction(c *cli.Context) error {
 	if c.NArg() < 1 {
-		return app.UsageErrorf("source file is required\n\nUsage: tag extract <source-file> --name <name> --as <generator>")
+		return app.UsageErrorf("source file is required\n\nUsage: tag extract --name <name> --as <generator> <source-file>")
 	}
 
 	sourcePath := c.Args().Get(0)
@@ -70,10 +70,10 @@ func extractAction(c *cli.Context) error {
 	as := c.String(flags.AsFlag)
 
 	if name == "" {
-		return app.UsageErrorf("--name flag is required\n\nUsage: tag extract <source-file> --name <name> --as <generator>")
+		return app.UsageErrorf("--name flag is required\n\nUsage: tag extract --name <name> --as <generator> <source-file>")
 	}
 	if as == "" {
-		return app.UsageErrorf("--as flag is required\n\nUsage: tag extract <source-file> --name <name> --as <generator>")
+		return app.UsageErrorf("--as flag is required\n\nUsage: tag extract --name <name> --as <generator> <source-file>")
 	}
 
 	// Validate generator name for path safety.
