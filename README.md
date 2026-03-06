@@ -1,67 +1,95 @@
 # TAG
 
-A powerful code generation and project scaffolding CLI for developers.
+The scaffolding tool that keeps working after day one.
 
-TAG combines the project bootstrapping capabilities of [Cookiecutter](https://cookiecutter.readthedocs.io/) with incremental code generation, supporting both full project scaffolding from templates and adding code to existing projects.
-
-## For AI Assistants
-
-If you're an AI coding agent working with a TAG template, read [`.skill/SKILL.md`](.skill/SKILL.md) first — it contains a decision tree, generator anatomy, CLI quick
-reference, and common pitfalls in a format optimized for LLM consumption. Detailed reference and recipes are in `.skill/reference.md` and `.skill/recipes.md`.
-
-## Features
-
-- **Project Scaffolding** - Create complete projects from local or remote templates
-- **Incremental Generation** - Add files, append content, or inject code into existing files
-- **Remote Templates** - Fetch templates from GitHub, GitLab, Bitbucket, or any Git repository
-- **Jinja2 Syntax** - Familiar template syntax via [Gonja](https://github.com/noirbizarre/gonja)
-- **Cookiecutter Compatible** - Convert and use existing Cookiecutter templates
-- **Interactive Prompts** - Guided variable input with defaults and choices
-- **Replay System** - Save and reuse scaffold inputs for reproducibility
-- **Hooks** - Run commands before and after scaffolding
-- **`.tagignore`** - Exclude template-authoring files from scaffold output using gitignore-style patterns
-- **Single Binary** - Pure Go, no external dependencies
+Most scaffolding tools create a project and disappear. TAG stays — generating code into your project as it grows. One binary, Jinja2 templates, built for AI coding agents.
 
 ## Quick Start
 
 ### Install
 
 ```bash
-# Quick install (macOS/Linux)
+# macOS/Linux
 curl -sSfL https://raw.githubusercontent.com/kaikenlabs/tag/main/install.sh | sh
 
 # With Go
 go install github.com/kaikenlabs/tag@latest
-
-# Specific version
-curl -sSfL https://raw.githubusercontent.com/kaikenlabs/tag/main/install.sh | sh -s -- --version v0.2.0
 ```
 
 ### Scaffold a Project
 
 ```bash
 # From a GitHub template
-tag scaffold gh:user/awesome-template
+tag scaffold gh:user/go-api my-service
 
 # From a local template
 tag scaffold ./my-template
-
-# With a project name
-tag scaffold gh:user/go-api my-new-api
 ```
 
-### Generate Code in Existing Projects
+### Generate Code Into It Later
 
 ```bash
-# Initialize TAG in your project
-tag template init
-
-# Create a generator
-tag template new generator handler
-
-# Generate code
+cd my-service
 tag generate handler UserAuth
+# → creates internal/handlers/user_auth_handler.go
 ```
+
+## Why TAG
+
+**Scaffold and generate in one tool.** Most scaffolding tools (Cookiecutter, Yeoman) create a project and walk away. Code generators (Plop, Hygen) only work inside existing projects. TAG does both — scaffold a complete project from a template, then keep generating code into it as your project grows.
+
+**Built for AI coding agents.** TAG templates include [`.skill/`](.skill/SKILL.md) files that AI coding assistants understand. Your AI agent can scaffold projects, create generators, and run code generation without manual copy-paste.
+
+**Single binary, familiar syntax.** One `curl` to install. No Python, no Node, no runtime. Templates use [Jinja2 syntax](docs/templates/syntax.md) you already know.
+
+**Migrate from Cookiecutter.** TAG [auto-detects Cookiecutter templates and converts them](docs/commands/convert.md). Your existing templates keep working.
+
+## How It Works
+
+### Scaffolding
+
+1. Pick a template — local, GitHub, GitLab, Bitbucket, or any Git repo
+2. Answer interactive prompts (or pass variables on the command line)
+3. TAG renders every file, runs [hooks](docs/templates/hooks.md), and outputs your project
+
+### Code Generation
+
+1. Run `tag template init` in your project
+2. Create generators in `.tag/` with [frontmatter](docs/templates/authoring.md) — create files, append to files, or inject at markers
+3. Run `tag generate <generator> <name>` to add code
+
+## Features
+
+| | |
+|---|---|
+| **Template sources** | GitHub (`gh:`), GitLab (`gl:`), Bitbucket (`bb:`), Git URLs, zips, [local paths](docs/reference/remote-refs.md) |
+| **Template syntax** | Jinja2 via Gonja — `{{ vars.project_name }}`, conditionals, loops ([syntax guide](docs/templates/syntax.md)) |
+| **Generators** | Create files, append to files, or inject at markers ([authoring guide](docs/templates/authoring.md)) |
+| **Filters** | Case transforms, inflections, string operations ([full list](docs/templates/filters.md)) |
+| **Hooks** | Run commands before/after scaffolding ([hooks guide](docs/templates/hooks.md)) |
+| **Replay** | Save and reuse inputs for reproducible scaffolds |
+| **Library** | Install, manage, and share templates locally ([lib commands](docs/commands/lib.md)) |
+| **Shell completion** | Bash, Zsh, Fish |
+| **Cookiecutter compat** | Auto-detect and convert existing templates ([convert guide](docs/commands/convert.md)) |
+| **Configuration** | [`tag.template.json`](docs/reference/tag.template.json.md) for variables, hooks, and metadata |
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `tag scaffold [template] [project]` | Create project from template (no args = picker) |
+| `tag generate <generator> <name>` | Run a generator or bundle |
+| `tag template init` | Initialize TAG in a project |
+| `tag template new generator <name>` | Create a new generator |
+| `tag template new bundle <name>` | Create a new bundle |
+| `tag template info <template>` | Show template metadata |
+| `tag template list` | List available generators and bundles |
+| `tag template variables` | Audit variables across templates |
+| `tag template graph` | Visualize generator dependencies |
+| `tag lib add\|list\|remove\|update\|edit` | Manage the template library |
+| `tag convert cookiecutter <source>` | Convert Cookiecutter template |
+| `tag version [--check]` | Print version, optionally check for updates |
+| `tag completion <shell>` | Output shell completion script |
 
 ## Documentation
 
@@ -72,196 +100,16 @@ tag generate handler UserAuth
 | [Scaffold Command](docs/commands/scaffold.md) | Project scaffolding reference |
 | [Generate Command](docs/commands/generate.md) | Code generation reference |
 | [Convert Command](docs/commands/convert.md) | Cookiecutter migration |
-| [Template Authoring](docs/templates/authoring.md) | Creating templates |
+| [Template Authoring](docs/templates/authoring.md) | Creating templates and generators |
 | [Template Syntax](docs/templates/syntax.md) | Jinja2/Gonja syntax guide |
 | [Filter Reference](docs/templates/filters.md) | Available template filters |
 | [Hooks Guide](docs/templates/hooks.md) | Pre and post hooks |
-| [tag.template.json](docs/reference/tag.template.json.md) | Configuration reference |
+| [Configuration Reference](docs/reference/tag.template.json.md) | `tag.template.json` schema |
 | [Remote References](docs/reference/remote-refs.md) | Remote template formats |
 
-## Template Sources
+## For AI Coding Agents
 
-TAG supports multiple template sources:
-
-| Format | Example |
-|--------|---------|
-| GitHub | `gh:user/repo`, `gh:user/repo@v1.0.0` |
-| GitLab | `gl:user/repo` |
-| Bitbucket | `bb:user/repo` |
-| Git URL | `https://github.com/user/repo.git` |
-| Zip URL | `https://example.com/template.zip` |
-| Local | `./my-template`, `/path/to/template` |
-
-## Template Syntax
-
-TAG uses Jinja2-compatible syntax:
-
-~~~jinja2
-# {{ vars.project_name }}
-
-Author: {{ vars.author }}
-
-{% if vars.use_docker %}
-## Docker
-
-    docker build -t {{ vars.project_name|kebab }} .
-
-{% endif %}
-
-## Features
-
-{% for feature in vars.features %}
-- {{ feature|title }}
-{% endfor %}
-~~~
-
-### Available Filters
-
-**Case transformations:** `snake`, `pascal`, `camel`, `kebab`, `lower`, `upper`, `title`
-
-**Inflections:** `plural`, `singular`, `ordinalize`, `titleize`, `humanize`
-
-**String operations:** `split`, `join`, `contains`, `hasprefix`, `hassuffix`, `replace`, `trim`, `default`, `truncate`
-
-## Template Configuration
-
-Templates are configured via `tag.template.json`:
-
-```json
-{
-  "name": "Go API Template",
-  "version": "1.0.0",
-  "vars": {
-    "project_name": "my-api",
-    "author": {
-      "type": "string",
-      "prompt": "Author name",
-      "default": "Your Name"
-    },
-    "license": {
-      "type": "choice",
-      "options": ["MIT", "Apache-2.0", "BSD-3"],
-      "default": "MIT"
-    },
-    "use_docker": {
-      "type": "boolean",
-      "default": true
-    }
-  },
-  "hooks": {
-    "post_scaffold": ["go mod tidy", "git init"]
-  }
-}
-```
-
-## Generator Templates
-
-For incremental code generation, create templates in `.tag/`:
-
-```
----
-to: internal/handlers/{{ name | snake }}_handler.go
----
-package handlers
-
-type {{ n.pascal_case }}Handler struct {}
-
-func New{{ n.pascal_case }}Handler() *{{ n.pascal_case }}Handler {
-    return &{{ n.pascal_case }}Handler{}
-}
-```
-
-Generators support three actions:
-- **Create** - Write new files (default)
-- **Append** - Add to existing files (`append: true`)
-- **Inject** - Insert before/after markers (`inject: true` + `before:`/`after:`)
-
-## Cookiecutter Migration
-
-TAG can automatically detect and convert Cookiecutter templates when scaffolding:
-
-```bash
-# Auto-detection - TAG will prompt to convert
-tag scaffold ./my-cookiecutter-template
-
-# Or convert explicitly
-tag convert cookiecutter gh:user/cookiecutter-django -o ./django-tag
-```
-
-The converter:
-- Transforms `cookiecutter.json` to `tag.template.json`
-- Converts path placeholders (`{{ cookiecutter.var }}` → `{{ vars.var }}`)
-- Preserves derived variables (computed from other variables)
-- Reports Jinja2/Gonja syntax differences
-- Copies and analyzes hooks
-
-### Derived Variables
-
-Following Cookiecutter's behavior, derived variables (those whose defaults reference other variables) are **not prompted** during scaffolding—they're computed automatically:
-
-```json
-{
-  "vars": {
-    "display_name": "My Package",
-    "package_name": "{{ vars.display_name | lower | replace(' ', '_') }}"
-  }
-}
-```
-
-Only `display_name` is prompted; `package_name` is computed as `my_package`.
-
-## Shell Completion
-
-TAG supports shell completion for commands, flags, generator names, and library templates.
-
-```bash
-# Bash (add to ~/.bashrc)
-source <(tag completion bash)
-
-# Zsh (add to ~/.zshrc)
-source <(tag completion zsh)
-
-# Fish
-tag completion fish | source
-```
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `tag scaffold [template] [project]` | Create project from template (no args = picker) |
-| `tag generate <generator> <name>` | Run a generator or bundle (auto-resolved) |
-| `tag template init` | Initialize TAG in a project |
-| `tag template new generator <name>` | Create a new generator |
-| `tag template new bundle <name>` | Create a new bundle |
-| `tag template info <template>` | Show template metadata |
-| `tag template list` | List available generators and bundles |
-| `tag lib add\|list\|remove\|update\|edit` | Manage the template library |
-| `tag convert cookiecutter <source>` | Convert Cookiecutter template |
-| `tag version [--check]` | Print version, optionally check for updates |
-| `tag completion <shell>` | Output shell completion script |
-
-## Global Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dry-run` / `-d` | false | Dry run mode (applies to: generate, convert) |
-| `--path` | `.tag` | Templates directory |
-| `--shared-path` | `_shared` | Shared templates directory |
-| `--bundle-path` | `_bundles` | Bundles directory |
-
-## Development
-
-```bash
-# Build
-make build
-
-# Test
-go test ./...
-
-# Lint
-make lint
-```
+If you're an AI agent working with a TAG template, start with [`.skill/SKILL.md`](.skill/SKILL.md) — it has a decision tree, generator anatomy, CLI quick reference, and common pitfalls in an LLM-optimized format. Detailed reference and recipes are in `.skill/reference.md` and `.skill/recipes.md`.
 
 ## License
 
