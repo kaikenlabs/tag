@@ -193,6 +193,7 @@ my-project/
 | `tag template new bundle <name>` | Create bundle (`--self-contained`, `--lib`) |
 | `tag template info <template>` | Show template details |
 | `tag template lint [path]` | Validate template (schema, syntax, vars) |
+| `tag template variables [path]` | Audit variable declarations vs usage (`--format json`, `--strict`) |
 | `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template |
 | `tag lib add <ref>` | Install template to library |
 | `tag lib ls` | List installed templates |
