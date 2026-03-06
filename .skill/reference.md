@@ -331,6 +331,23 @@ Validates:
 
 Exit codes: `0` = pass, `1` = lint errors, `2` = usage error.
 
+### Variable Auditing
+
+```bash
+tag template variables                 # Audit current directory
+tag template vars ./path/to/template   # Audit specific template (vars is an alias)
+tag template variables --format json   # Machine-readable output
+tag template variables --strict        # Non-zero exit on issues (for CI)
+```
+
+Cross-references declared variables in `tag.template.json` with usage in templates:
+- Lists declared variables with usage counts and file locations
+- Detects undeclared variables used in templates
+- Detects declared but unused variables
+- Scans generator-level configs inside `_generators/`
+
+Exit codes: `0` = no issues (or non-strict), `1` = issues found (`--strict`), `2` = usage error.
+
 ### Cache Management
 
 ```bash

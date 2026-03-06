@@ -21,6 +21,7 @@ The `tag template` command group provides tools for managing templates, generato
 | `tag template new bundle <name>` | Create a new bundle |
 | `tag template info <template>` | Show template metadata and details |
 | `tag template lint [path]` | Validate template syntax, schema, and variable references |
+| `tag template variables [path]` | Audit variable declarations and usage across template files |
 | `tag template list` | List available generators and bundles |
 
 ---
@@ -205,6 +206,76 @@ tag template lint --format json
 - **Binary files** — Automatically skipped.
 - **`.tagignore` patterns** — Ignored files are excluded from linting.
 - **Comments** — Template comments (`{# ... #}`) are stripped before variable scanning.
+
+---
+
+### `tag template variables`
+
+Audit variable declarations and usage across all template files. Cross-references `tag.template.json` declarations with `{{ vars.* }}` references in templates. Also scans generator-level configs inside `_generators/`.
+
+```bash
+tag template variables [path] [flags]
+tag template vars [path] [flags]   # alias
+```
+
+If `[path]` is omitted, the current directory is used.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--format` | `text` | Output format: `text` or `json` |
+| `--strict` | `false` | Exit with non-zero status when undeclared or unused variables are found |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| `0` | Analysis completed (or no issues when `--strict`) |
+| `1` | Issues found (`--strict` mode only) |
+| `2` | Usage error (bad arguments, missing config) |
+
+**Examples:**
+
+```bash
+# Audit the current directory
+tag template variables
+
+# Audit a specific template
+tag template variables ./my-template
+
+# Machine-readable output for CI
+tag template variables --format json
+
+# Fail CI when issues found
+tag template variables --strict
+```
+
+**Example text output:**
+
+```
+Variables declared in tag.template.json:
+  author          (string, required)              — used in 3 file(s), 4 reference(s)
+  port            (number, default: 8080)         — used in 4 file(s), 6 reference(s)
+  project_name    (string, required)              — used in 12 file(s), 23 reference(s)
+  use_docker      (boolean, default: true)        — used in 2 file(s), 3 reference(s)
+  _slug           (derived)                       — used in 8 file(s), 15 reference(s)
+
+No undeclared variables.
+
+No unused variables.
+
+Summary: 5 declared, 0 undeclared, 0 unused
+```
+
+**What is scanned:**
+
+- `{{ vars.x }}` references in template file bodies
+- `{{ vars.x }}` references in directory name placeholders
+- `{% if vars.x %}` conditional references
+- `{% for item in vars.x %}` iteration references
+- Derived variable default expressions (`"default": "{{ vars.other }}"`)
+- Generator-level `tag.template.json` configs
+- Template comments (`{# ... #}`) are stripped before scanning
+- Binary files and `.tagignore` patterns are honored
 
 ---
 
