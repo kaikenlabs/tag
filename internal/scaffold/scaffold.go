@@ -314,7 +314,12 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 
 	// Generate config — filter out secret variables before writing to .tagconfig.json
 	configVars := replay.FilterSecrets(ctx.vars, secretKeys(ctx.config.Vars))
+	templateType := types.TemplateTypeLocal
+	if ctx.opts.IsRemote {
+		templateType = types.TemplateTypeRemote
+	}
 	tagConfigOpts := TagConfigOptions{
+		TemplateType:    templateType,
 		TemplateSource:  ctx.opts.TemplateRef,
 		TemplateName:    ctx.opts.TemplateName,
 		TemplateVersion: ctx.opts.TemplateVersion,

@@ -671,7 +671,7 @@ func TestUT_ProcessFile_TemplateExecuteError(t *testing.T) {
 
 // --- GenerateTagConfig ---
 
-func TestUT_GenerateTagConfig_WithoutTemplateOrigin(t *testing.T) {
+func TestUT_GenerateTagConfig_DefaultOptions(t *testing.T) {
 	outputDir := t.TempDir()
 
 	err := GenerateTagConfig(outputDir, TagConfigOptions{})
@@ -683,6 +683,19 @@ func TestUT_GenerateTagConfig_WithoutTemplateOrigin(t *testing.T) {
 
 	var config map[string]any
 	require.NoError(t, json.Unmarshal(data, &config))
+
+	// Schema version always present
+	assert.Equal(t, float64(types.TagConfigSchemaVersion), config["schema_version"])
+
+	// Template section always present with type
+	tmpl, ok := config["template"].(map[string]any)
+	require.True(t, ok, "template should always be a map")
+	assert.Equal(t, string(types.TemplateTypeLocal), tmpl["type"])
+
+	// Skip patterns always present as empty array
+	skipPatterns, ok := config["skip_patterns"].([]any)
+	require.True(t, ok, "skip_patterns should be an array")
+	assert.Empty(t, skipPatterns)
 
 	// Verify env section
 	env, ok := config["env"].(map[string]any)
@@ -697,18 +710,20 @@ func TestUT_GenerateTagConfig_WithoutTemplateOrigin(t *testing.T) {
 	assert.NotNil(t, hooks["pre"])
 	assert.NotNil(t, hooks["post"])
 
-	// No template or variables fields when not provided
-	assert.Nil(t, config["template"])
+	// No variables when not provided
 	assert.Nil(t, config["variables"])
 }
 
-func TestUT_GenerateTagConfig_WithTemplateOrigin(t *testing.T) {
+func TestUT_GenerateTagConfig_RemoteTemplate(t *testing.T) {
 	outputDir := t.TempDir()
 
 	err := GenerateTagConfig(outputDir, TagConfigOptions{
+		TemplateType:    types.TemplateTypeRemote,
 		TemplateSource:  "gh:acme/nextjs-starter",
 		TemplateName:    "nextjs-starter",
 		TemplateVersion: "1.2.0",
+		TemplateRef:     "v1.2.0",
+		CommitSHA:       "abc123def456",
 		Variables: map[string]any{
 			"project_name": "my-app",
 			"use_docker":   true,
@@ -723,12 +738,18 @@ func TestUT_GenerateTagConfig_WithTemplateOrigin(t *testing.T) {
 	var config map[string]any
 	require.NoError(t, json.Unmarshal(data, &config))
 
+	// Schema version
+	assert.Equal(t, float64(types.TagConfigSchemaVersion), config["schema_version"])
+
 	// Verify template origin
 	tmpl, ok := config["template"].(map[string]any)
 	require.True(t, ok, "template should be a map")
+	assert.Equal(t, "remote", tmpl["type"])
 	assert.Equal(t, "gh:acme/nextjs-starter", tmpl["source"])
 	assert.Equal(t, "nextjs-starter", tmpl["name"])
 	assert.Equal(t, "1.2.0", tmpl["version"])
+	assert.Equal(t, "v1.2.0", tmpl["ref"])
+	assert.Equal(t, "abc123def456", tmpl["commit"])
 
 	// Verify variables
 	vars, ok := config["variables"].(map[string]any)
@@ -741,6 +762,7 @@ func TestUT_GenerateTagConfig_WithoutVersion(t *testing.T) {
 	outputDir := t.TempDir()
 
 	err := GenerateTagConfig(outputDir, TagConfigOptions{
+		TemplateType:   types.TemplateTypeRemote,
 		TemplateSource: "gh:acme/repo",
 		TemplateName:   "repo",
 	})
@@ -755,9 +777,131 @@ func TestUT_GenerateTagConfig_WithoutVersion(t *testing.T) {
 
 	tmpl, ok := config["template"].(map[string]any)
 	require.True(t, ok)
+	assert.Equal(t, "remote", tmpl["type"])
 	assert.Equal(t, "gh:acme/repo", tmpl["source"])
 	assert.Equal(t, "repo", tmpl["name"])
 	assert.Nil(t, tmpl["version"]) // version omitted when empty
+}
+
+func TestUT_GenerateTagConfig_SkipPatterns(t *testing.T) {
+	outputDir := t.TempDir()
+
+	err := GenerateTagConfig(outputDir, TagConfigOptions{
+		TemplateType:   types.TemplateTypeLocal,
+		TemplateSource: "./my-template",
+		SkipPatterns:   []string{"*.log", "temp/**"},
+	})
+	require.NoError(t, err)
+
+	configPath := filepath.Join(outputDir, ".tagconfig.json")
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	var config map[string]any
+	require.NoError(t, json.Unmarshal(data, &config))
+
+	skipPatterns, ok := config["skip_patterns"].([]any)
+	require.True(t, ok)
+	assert.Len(t, skipPatterns, 2)
+	assert.Equal(t, "*.log", skipPatterns[0])
+	assert.Equal(t, "temp/**", skipPatterns[1])
+}
+
+func TestUT_LoadTagConfig_V1(t *testing.T) {
+	dir := t.TempDir()
+	configJSON := `{
+  "schema_version": 1,
+  "template": {
+    "type": "remote",
+    "source": "gh:acme/starter",
+    "name": "starter",
+    "version": "2.0.0",
+    "ref": "main",
+    "commit": "deadbeef1234"
+  },
+  "variables": {"project_name": "my-proj"},
+  "skip_patterns": ["*.bak"],
+  "env": {},
+  "hooks": {}
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".tagconfig.json"), []byte(configJSON), 0o644))
+
+	cfg, err := LoadTagConfig(dir)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, cfg.SchemaVersion)
+	require.NotNil(t, cfg.Template)
+	assert.Equal(t, types.TemplateTypeRemote, cfg.Template.Type)
+	assert.Equal(t, "gh:acme/starter", cfg.Template.Source)
+	assert.Equal(t, "starter", cfg.Template.Name)
+	assert.Equal(t, "2.0.0", cfg.Template.Version)
+	assert.Equal(t, "main", cfg.Template.Ref)
+	assert.Equal(t, "deadbeef1234", cfg.Template.CommitSHA)
+	assert.Equal(t, []string{"*.bak"}, cfg.SkipPatterns)
+	assert.True(t, cfg.HasTemplateOrigin())
+}
+
+func TestUT_LoadTagConfig_LegacyV0(t *testing.T) {
+	dir := t.TempDir()
+	// Legacy format: no schema_version, no type, no skip_patterns
+	configJSON := `{
+  "template": {
+    "source": "gh:acme/old-template",
+    "name": "old-template"
+  },
+  "variables": {"name": "legacy"},
+  "env": {},
+  "hooks": {}
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".tagconfig.json"), []byte(configJSON), 0o644))
+
+	cfg, err := LoadTagConfig(dir)
+	require.NoError(t, err)
+
+	// Normalize fills in defaults
+	assert.Equal(t, types.TagConfigSchemaVersion, cfg.SchemaVersion)
+	assert.Equal(t, types.TemplateTypeRemote, cfg.Template.Type) // inferred from "gh:" prefix
+	assert.Equal(t, []string{}, cfg.SkipPatterns)                // nil → empty slice
+	assert.True(t, cfg.HasTemplateOrigin())
+}
+
+func TestUT_LoadTagConfig_LegacyNoTemplate(t *testing.T) {
+	dir := t.TempDir()
+	// Legacy format: no template section at all
+	configJSON := `{
+  "env": {},
+  "hooks": {}
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".tagconfig.json"), []byte(configJSON), 0o644))
+
+	cfg, err := LoadTagConfig(dir)
+	require.NoError(t, err)
+
+	assert.Nil(t, cfg.Template)
+	assert.False(t, cfg.HasTemplateOrigin())
+}
+
+func TestUT_InferTemplateType(t *testing.T) {
+	tests := []struct {
+		source   string
+		expected types.TemplateType
+	}{
+		{"gh:acme/repo", types.TemplateTypeRemote},
+		{"gl:acme/repo", types.TemplateTypeRemote},
+		{"bb:acme/repo", types.TemplateTypeRemote},
+		{"https://github.com/acme/repo", types.TemplateTypeRemote},
+		{"git@github.com:acme/repo.git", types.TemplateTypeRemote},
+		{"git://github.com/acme/repo.git", types.TemplateTypeRemote},
+		{"git+ssh://git@github.com/acme/repo.git", types.TemplateTypeRemote},
+		{"./local/path", types.TemplateTypeLocal},
+		{"/absolute/path", types.TemplateTypeLocal},
+		{"", types.TemplateTypeLocal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.source, func(t *testing.T) {
+			assert.Equal(t, tt.expected, inferTemplateType(tt.source))
+		})
+	}
 }
 
 // --- buildTemplateContext ---

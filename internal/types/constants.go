@@ -40,6 +40,23 @@ const (
 
 	// HistoryBackupsDir is the subdirectory inside TemplatesDir where backups are stored.
 	HistoryBackupsDir = "history/backups"
+
+	// TagConfigFile is the name of the project-level scaffold configuration file.
+	TagConfigFile = ".tagconfig.json"
+
+	// TagConfigSchemaVersion is the current schema version for .tagconfig.json.
+	TagConfigSchemaVersion = 1
+)
+
+// TemplateType indicates the source type of a scaffolded template.
+type TemplateType string
+
+const (
+	// TemplateTypeLocal indicates a template sourced from a local directory.
+	TemplateTypeLocal TemplateType = "local"
+
+	// TemplateTypeRemote indicates a template sourced from a remote git/zip origin.
+	TemplateTypeRemote TemplateType = "remote"
 )
 
 // InjectClause represents where to inject content relative to a marker.
