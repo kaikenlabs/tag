@@ -22,7 +22,7 @@ const templatesDir = "templates"
 
 // Resolver resolves template references to local directories.
 type Resolver interface {
-	Resolve(ctx context.Context, input string, opts remote.ResolveOptions) (string, error)
+	Resolve(ctx context.Context, input string, opts remote.ResolveOptions) (*remote.FetchResult, error)
 }
 
 // Library manages a persistent collection of installed templates.
@@ -99,12 +99,14 @@ func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 		if l.resolver == nil {
 			return nil, &LibraryError{Name: name, Operation: "add", Err: errors.New("resolver not configured")}
 		}
-		resolvedDir, err = l.resolver.Resolve(ctx, opts.Ref, remote.ResolveOptions{
+		var resolveResult *remote.FetchResult
+		resolveResult, err = l.resolver.Resolve(ctx, opts.Ref, remote.ResolveOptions{
 			ForceUpdate: true,
 		})
 		if err != nil {
 			return nil, &LibraryError{Name: name, Operation: "add", Err: fmt.Errorf("resolve template: %w", err)}
 		}
+		resolvedDir = resolveResult.Path
 	}
 
 	destPath := filepath.Join(l.dataDir, templatesDir, name)

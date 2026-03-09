@@ -49,9 +49,10 @@ func NewZipFetcher() *ZipFetcher {
 
 // Fetch downloads (if remote) and extracts the zip file.
 // Returns the path to the extracted template directory.
-func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) {
+// CommitSHA is always empty for zip sources.
+func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (*FetchResult, error) {
 	if ref.Type != ReferenceTypeZip {
-		return "", &FetchError{Ref: ref, Message: "not a Zip reference"}
+		return nil, &FetchError{Ref: ref, Message: "not a Zip reference"}
 	}
 
 	// Determine if remote or local
@@ -60,7 +61,7 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 
 	// Security: reject insecure HTTP URLs for remote downloads
 	if strings.HasPrefix(urlLower, "http://") {
-		return "", &FetchError{
+		return nil, &FetchError{
 			Ref:     ref,
 			Message: "insecure HTTP URL rejected; use HTTPS instead",
 		}
@@ -75,7 +76,7 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 		f.writeStatus("Downloading template...")
 		zipPath, err = f.download(ctx, ref.URL)
 		if err != nil {
-			return "", &FetchError{Ref: ref, Message: "download failed", Err: err}
+			return nil, &FetchError{Ref: ref, Message: "download failed", Err: err}
 		}
 		tmpZip = true
 	} else {
@@ -89,7 +90,7 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 		if tmpZip {
 			os.Remove(zipPath)
 		}
-		return "", &FetchError{Ref: ref, Message: "cannot create temp directory", Err: err}
+		return nil, &FetchError{Ref: ref, Message: "cannot create temp directory", Err: err}
 	}
 
 	// Clean up on error
@@ -106,13 +107,13 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 	// Extract zip
 	f.writeStatus("Extracting template...")
 	if err := f.extract(zipPath, tmpDir); err != nil { //nolint:govet // shadow in if-init is idiomatic
-		return "", &FetchError{Ref: ref, Message: "extraction failed", Err: err}
+		return nil, &FetchError{Ref: ref, Message: "extraction failed", Err: err}
 	}
 
 	// Handle single root directory (unwrap if needed)
 	resultPath, err := f.unwrapSingleRoot(tmpDir)
 	if err != nil {
-		return "", &FetchError{Ref: ref, Message: "cannot unwrap root", Err: err}
+		return nil, &FetchError{Ref: ref, Message: "cannot unwrap root", Err: err}
 	}
 
 	// Apply subpath if specified
@@ -121,16 +122,16 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 		info, err := os.Stat(resultPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return "", &FetchError{
+				return nil, &FetchError{
 					Ref:     ref,
 					Message: fmt.Sprintf("subpath %q not found in archive", ref.SubPath),
 					Err:     ErrSubPathNotFound,
 				}
 			}
-			return "", &FetchError{Ref: ref, Message: "cannot access subpath", Err: err}
+			return nil, &FetchError{Ref: ref, Message: "cannot access subpath", Err: err}
 		}
 		if !info.IsDir() {
-			return "", &FetchError{
+			return nil, &FetchError{
 				Ref:     ref,
 				Message: fmt.Sprintf("subpath %q is not a directory", ref.SubPath),
 			}
@@ -139,7 +140,10 @@ func (f *ZipFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 
 	f.writeStatus("") // Clear status line
 	success = true
-	return resultPath, nil
+	return &FetchResult{
+		Path:    resultPath,
+		Version: ref.Version,
+	}, nil
 }
 
 // download fetches a remote zip file to a temporary location.

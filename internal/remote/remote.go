@@ -49,18 +49,18 @@ func NewResolverWithOptions(cacheDir string, auth AuthProvider) (*Resolver, erro
 	}, nil
 }
 
-// Resolve takes a template reference string and returns a local path.
-// This is the main entry point for remote template resolution.
-func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOptions) (string, error) {
+// Resolve takes a template reference string and returns a FetchResult containing
+// the local path and, for git sources, the resolved commit SHA.
+func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOptions) (*FetchResult, error) {
 	// 1. Parse the reference
 	ref, err := Parse(input)
 	if err != nil {
-		return "", fmt.Errorf("invalid template reference: %w", err)
+		return nil, fmt.Errorf("invalid template reference: %w", err)
 	}
 
 	// 2. If local directory, just return the path
 	if ref.Type == ReferenceTypeLocal && !isZipFile(ref.URL) {
-		return ref.URL, nil
+		return &FetchResult{Path: ref.URL}, nil
 	}
 
 	// For local zip files, we still need to extract them
@@ -76,15 +76,14 @@ func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOption
 	cacheKey := ref.CacheKey()
 	skipCache := opts.ForceUpdate || ref.Version == ""
 	if !skipCache {
-		if path, found, err := r.cache.Get(cacheKey); err == nil && found { //nolint:govet // shadow in if-init is idiomatic
-			// Apply subpath to cached path
-			return r.applySubPath(path, ref.SubPath)
+		if result, ok := r.tryCache(cacheKey, ref); ok {
+			return result, nil
 		}
 	}
 
 	// 4. If offline mode, fail
 	if opts.Offline {
-		return "", &FetchError{
+		return nil, &FetchError{
 			Ref:     ref,
 			Message: "not cached and offline mode is enabled",
 			Err:     ErrNotCached,
@@ -94,15 +93,18 @@ func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOption
 	// 5. Fetch using appropriate fetcher
 	fetcher, ok := r.fetchers[ref.Type]
 	if !ok {
-		return "", &FetchError{
+		return nil, &FetchError{
 			Ref:     ref,
 			Message: fmt.Sprintf("unsupported reference type: %s", ref.Type),
 		}
 	}
 
-	tempPath, err := fetcher.Fetch(ctx, ref)
+	fetchResult, err := fetcher.Fetch(ctx, ref)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	if fetchResult == nil {
+		return nil, &FetchError{Ref: ref, Message: "fetcher returned nil result"}
 	}
 
 	// 6. Store in cache
@@ -110,17 +112,18 @@ func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOption
 		OriginalRef: ref.Original,
 		ResolvedURL: ref.URL,
 		Version:     ref.Version,
+		CommitSHA:   fetchResult.CommitSHA,
 		FetchedAt:   time.Now(),
 	}
 
-	cachedPath, err := r.cache.Set(cacheKey, tempPath, meta)
+	cachedPath, err := r.cache.Set(cacheKey, fetchResult.Path, meta)
 	if err != nil {
 		slog.Warn("could not cache template", "ref", ref.Original, "error", err)
-		return tempPath, nil
+		return fetchResult, nil
 	}
 
 	// 7. Clean up temp directory (ignore error - best effort)
-	_ = CleanupTempDir(tempPath)
+	_ = CleanupTempDir(fetchResult.Path)
 
 	// 8. Opportunistic cleanup of expired cache entries
 	if fsCache, ok := r.cache.(*FSCache); ok {
@@ -129,15 +132,41 @@ func (r *Resolver) Resolve(ctx context.Context, input string, opts ResolveOption
 		}
 	}
 
-	// 9. Return cached path (subpath is already in the cached content)
-	return cachedPath, nil
+	// 9. Return cached path with commit SHA
+	return &FetchResult{
+		Path:      cachedPath,
+		CommitSHA: fetchResult.CommitSHA,
+		Version:   fetchResult.Version,
+	}, nil
+}
+
+// tryCache attempts to return a cached result for the given key.
+// Returns the FetchResult and true if a valid cache entry was found.
+func (r *Resolver) tryCache(cacheKey string, ref *Reference) (*FetchResult, bool) {
+	path, found, err := r.cache.Get(cacheKey)
+	if err != nil || !found {
+		return nil, false
+	}
+
+	resolvedPath, subErr := r.applySubPath(path, ref.SubPath)
+	if subErr != nil {
+		return nil, false
+	}
+
+	result := &FetchResult{Path: resolvedPath, Version: ref.Version}
+	if fsCache, ok := r.cache.(*FSCache); ok {
+		if meta, metaErr := fsCache.readMeta(cacheKey); metaErr == nil {
+			result.CommitSHA = meta.CommitSHA
+		}
+	}
+	return result, true
 }
 
 // fetchAndReturn fetches without caching (for local zip files).
-func (r *Resolver) fetchAndReturn(ctx context.Context, ref *Reference) (string, error) {
+func (r *Resolver) fetchAndReturn(ctx context.Context, ref *Reference) (*FetchResult, error) {
 	fetcher, ok := r.fetchers[ref.Type]
 	if !ok {
-		return "", &FetchError{
+		return nil, &FetchError{
 			Ref:     ref,
 			Message: fmt.Sprintf("unsupported reference type: %s", ref.Type),
 		}

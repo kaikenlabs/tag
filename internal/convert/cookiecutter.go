@@ -157,12 +157,12 @@ func (c *Converter) resolveSource(ctx context.Context, source string) (string, e
 	}
 
 	// Try to resolve as remote
-	resolvedPath, err := c.resolver.Resolve(ctx, source, remote.ResolveOptions{})
+	resolveResult, err := c.resolver.Resolve(ctx, source, remote.ResolveOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve template: %w", err)
 	}
 
-	return resolvedPath, nil
+	return resolveResult.Path, nil
 }
 
 // processTemplateFiles walks the template directory and converts files.
