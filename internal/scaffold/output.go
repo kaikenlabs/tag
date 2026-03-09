@@ -465,44 +465,70 @@ func sanitizeFileMode(mode fs.FileMode) fs.FileMode {
 
 // TagConfigOptions provides template metadata for enriched .tagconfig.json generation.
 type TagConfigOptions struct {
-	TemplateSource  string         // Original ref (e.g., "gh:user/repo")
-	TemplateName    string         // Library name
-	TemplateVersion string         // From tag.template.json
-	Variables       map[string]any // Scaffold-time variable values
+	TemplateType    types.TemplateType // "local" or "remote"
+	TemplateSource  string             // Original ref (e.g., "gh:user/repo" or local path)
+	TemplateName    string             // Library name (if any)
+	TemplateVersion string             // From tag.template.json
+	TemplateRef     string             // Branch/tag used (e.g., "main", "v1.2.0")
+	CommitSHA       string             // Resolved git commit SHA (empty for local/zip)
+	SkipPatterns    []string           // User-configurable update exclusions
+	Variables       map[string]any     // Scaffold-time variable values
+}
+
+// tagConfigJSON is the serialization format for .tagconfig.json (v1 schema).
+type tagConfigJSON struct {
+	SchemaVersion int                 `json:"schema_version"`
+	Template      tagTemplateJSON     `json:"template"`
+	Variables     map[string]any      `json:"variables,omitempty"`
+	SkipPatterns  []string            `json:"skip_patterns"`
+	Env           map[string]string   `json:"env"`
+	Hooks         map[string][]string `json:"hooks"`
+}
+
+// tagTemplateJSON is the template origin section of .tagconfig.json.
+type tagTemplateJSON struct {
+	Type      types.TemplateType `json:"type"`
+	Source    string             `json:"source,omitempty"`
+	Name      string             `json:"name,omitempty"`
+	Version   string             `json:"version,omitempty"`
+	Ref       string             `json:"ref,omitempty"`
+	CommitSHA string             `json:"commit,omitempty"`
 }
 
 // GenerateTagConfig generates a .tagconfig.json file in the output directory.
-// When opts contains template metadata, it records the template origin and scaffold variables.
+// The template section is always written with an explicit type discriminator.
 func GenerateTagConfig(outputDir string, opts TagConfigOptions) error {
-	cfg := map[string]any{
-		"env": map[string]string{
+	templateType := opts.TemplateType
+	if templateType == "" {
+		templateType = types.TemplateTypeLocal
+	}
+
+	skipPatterns := opts.SkipPatterns
+	if skipPatterns == nil {
+		skipPatterns = []string{}
+	}
+
+	cfg := tagConfigJSON{
+		SchemaVersion: types.TagConfigSchemaVersion,
+		Template: tagTemplateJSON{
+			Type:      templateType,
+			Source:    opts.TemplateSource,
+			Name:      opts.TemplateName,
+			Version:   opts.TemplateVersion,
+			Ref:       opts.TemplateRef,
+			CommitSHA: opts.CommitSHA,
+		},
+		Variables:    opts.Variables,
+		SkipPatterns: skipPatterns,
+		Env: map[string]string{
 			"TAG_PATH":        types.TemplatesDir,
 			"TAG_SHARED_PATH": types.SharedDir,
 			"TAG_BUNDLE_PATH": types.BundlesDir,
 		},
-		"hooks": map[string][]string{
+		Hooks: map[string][]string{
 			"pre":  {},
 			"post": {},
 		},
-	}
-
-	// Add template origin if a library name is known.
-	// TemplateName is required — writing a partial origin with just source
-	// but no name would create invalid config (HasTemplateOrigin requires Name).
-	if opts.TemplateName != "" {
-		origin := map[string]string{
-			"source": opts.TemplateSource,
-			"name":   opts.TemplateName,
-		}
-		if opts.TemplateVersion != "" {
-			origin["version"] = opts.TemplateVersion
-		}
-		cfg["template"] = origin
-	}
-
-	// Add scaffold variables if provided
-	if len(opts.Variables) > 0 {
-		cfg["variables"] = opts.Variables
 	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -510,10 +536,81 @@ func GenerateTagConfig(outputDir string, opts TagConfigOptions) error {
 		return fmt.Errorf("failed to marshal tagconfig: %w", err)
 	}
 
-	configPath := filepath.Join(outputDir, ".tagconfig.json")
+	configPath := filepath.Join(outputDir, types.TagConfigFile)
 	if err := os.WriteFile(configPath, data, types.FileMode); err != nil {
 		return fmt.Errorf("failed to write tagconfig: %w", err)
 	}
 
 	return nil
+}
+
+// TagConfig represents a parsed .tagconfig.json file.
+// Used by the update system to read existing project configurations.
+type TagConfig struct {
+	SchemaVersion int                 `json:"schema_version,omitempty"`
+	Template      *TagTemplate        `json:"template,omitempty"`
+	Variables     map[string]any      `json:"variables,omitempty"`
+	SkipPatterns  []string            `json:"skip_patterns,omitempty"`
+	Env           map[string]string   `json:"env,omitempty"`
+	Hooks         map[string][]string `json:"hooks,omitempty"`
+}
+
+// TagTemplate describes the template origin recorded in .tagconfig.json.
+type TagTemplate struct {
+	Type      types.TemplateType `json:"type,omitempty"`
+	Source    string             `json:"source,omitempty"`
+	Name      string             `json:"name,omitempty"`
+	Version   string             `json:"version,omitempty"`
+	Ref       string             `json:"ref,omitempty"`
+	CommitSHA string             `json:"commit,omitempty"`
+}
+
+// LoadTagConfig reads and parses a .tagconfig.json from the given project directory.
+func LoadTagConfig(projectDir string) (*TagConfig, error) {
+	data, err := os.ReadFile(filepath.Join(projectDir, types.TagConfigFile))
+	if err != nil {
+		return nil, fmt.Errorf("read tagconfig: %w", err)
+	}
+
+	return ParseTagConfigJSON(data)
+}
+
+// ParseTagConfigJSON parses raw JSON bytes into a TagConfig.
+func ParseTagConfigJSON(data []byte) (*TagConfig, error) {
+	var cfg TagConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse tagconfig: %w", err)
+	}
+
+	cfg.normalize()
+	return &cfg, nil
+}
+
+// normalize fills in defaults for legacy (pre-v1) configs.
+func (c *TagConfig) normalize() {
+	if c.SchemaVersion == 0 {
+		c.SchemaVersion = types.TagConfigSchemaVersion
+	}
+	if c.SkipPatterns == nil {
+		c.SkipPatterns = []string{}
+	}
+	if c.Template != nil && c.Template.Type == "" {
+		c.Template.Type = inferTemplateType(c.Template.Source)
+	}
+}
+
+// HasTemplateOrigin reports whether the config has enough template metadata
+// for the update system to resolve the original template.
+func (c *TagConfig) HasTemplateOrigin() bool {
+	return c.Template != nil && c.Template.Source != ""
+}
+
+// inferTemplateType guesses the template type from the source string.
+func inferTemplateType(source string) types.TemplateType {
+	for _, prefix := range []string{"gh:", "gl:", "bb:", "http://", "https://", "git@", "git://", "git+ssh://"} {
+		if strings.HasPrefix(source, prefix) {
+			return types.TemplateTypeRemote
+		}
+	}
+	return types.TemplateTypeLocal
 }
