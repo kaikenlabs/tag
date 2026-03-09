@@ -31,8 +31,9 @@ func TestUT_GitFetcher_FetchWrongType(t *testing.T) {
 		URL:  "https://example.com/template.zip",
 	}
 
-	_, err := fetcher.Fetch(context.Background(), ref)
+	result, err := fetcher.Fetch(context.Background(), ref)
 	require.Error(t, err)
+	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "not a Git reference")
 }
 
@@ -110,6 +111,41 @@ func TestUT_CleanupTempDir_SafetyCheck(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestUT_GitFetcher_FetchAtCommit_InvalidSHA(t *testing.T) {
+	fetcher := NewGitFetcher(nil)
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		sha  string
+	}{
+		{"empty", ""},
+		{"too short", "abc1234"},
+		{"short but valid hex", "abc123def456789012345678901234567890abc"}, // 39 chars
+		{"non-hex chars", "xyz123def456789012345678901234567890abcd"},      // 40 but invalid
+		{"41 chars", "abc123def456789012345678901234567890abcde"},          // too long
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := fetcher.FetchAtCommit(ctx, "https://github.com/user/repo.git", tt.sha, t.TempDir())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid commit SHA")
+		})
+	}
+}
+
+func TestUT_GitFetcher_FetchAtCommit_ValidSHAFormat(t *testing.T) {
+	fetcher := NewGitFetcher(nil)
+
+	// Valid 40-char hex should pass validation (will fail on clone, but proves validation passes)
+	validSHA := "abc123def456789012345678901234567890abcd"
+	_, err := fetcher.FetchAtCommit(context.Background(), "https://invalid-host-for-test.example/repo.git", validSHA, t.TempDir())
+	require.Error(t, err)
+	// Error should be from clone, not from SHA validation
+	assert.NotContains(t, err.Error(), "invalid commit SHA")
+}
+
 func TestUT_GitFetcher_SubPathValidation(t *testing.T) {
 	// This test verifies the subpath logic without actually cloning
 	// We create a fake repo directory structure and verify path resolution
@@ -157,23 +193,26 @@ func TestIT_GitFetcher_PublicGitHubRepo(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	path, err := fetcher.Fetch(ctx, ref)
+	result, err := fetcher.Fetch(ctx, ref)
 	if err != nil {
 		// Network errors are acceptable in CI
 		t.Logf("Clone failed (may be network issue): %v", err)
 		t.Skip("skipping due to network error")
 	}
 
-	defer func() { _ = CleanupTempDir(path) }()
+	defer func() { _ = CleanupTempDir(result.Path) }()
 
 	// Verify we got something
-	info, err := os.Stat(path)
+	info, err := os.Stat(result.Path)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 
 	// Verify README exists (known file in that repo)
-	_, err = os.Stat(filepath.Join(path, "README"))
+	_, err = os.Stat(filepath.Join(result.Path, "README"))
 	assert.NoError(t, err)
+
+	// Verify commit SHA is populated for git sources
+	assert.NotEmpty(t, result.CommitSHA, "commit SHA should be populated for git repos")
 }
 
 // --- Unit Tests for sanitizeErrorMessage ---

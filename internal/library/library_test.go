@@ -30,19 +30,19 @@ func newWithDir(dataDir string, resolver Resolver) *Library {
 // localResolver is a test resolver that returns local paths as-is.
 type localResolver struct{}
 
-func (r *localResolver) Resolve(_ context.Context, input string, _ remote.ResolveOptions) (string, error) {
+func (r *localResolver) Resolve(_ context.Context, input string, _ remote.ResolveOptions) (*remote.FetchResult, error) {
 	// For local paths, just verify they exist and return them
 	if _, err := os.Stat(input); err != nil {
-		return "", fmt.Errorf("local path not found: %w", err)
+		return nil, fmt.Errorf("local path not found: %w", err)
 	}
-	return input, nil
+	return &remote.FetchResult{Path: input}, nil
 }
 
 // failResolver always returns an error.
 type failResolver struct{ err error }
 
-func (r *failResolver) Resolve(_ context.Context, _ string, _ remote.ResolveOptions) (string, error) {
-	return "", r.err
+func (r *failResolver) Resolve(_ context.Context, _ string, _ remote.ResolveOptions) (*remote.FetchResult, error) {
+	return nil, r.err
 }
 
 func TestUT_DeriveName(t *testing.T) {
@@ -846,14 +846,14 @@ type selectiveFailResolver struct {
 	failRefs map[string]bool
 }
 
-func (r *selectiveFailResolver) Resolve(_ context.Context, input string, _ remote.ResolveOptions) (string, error) {
+func (r *selectiveFailResolver) Resolve(_ context.Context, input string, _ remote.ResolveOptions) (*remote.FetchResult, error) {
 	if r.failRefs[input] {
-		return "", fmt.Errorf("simulated failure for %s", input)
+		return nil, fmt.Errorf("simulated failure for %s", input)
 	}
 	if _, err := os.Stat(input); err != nil {
-		return "", fmt.Errorf("local path not found: %w", err)
+		return nil, fmt.Errorf("local path not found: %w", err)
 	}
-	return input, nil
+	return &remote.FetchResult{Path: input}, nil
 }
 
 func TestUT_UpdateAll_PartialFailure(t *testing.T) {

@@ -30,17 +30,17 @@ func NewGitFetcher(auth AuthProvider) *GitFetcher {
 	return &GitFetcher{auth: auth, out: os.Stderr}
 }
 
-// Fetch clones the repository and returns the path to the template.
-// If ref.SubPath is set, returns the path to that subdirectory.
-func (f *GitFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) {
+// Fetch clones the repository and returns the path to the template along with
+// the resolved commit SHA.
+func (f *GitFetcher) Fetch(ctx context.Context, ref *Reference) (*FetchResult, error) {
 	if ref.Type != ReferenceTypeGit {
-		return "", &FetchError{Ref: ref, Message: "not a Git reference"}
+		return nil, &FetchError{Ref: ref, Message: "not a Git reference"}
 	}
 
 	// Create temporary directory for clone
 	tmpDir, err := os.MkdirTemp("", "tag-git-*")
 	if err != nil {
-		return "", &FetchError{Ref: ref, Message: "cannot create temp directory", Err: err}
+		return nil, &FetchError{Ref: ref, Message: "cannot create temp directory", Err: err}
 	}
 
 	// Clean up on error
@@ -54,13 +54,22 @@ func (f *GitFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 	// Clone the repository (falls back to SSH on HTTPS auth failure)
 	repo, err := f.clone(ctx, ref, tmpDir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// Checkout specific version if requested
+	// Resolve commit SHA
+	var commitHash plumbing.Hash
 	if ref.Version != "" {
-		if err := f.checkout(repo, ref); err != nil {
-			return "", err
+		// Checkout specific version and get its resolved hash
+		commitHash, err = f.checkout(repo, ref)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// No version specified — resolve HEAD of the default branch
+		commitHash, err = resolveHEAD(repo)
+		if err != nil {
+			return nil, &FetchError{Ref: ref, Message: "cannot resolve HEAD", Err: err}
 		}
 	}
 
@@ -72,16 +81,16 @@ func (f *GitFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 		info, err := os.Stat(resultPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return "", &FetchError{
+				return nil, &FetchError{
 					Ref:     ref,
 					Message: fmt.Sprintf("subpath %q not found in repository", ref.SubPath),
 					Err:     ErrSubPathNotFound,
 				}
 			}
-			return "", &FetchError{Ref: ref, Message: "cannot access subpath", Err: err}
+			return nil, &FetchError{Ref: ref, Message: "cannot access subpath", Err: err}
 		}
 		if !info.IsDir() {
-			return "", &FetchError{
+			return nil, &FetchError{
 				Ref:     ref,
 				Message: fmt.Sprintf("subpath %q is not a directory", ref.SubPath),
 			}
@@ -89,7 +98,49 @@ func (f *GitFetcher) Fetch(ctx context.Context, ref *Reference) (string, error) 
 	}
 
 	success = true
-	return resultPath, nil
+	return &FetchResult{
+		Path:      resultPath,
+		CommitSHA: commitHash.String(),
+		Version:   ref.Version,
+	}, nil
+}
+
+// FetchAtCommit clones a repository and checks out a specific commit SHA.
+// Unlike Fetch, this performs a full clone (not shallow) since the target commit
+// may not be reachable from advertised refs in a shallow clone.
+func (f *GitFetcher) FetchAtCommit(ctx context.Context, url, commitSHA, destDir string) (string, error) {
+	if !looksLikeCommitSHA(commitSHA) || len(commitSHA) != 40 {
+		return "", fmt.Errorf("invalid commit SHA (must be full 40-character hex): %q", commitSHA)
+	}
+
+	// Full clone (no depth limit) to ensure the commit is available
+	opts := &git.CloneOptions{
+		URL:      url,
+		Progress: f.progressWriter(),
+	}
+
+	// Get auth if possible (best-effort, URL-based ref)
+	ref := &Reference{URL: url, Type: ReferenceTypeGit}
+	if auth, err := f.auth.GitAuth(ref); err == nil {
+		opts.Auth = auth
+	}
+
+	repo, err := git.PlainCloneContext(ctx, destDir, false, opts)
+	if err != nil {
+		return "", fmt.Errorf("clone for commit checkout: %s", sanitizeErrorMessage(err.Error()))
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("get worktree: %w", err)
+	}
+
+	hash := plumbing.NewHash(commitSHA)
+	if err := wt.Checkout(&git.CheckoutOptions{Hash: hash, Force: true}); err != nil {
+		return "", fmt.Errorf("checkout commit %s: %w", commitSHA, err)
+	}
+
+	return destDir, nil
 }
 
 // clone performs the Git clone operation.
@@ -173,11 +224,12 @@ func isAuthError(err error) bool {
 		strings.Contains(errStr, "403")
 }
 
-// checkout checks out a specific version (tag, branch, or commit).
-func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
+// checkout checks out a specific version (tag, branch, or commit) and returns
+// the resolved commit hash.
+func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) (plumbing.Hash, error) {
 	wt, err := repo.Worktree()
 	if err != nil {
-		return &FetchError{Ref: ref, Message: "cannot get worktree", Err: err}
+		return plumbing.ZeroHash, &FetchError{Ref: ref, Message: "cannot get worktree", Err: err}
 	}
 
 	// Try different reference types in order:
@@ -193,7 +245,7 @@ func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
 			Force:  true,
 		})
 		if err == nil {
-			return nil
+			return resolveHEAD(repo)
 		}
 	}
 
@@ -205,7 +257,7 @@ func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
 			Force:  true,
 		})
 		if err == nil {
-			return nil
+			return resolveHEAD(repo)
 		}
 	}
 
@@ -217,15 +269,24 @@ func (f *GitFetcher) checkout(repo *git.Repository, ref *Reference) error {
 			Force: true,
 		})
 		if err == nil {
-			return nil
+			return hash, nil
 		}
 	}
 
-	return &FetchError{
+	return plumbing.ZeroHash, &FetchError{
 		Ref:     ref,
 		Message: fmt.Sprintf("version %q not found (tried as tag, branch, and commit)", ref.Version),
 		Err:     ErrVersionNotFound,
 	}
+}
+
+// resolveHEAD returns the commit hash that HEAD currently points to.
+func resolveHEAD(repo *git.Repository) (plumbing.Hash, error) {
+	head, err := repo.Head()
+	if err != nil {
+		return plumbing.ZeroHash, fmt.Errorf("resolve HEAD: %w", err)
+	}
+	return head.Hash(), nil
 }
 
 // wrapCloneError wraps clone errors with helpful messages.
@@ -320,9 +381,16 @@ func looksLikeCommitSHA(s string) bool {
 	return true
 }
 
+// FetchResult contains the result of a fetch operation.
+type FetchResult struct {
+	Path      string // Local filesystem path to template
+	CommitSHA string // Resolved git commit SHA (empty for zip/local)
+	Version   string // Tag/branch/commit ref used
+}
+
 // Fetcher is the interface for all fetchers.
 type Fetcher interface {
-	Fetch(ctx context.Context, ref *Reference) (path string, err error)
+	Fetch(ctx context.Context, ref *Reference) (*FetchResult, error)
 }
 
 // Ensure GitFetcher implements Fetcher.

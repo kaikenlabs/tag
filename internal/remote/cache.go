@@ -23,6 +23,7 @@ type CacheMeta struct {
 	OriginalRef string     `json:"original_ref"`
 	ResolvedURL string     `json:"resolved_url"`
 	Version     string     `json:"version,omitempty"`
+	CommitSHA   string     `json:"commit_sha,omitempty"` // Resolved git commit SHA
 	FetchedAt   time.Time  `json:"fetched_at"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"` // nil = never expires (pinned)
 }

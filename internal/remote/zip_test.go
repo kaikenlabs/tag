@@ -81,8 +81,9 @@ func TestUT_ZipFetcher_FetchWrongType(t *testing.T) {
 		URL:  "https://github.com/user/repo.git",
 	}
 
-	_, err := fetcher.Fetch(context.Background(), ref)
+	result, err := fetcher.Fetch(context.Background(), ref)
 	require.Error(t, err)
+	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "not a Zip reference")
 }
 
@@ -105,18 +106,21 @@ func TestUT_ZipFetcher_LocalZip(t *testing.T) {
 		URL:      zipPath,
 	}
 
-	path, err := fetcher.Fetch(context.Background(), ref)
+	result, err := fetcher.Fetch(context.Background(), ref)
 	require.NoError(t, err)
-	defer os.RemoveAll(path)
+	defer os.RemoveAll(result.Path)
 
 	// Verify extracted content
-	content, err := os.ReadFile(filepath.Join(path, "file.txt"))
+	content, err := os.ReadFile(filepath.Join(result.Path, "file.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "content", string(content))
 
-	nested, err := os.ReadFile(filepath.Join(path, "subdir", "nested.txt"))
+	nested, err := os.ReadFile(filepath.Join(result.Path, "subdir", "nested.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "nested content", string(nested))
+
+	// Zip sources should have empty commit SHA
+	assert.Empty(t, result.CommitSHA)
 }
 
 func TestUT_ZipFetcher_UnwrapSingleRoot(t *testing.T) {
@@ -137,17 +141,17 @@ func TestUT_ZipFetcher_UnwrapSingleRoot(t *testing.T) {
 		URL:      zipPath,
 	}
 
-	path, err := fetcher.Fetch(context.Background(), ref)
+	result, err := fetcher.Fetch(context.Background(), ref)
 	require.NoError(t, err)
-	defer os.RemoveAll(filepath.Dir(path)) // Clean up parent temp dir
+	defer os.RemoveAll(filepath.Dir(result.Path)) // Clean up parent temp dir
 
 	// Path should point to the unwrapped content
-	content, err := os.ReadFile(filepath.Join(path, "file.txt"))
+	content, err := os.ReadFile(filepath.Join(result.Path, "file.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "content", string(content))
 
 	// Verify we're in the unwrapped directory (my-template-main)
-	assert.True(t, filepath.Base(path) == "my-template-main")
+	assert.Equal(t, "my-template-main", filepath.Base(result.Path))
 }
 
 func TestUT_ZipFetcher_NoUnwrapMultipleRoots(t *testing.T) {
@@ -168,14 +172,14 @@ func TestUT_ZipFetcher_NoUnwrapMultipleRoots(t *testing.T) {
 		URL:      zipPath,
 	}
 
-	path, err := fetcher.Fetch(context.Background(), ref)
+	result, err := fetcher.Fetch(context.Background(), ref)
 	require.NoError(t, err)
-	defer os.RemoveAll(path)
+	defer os.RemoveAll(result.Path)
 
 	// Both files should be at root
-	_, err = os.Stat(filepath.Join(path, "file1.txt"))
+	_, err = os.Stat(filepath.Join(result.Path, "file1.txt"))
 	assert.NoError(t, err)
-	_, err = os.Stat(filepath.Join(path, "file2.txt"))
+	_, err = os.Stat(filepath.Join(result.Path, "file2.txt"))
 	assert.NoError(t, err)
 }
 
@@ -201,12 +205,12 @@ func TestUT_ZipFetcher_SubPath(t *testing.T) {
 		SubPath:  "templates/go",
 	}
 
-	path, err := fetcher.Fetch(context.Background(), ref)
+	result, err := fetcher.Fetch(context.Background(), ref)
 	require.NoError(t, err)
-	defer os.RemoveAll(filepath.Dir(filepath.Dir(filepath.Dir(path)))) // Clean up root temp dir
+	defer os.RemoveAll(filepath.Dir(filepath.Dir(filepath.Dir(result.Path)))) // Clean up root temp dir
 
 	// Should be in the subpath
-	content, err := os.ReadFile(filepath.Join(path, "main.go.tmpl"))
+	content, err := os.ReadFile(filepath.Join(result.Path, "main.go.tmpl"))
 	require.NoError(t, err)
 	assert.Equal(t, "package main", string(content))
 }
@@ -312,12 +316,12 @@ func TestUT_ZipFetcher_SkipsHiddenAndMacOS(t *testing.T) {
 		URL:      zipPath,
 	}
 
-	path, err := fetcher.Fetch(context.Background(), ref)
+	result, err := fetcher.Fetch(context.Background(), ref)
 	require.NoError(t, err)
-	defer os.RemoveAll(filepath.Dir(path))
+	defer os.RemoveAll(filepath.Dir(result.Path))
 
 	// Should unwrap to template/ since __MACOSX and .hidden are skipped
-	assert.Equal(t, "template", filepath.Base(path))
+	assert.Equal(t, "template", filepath.Base(result.Path))
 }
 
 func TestUT_ZipFetcher_RejectsHTTP(t *testing.T) {
@@ -354,7 +358,7 @@ func TestIT_ZipFetcher_RemoteDownload(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create HTTPS test server (HTTP is rejected by HTTPS enforcement)
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/zip")
 		_, _ = w.Write(zipContent)
 	}))
@@ -370,12 +374,12 @@ func TestIT_ZipFetcher_RemoteDownload(t *testing.T) {
 		URL:      server.URL + "/template.zip",
 	}
 
-	path, err := fetcher.Fetch(context.Background(), ref)
+	result, err := fetcher.Fetch(context.Background(), ref)
 	require.NoError(t, err)
-	defer os.RemoveAll(path)
+	defer os.RemoveAll(result.Path)
 
 	// Verify downloaded content
-	content, err := os.ReadFile(filepath.Join(path, "file.txt"))
+	content, err := os.ReadFile(filepath.Join(result.Path, "file.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "remote content", string(content))
 }
@@ -386,7 +390,7 @@ func TestIT_ZipFetcher_RemoteDownloadError(t *testing.T) {
 	}
 
 	// Create HTTPS test server that returns 404
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()

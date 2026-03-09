@@ -181,12 +181,13 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 		return app.Errorf("failed to create resolver: %w", err)
 	}
 
-	templateDir, err := resolver.Resolve(c.Context, templateRef, remote.ResolveOptions{
+	resolveResult, err := resolver.Resolve(c.Context, templateRef, remote.ResolveOptions{
 		ForceUpdate: c.Bool("update"),
 	})
 	if err != nil {
 		return app.Errorf("failed to resolve template: %w", err)
 	}
+	templateDir := resolveResult.Path
 
 	// Parse meta flags
 	meta, err := parse.ParseKeyValues(c.StringSlice("meta"), true)

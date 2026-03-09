@@ -85,14 +85,14 @@ func resolveTemplateDir(c *cli.Context, ref string) (string, error) {
 		return "", app.Errorf("failed to create resolver: %w", err)
 	}
 
-	templateDir, err := resolver.Resolve(c.Context, ref, remote.ResolveOptions{
+	resolveResult, err := resolver.Resolve(c.Context, ref, remote.ResolveOptions{
 		ForceUpdate: c.Bool("update"),
 	})
 	if err != nil {
 		return "", app.Errorf("failed to resolve template %q: %w", ref, err)
 	}
 
-	return templateDir, nil
+	return resolveResult.Path, nil
 }
 
 // displayTemplateInfo orchestrates the display of all template information sections.
