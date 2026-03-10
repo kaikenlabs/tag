@@ -90,15 +90,16 @@ const (
 	ResolveTheirs
 )
 
-// ResolveConflicts applies the given resolution mode to all conflicts in the
-// report and returns a new set of clean MergeResults. Only conflicted files
-// are affected; clean and prompt results are unchanged.
+// ResolveConflicts applies the given resolution mode to all conflicts and
+// prompts (including binary file conflicts) in the report. Returns a new set
+// of clean MergeResults that replace the conflicted/prompt entries.
 func ResolveConflicts(report *ConflictReport, mode ResolveMode) []MergeResult {
 	if mode == ResolveNone {
 		return nil
 	}
 
-	resolved := make([]MergeResult, 0, len(report.Conflicts))
+	resolved := make([]MergeResult, 0, len(report.Conflicts)+len(report.Prompts))
+
 	for _, cf := range report.Conflicts {
 		var content []byte
 		switch mode {
@@ -113,6 +114,38 @@ func ResolveConflicts(report *ConflictReport, mode ResolveMode) []MergeResult {
 			Op:      MergeUpdate,
 			Content: content,
 			Mode:    cf.Mode,
+		})
+	}
+
+	// Also resolve prompts (binary conflicts, deletion disputes).
+	for _, p := range report.Prompts {
+		var content []byte
+		var op MergeOp
+
+		switch mode {
+		case ResolveOurs:
+			if p.OursContent != nil {
+				content = p.OursContent
+				op = MergeKeep
+			} else {
+				// User deleted the file — keep it deleted.
+				op = MergeDelete
+			}
+		case ResolveTheirs:
+			if p.TheirsContent != nil {
+				content = p.TheirsContent
+				op = MergeUpdate
+			} else {
+				// Template deleted the file — delete it.
+				op = MergeDelete
+			}
+		}
+
+		resolved = append(resolved, MergeResult{
+			Path:    p.Path,
+			Op:      op,
+			Content: content,
+			Mode:    p.Mode,
 		})
 	}
 

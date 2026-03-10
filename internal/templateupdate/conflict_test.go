@@ -229,6 +229,64 @@ func TestUT_CleanSummary_NoChanges(t *testing.T) {
 	assert.Contains(t, buf.String(), "up to date")
 }
 
+func TestUT_AcceptOurs_ResolvesPrompts(t *testing.T) {
+	t.Parallel()
+
+	report := &ConflictReport{
+		Prompts: []MergeResult{
+			{
+				Path:          "logo.png",
+				Op:            MergePrompt,
+				IsBinary:      true,
+				PromptReason:  "binary file modified by both sides",
+				OursContent:   []byte("ours-binary"),
+				TheirsContent: []byte("theirs-binary"),
+				Mode:          0o644,
+			},
+			{
+				Path:          "deleted.go",
+				Op:            MergePrompt,
+				PromptReason:  "you deleted this file but the template updated it",
+				TheirsContent: []byte("template-version"),
+				Mode:          0o644,
+			},
+		},
+	}
+
+	resolved := ResolveConflicts(report, ResolveOurs)
+	require.Len(t, resolved, 2)
+
+	// Binary: keep ours.
+	assert.Equal(t, MergeKeep, resolved[0].Op)
+	assert.Equal(t, []byte("ours-binary"), resolved[0].Content)
+
+	// User deleted: keep deleted.
+	assert.Equal(t, MergeDelete, resolved[1].Op)
+}
+
+func TestUT_AcceptTheirs_ResolvesPrompts(t *testing.T) {
+	t.Parallel()
+
+	report := &ConflictReport{
+		Prompts: []MergeResult{
+			{
+				Path:          "logo.png",
+				Op:            MergePrompt,
+				IsBinary:      true,
+				PromptReason:  "binary file modified by both sides",
+				OursContent:   []byte("ours-binary"),
+				TheirsContent: []byte("theirs-binary"),
+				Mode:          0o644,
+			},
+		},
+	}
+
+	resolved := ResolveConflicts(report, ResolveTheirs)
+	require.Len(t, resolved, 1)
+	assert.Equal(t, MergeUpdate, resolved[0].Op)
+	assert.Equal(t, []byte("theirs-binary"), resolved[0].Content)
+}
+
 func TestUT_MergeOp_String(t *testing.T) {
 	t.Parallel()
 

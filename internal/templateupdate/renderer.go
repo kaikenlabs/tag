@@ -113,6 +113,40 @@ func (r *HistoricalRenderer) RenderAt(
 	return state.files, nil
 }
 
+// LoadConfigAtCommit fetches the template at the given commit and returns
+// the parsed TemplateConfig (tag.template.json). The checkout is created
+// in a temporary directory and cleaned up before returning.
+func (r *HistoricalRenderer) LoadConfigAtCommit(
+	ctx context.Context,
+	templateURL string,
+	commitSHA string,
+) (*tmplconfig.TemplateConfig, error) {
+	tmpDir, err := os.MkdirTemp("", "tag-config-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	checkoutDir, err := r.fetchTemplate(ctx, templateURL, commitSHA, tmpDir)
+	if err != nil {
+		return nil, err
+	}
+
+	configPath := filepath.Join(checkoutDir, types.TemplateConfigFile)
+
+	data, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		return nil, fmt.Errorf("read %s at commit %s: %w", types.TemplateConfigFile, shortSHA(commitSHA), readErr)
+	}
+
+	cfg, parseErr := tmplconfig.ParseTemplateConfig(data)
+	if parseErr != nil {
+		return nil, fmt.Errorf("parse %s at commit %s: %w", types.TemplateConfigFile, shortSHA(commitSHA), parseErr)
+	}
+
+	return cfg, nil
+}
+
 // fetchTemplate checks out the template at the given commit into a subdirectory of tmpDir.
 func (r *HistoricalRenderer) fetchTemplate(ctx context.Context, templateURL, commitSHA, tmpDir string) (string, error) {
 	checkoutDir := filepath.Join(tmpDir, "checkout")

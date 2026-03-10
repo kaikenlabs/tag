@@ -495,16 +495,73 @@ tag update --dry-run                   # Preview changes without applying
 tag update --accept-ours               # Auto-resolve conflicts with your version
 tag update --accept-theirs             # Auto-resolve conflicts with template version
 tag update --set author="Jane"         # Override variables during update
+tag update --set go_version=1.22       # Pre-answer new required variables (CI)
 tag update --skip "*.md"               # Skip patterns for this run
+tag update --backup=false              # Skip backup creation
+tag update --skip-hooks                # Skip all hook execution
+tag update --accept-hooks              # Run changed hooks without prompting
 tag update --continue                  # Resume after manual conflict resolution
 tag update --abort                     # Abort and restore from backup
 ```
 
 **How update works**: Renders the template at the old commit SHA and the new commit SHA (both with your variables), reads your current project files, then performs a 3-way merge (base=old template, ours=your files, theirs=new template). Conflicts are written with standard `<<<<<<<`/`=======`/`>>>>>>>` markers.
 
+**Variable changes**: When the template introduces new variables, optional ones use their defaults automatically. New required variables without defaults need values via `--set key=value`. Removed variables are cleaned from `.tagconfig.json`. Default-only changes keep your stored value.
+
+**Hook changes**: When template hooks are added or modified, the update displays their content and prompts for execution. Use `--skip-hooks` to suppress all execution, or `--accept-hooks` to auto-execute. Non-interactive mode skips hooks by default. Changed hooks receive `TAG_UPDATE_MODE=true` in their environment.
+
+**Binary files**: Binary files (detected by null bytes in first 8KB) cannot be text-merged. When both sides modify a binary file, the update prompts for a choice. Use `--accept-ours` or `--accept-theirs` to auto-resolve. Binary changes are identified by SHA256 hash.
+
+**Backup/rollback**: By default, `tag update` creates a backup in `.tag/backup/{timestamp}/` with a `manifest.json` tracking which files were modified, deleted, or added. On `--abort`, modified/deleted files are restored and newly-added files are removed. Backups older than 30 days are auto-cleaned. Use `--backup=false` to skip backup creation.
+
 **Conflict workflow**: If conflicts occur, resolve them manually in the affected files, then run `tag update --continue` to finalize. Or run `tag update --abort` to restore from backup.
 
 **`.tagconfig.json` tracking**: After a successful update, `.tagconfig.json` is updated with the new `commit` SHA. The `tag check` command compares this SHA against the latest remote commit.
+
+#### CI Integration
+
+**GitHub Actions — freshness check (weekly):**
+```yaml
+name: Template Freshness
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install TAG
+        run: go install github.com/kaikenlabs/tag@latest
+      - name: Check template
+        run: tag check --quiet
+```
+
+**GitHub Actions — auto-update PR:**
+```yaml
+name: Template Update
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install TAG
+        run: go install github.com/kaikenlabs/tag@latest
+      - name: Update template
+        run: |
+          tag update --accept-theirs --skip-hooks --backup=false
+          if [ -n "$(git status --porcelain)" ]; then
+            git checkout -b chore/template-update
+            git add -A && git commit -m "chore: update project template"
+            gh pr create --title "chore: update project template" \
+              --body "Automated template update via \`tag update\`."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
 
 ### Self-Upgrade
 

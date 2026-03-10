@@ -190,6 +190,10 @@ func TestUT_MergeFile_BinaryFileConflict(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, MergePrompt, result.Op)
 	assert.Contains(t, result.PromptReason, "binary")
+	assert.True(t, result.IsBinary)
+	assert.NotEmpty(t, result.OursSHA256, "should have SHA256 for ours")
+	assert.NotEmpty(t, result.TheirsSHA256, "should have SHA256 for theirs")
+	assert.NotEqual(t, result.OursSHA256, result.TheirsSHA256, "different content = different hashes")
 }
 
 func TestUT_MergeFile_TextMergerError(t *testing.T) {
