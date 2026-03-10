@@ -54,7 +54,7 @@ main.go                         CLI entry point (urfave/cli/v2)
 ├── internal/remote/            Remote template resolution (git/zip/cache/auth)
 ├── internal/engine/            Code generation engine + template parsing
 ├── internal/library/           Template library management
-├── internal/templateupdate/    Historical template rendering for update/diff/check
+├── internal/templateupdate/    Historical rendering, 3-way merge engine, ignore matcher, conflict resolution
 ├── internal/parse/             Shared parsing utilities (meta-flag parser)
 ├── internal/config/            Config file loading and validation
 ├── internal/validate/          Input name validation
