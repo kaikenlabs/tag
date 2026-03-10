@@ -60,6 +60,8 @@ type MergeResult struct {
 	Mode os.FileMode
 	// Conflicted is true when Content contains unresolved conflict markers.
 	Conflicted bool
+	// IsBinary is true when the file was detected as binary.
+	IsBinary bool
 	// PromptReason describes why a user prompt is needed (non-empty only for MergePrompt).
 	PromptReason string
 	// BaseContent is the original base version (populated for conflicts/prompts to enable resolution).
@@ -68,6 +70,10 @@ type MergeResult struct {
 	OursContent []byte
 	// TheirsContent is the template's version (populated for conflicts/prompts).
 	TheirsContent []byte
+	// OursSHA256 is the SHA256 hex digest of the user's binary content (for display).
+	OursSHA256 string
+	// TheirsSHA256 is the SHA256 hex digest of the template's binary content (for display).
+	TheirsSHA256 string
 }
 
 // TextMerger performs 3-way text merging of file contents.

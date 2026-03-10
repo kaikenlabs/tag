@@ -86,6 +86,14 @@ Examples:
 				Name:  "abort",
 				Usage: "Abort in-progress update, restore backup",
 			},
+			&cli.BoolFlag{
+				Name:  "skip-hooks",
+				Usage: "Skip all hook execution during update",
+			},
+			&cli.BoolFlag{
+				Name:  "accept-hooks",
+				Usage: "Run changed hooks without prompting",
+			},
 		},
 		Action: updateTemplateAction,
 	}
@@ -136,6 +144,8 @@ func updateTemplateAction(c *cli.Context) error {
 		SkipPatterns: c.StringSlice("skip"),
 		DryRun:       c.Bool("dry-run"),
 		Backup:       c.Bool("backup"),
+		SkipHooks:    c.Bool("skip-hooks"),
+		AcceptHooks:  c.Bool("accept-hooks"),
 		Mode:         mode,
 	})
 	if err != nil {
@@ -166,6 +176,23 @@ func updateTemplateAction(c *cli.Context) error {
 		fmt.Fprintf(os.Stdout, "Would update from %s → %s\n", shortCommitSHA(result.OldSHA), shortCommitSHA(result.NewSHA))
 	} else {
 		fmt.Fprintf(os.Stdout, "Updating from template (%s → %s)\n", shortCommitSHA(result.OldSHA), shortCommitSHA(result.NewSHA))
+	}
+
+	if len(result.VarChanges) > 0 {
+		fmt.Fprintln(os.Stdout, "\nVariable changes:")
+		lines := templateupdate.FormatVarChanges(result.VarChanges, nil)
+		for _, line := range lines {
+			fmt.Fprintln(os.Stdout, line)
+		}
+		fmt.Fprintln(os.Stdout)
+	}
+
+	if len(result.HookChanges) > 0 {
+		fmt.Fprintln(os.Stdout, "\nHook changes:")
+		for _, line := range templateupdate.FormatHookChanges(result.HookChanges) {
+			fmt.Fprintln(os.Stdout, line)
+		}
+		fmt.Fprintln(os.Stdout)
 	}
 
 	printUpdateSummary(result)

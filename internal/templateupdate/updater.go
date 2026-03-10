@@ -36,6 +36,8 @@ type UpdateOptions struct {
 	SkipPatterns []string
 	DryRun       bool
 	Backup       bool
+	SkipHooks    bool
+	AcceptHooks  bool
 	Mode         UpdateMode
 }
 
@@ -45,6 +47,8 @@ type UpdateResult struct {
 	NewSHA       string
 	Applied      []MergeResult
 	Conflicts    *ConflictReport
+	VarChanges   []VarChange
+	HookChanges  []HookChange
 	NewFiles     int
 	UpdatedFiles int
 	DeletedFiles int
@@ -137,6 +141,30 @@ func (u *Updater) resolveUpdate(ctx context.Context, projectDir string, opts Upd
 	}, nil, nil
 }
 
+// configChanges holds detected variable and hook changes between template versions.
+type configChanges struct {
+	vars  []VarChange
+	hooks []HookChange
+}
+
+// detectConfigChanges loads template configs at both commits and detects variable and hook changes.
+func (u *Updater) detectConfigChanges(ctx context.Context, rctx *resolveUpdateContext) (*configChanges, error) {
+	oldConfig, err := u.renderer.LoadConfigAtCommit(ctx, rctx.ref.URL, rctx.cfg.Template.CommitSHA)
+	if err != nil {
+		return nil, fmt.Errorf("load old template config: %w", err)
+	}
+
+	newConfig, err := u.renderer.LoadConfigAtCommit(ctx, rctx.ref.URL, rctx.latestSHA)
+	if err != nil {
+		return nil, fmt.Errorf("load new template config: %w", err)
+	}
+
+	return &configChanges{
+		vars:  DetectVarChanges(oldConfig, newConfig),
+		hooks: DetectHookChanges(oldConfig, newConfig),
+	}, nil
+}
+
 // performMerge renders both template versions and performs the 3-way merge.
 func (u *Updater) performMerge(ctx context.Context, projectDir string, rctx *resolveUpdateContext, opts UpdateOptions) ([]MergeResult, *ConflictReport, error) {
 	base, theirs, err := u.renderer.RenderPair(ctx, rctx.ref.URL, rctx.cfg.Template.CommitSHA, rctx.latestSHA, rctx.vars)
@@ -210,22 +238,39 @@ func (u *Updater) applyUpdate(ctx context.Context, projectDir string, opts Updat
 		return earlyResult, nil
 	}
 
+	// Detect variable and hook changes between template versions.
+	cfgChanges, cfgErr := u.detectConfigChanges(ctx, rctx)
+	if cfgErr != nil {
+		return nil, cfgErr
+	}
+
+	// Resolve new variables: apply defaults, check for missing required vars.
+	needsInput := ResolveNewVariables(cfgChanges.vars, rctx.vars, opts.VarOverrides)
+	if len(needsInput) > 0 {
+		return nil, fmt.Errorf("new required variable(s) need values: %v — use --set to provide them", needsInput)
+	}
+
 	results, report, err := u.performMerge(ctx, projectDir, rctx, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	// Backup affected files.
+	// Backup affected files with manifest for reliable rollback.
 	if opts.Backup && !opts.DryRun {
-		affectedPaths := collectAffectedPaths(results)
-		if len(affectedPaths) > 0 {
-			if _, backupErr := CreateBackup(projectDir, affectedPaths); backupErr != nil {
+		entries := BuildManifestEntries(results)
+		if len(entries) > 0 {
+			if _, backupErr := CreateBackupFromResults(projectDir, results, rctx.cfg.Template.CommitSHA, rctx.latestSHA); backupErr != nil {
 				return nil, fmt.Errorf("create backup: %w", backupErr)
 			}
 		}
+
+		// Clean old backups after successful creation (best-effort).
+		_ = CleanOldBackups(projectDir, defaultBackupMaxAge)
 	}
 
 	result := buildUpdateResult(rctx.cfg.Template.CommitSHA, rctx.latestSHA, results, report)
+	result.VarChanges = cfgChanges.vars
+	result.HookChanges = cfgChanges.hooks
 
 	if opts.DryRun {
 		return result, nil
@@ -313,7 +358,7 @@ func (u *Updater) abortUpdate(projectDir string) (*UpdateResult, error) {
 		return nil, errors.New("no backup found — cannot abort")
 	}
 
-	if err := RestoreBackup(projectDir, backupPath); err != nil {
+	if err := RestoreFromManifest(projectDir, backupPath); err != nil {
 		return nil, fmt.Errorf("restore backup: %w", err)
 	}
 
@@ -366,11 +411,8 @@ func updateTagConfig(projectDir string, cfg *scaffold.TagConfig, newSHA, newRef 
 }
 
 // mergeVars merges stored variables with command-line overrides.
+// Always returns a new map to avoid mutating the original config.
 func mergeVars(stored map[string]any, overrides map[string]string) map[string]any {
-	if len(overrides) == 0 {
-		return stored
-	}
-
 	merged := make(map[string]any, len(stored))
 	maps.Copy(merged, stored)
 	for k, v := range overrides {
@@ -388,7 +430,7 @@ func replaceConflicts(results, resolved []MergeResult) []MergeResult {
 
 	out := make([]MergeResult, 0, len(results))
 	for _, r := range results {
-		if r.Op == MergeConflict {
+		if r.Op == MergeConflict || r.Op == MergePrompt {
 			if replacement, ok := resolvedMap[r.Path]; ok {
 				out = append(out, replacement)
 				continue
@@ -397,16 +439,4 @@ func replaceConflicts(results, resolved []MergeResult) []MergeResult {
 		out = append(out, r)
 	}
 	return out
-}
-
-// collectAffectedPaths returns paths that will be modified by the merge.
-func collectAffectedPaths(results []MergeResult) []string {
-	var paths []string
-	for _, r := range results {
-		switch r.Op {
-		case MergeAdd, MergeUpdate, MergeDelete, MergeConflict:
-			paths = append(paths, r.Path)
-		}
-	}
-	return paths
 }

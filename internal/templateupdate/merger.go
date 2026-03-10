@@ -3,6 +3,8 @@ package templateupdate
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 )
@@ -250,7 +252,8 @@ func (m *MergeEngine) textMerge(
 	}, nil
 }
 
-// binaryPrompt creates a MergePrompt result for binary file conflicts.
+// binaryPrompt creates a MergePrompt result for binary file conflicts,
+// including SHA256 hashes for display.
 func binaryPrompt(
 	path string, base, ours, theirs *RenderedFile, reason string,
 ) MergeResult {
@@ -262,10 +265,19 @@ func binaryPrompt(
 	return MergeResult{
 		Path:          path,
 		Op:            MergePrompt,
+		IsBinary:      true,
 		PromptReason:  reason,
 		BaseContent:   baseContent,
 		OursContent:   ours.Content,
 		TheirsContent: theirs.Content,
+		OursSHA256:    sha256Hex(ours.Content),
+		TheirsSHA256:  sha256Hex(theirs.Content),
 		Mode:          ours.Mode,
 	}
+}
+
+// sha256Hex returns the lowercase hex SHA256 digest of data.
+func sha256Hex(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
 }
