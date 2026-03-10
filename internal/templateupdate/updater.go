@@ -255,11 +255,6 @@ func (u *Updater) applyUpdate(ctx context.Context, projectDir string, opts Updat
 		return nil, err
 	}
 
-	// Clean old backups (best-effort, don't fail the update).
-	if !opts.DryRun {
-		_ = CleanOldBackups(projectDir, defaultBackupMaxAge)
-	}
-
 	// Backup affected files with manifest for reliable rollback.
 	if opts.Backup && !opts.DryRun {
 		entries := BuildManifestEntries(results)
@@ -268,6 +263,9 @@ func (u *Updater) applyUpdate(ctx context.Context, projectDir string, opts Updat
 				return nil, fmt.Errorf("create backup: %w", backupErr)
 			}
 		}
+
+		// Clean old backups after successful creation (best-effort).
+		_ = CleanOldBackups(projectDir, defaultBackupMaxAge)
 	}
 
 	result := buildUpdateResult(rctx.cfg.Template.CommitSHA, rctx.latestSHA, results, report)
@@ -413,11 +411,8 @@ func updateTagConfig(projectDir string, cfg *scaffold.TagConfig, newSHA, newRef 
 }
 
 // mergeVars merges stored variables with command-line overrides.
+// Always returns a new map to avoid mutating the original config.
 func mergeVars(stored map[string]any, overrides map[string]string) map[string]any {
-	if len(overrides) == 0 {
-		return stored
-	}
-
 	merged := make(map[string]any, len(stored))
 	maps.Copy(merged, stored)
 	for k, v := range overrides {
@@ -444,16 +439,4 @@ func replaceConflicts(results, resolved []MergeResult) []MergeResult {
 		out = append(out, r)
 	}
 	return out
-}
-
-// collectAffectedPaths returns paths that will be modified by the merge.
-func collectAffectedPaths(results []MergeResult) []string {
-	var paths []string
-	for _, r := range results {
-		switch r.Op {
-		case MergeAdd, MergeUpdate, MergeDelete, MergeConflict:
-			paths = append(paths, r.Path)
-		}
-	}
-	return paths
 }

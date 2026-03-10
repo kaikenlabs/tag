@@ -147,19 +147,11 @@ func TestUT_MergeVars_NoOverrides(t *testing.T) {
 	stored := map[string]any{"a": "1"}
 	merged := mergeVars(stored, nil)
 	assert.Equal(t, stored, merged)
-}
 
-func TestUT_CollectAffectedPaths(t *testing.T) {
-	results := []MergeResult{
-		{Path: "new.txt", Op: MergeAdd},
-		{Path: "keep.txt", Op: MergeKeep},
-		{Path: "mod.txt", Op: MergeUpdate},
-		{Path: "del.txt", Op: MergeDelete},
-		{Path: "user.txt", Op: MergeUserAdded},
-	}
-
-	paths := collectAffectedPaths(results)
-	assert.ElementsMatch(t, []string{"new.txt", "mod.txt", "del.txt"}, paths)
+	// Verify returned map is a copy, not the original.
+	merged["b"] = "2"
+	_, exists := stored["b"]
+	assert.False(t, exists, "mergeVars should return a copy")
 }
 
 func TestUT_ReplaceConflicts(t *testing.T) {

@@ -2,6 +2,7 @@ package templateupdate
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
@@ -108,7 +109,7 @@ func detectFieldChanges(name string, oldDef, newDef tmplconfig.VariableDef) []Va
 		})
 	}
 
-	if fmt.Sprintf("%v", oldDef.Default) != fmt.Sprintf("%v", newDef.Default) {
+	if !reflect.DeepEqual(oldDef.Default, newDef.Default) {
 		od, nd := oldDef, newDef
 		changes = append(changes, VarChange{
 			Name:   name,

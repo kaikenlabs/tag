@@ -81,9 +81,11 @@ func TestUT_DetectVarChanges_TypeChanged(t *testing.T) {
 	}
 
 	changes := DetectVarChanges(oldCfg, newCfg)
-	// Only type change detected — "8080" and 8080 have the same %v representation.
-	require.Len(t, changes, 1)
-	assert.Equal(t, VarTypeChanged, changes[0].Type)
+	// Both type and default change detected — reflect.DeepEqual distinguishes "8080" from 8080.
+	require.Len(t, changes, 2)
+	// Sorted by VarChangeType enum: VarDefaultChanged (2) < VarTypeChanged (3).
+	assert.Equal(t, VarDefaultChanged, changes[0].Type)
+	assert.Equal(t, VarTypeChanged, changes[1].Type)
 }
 
 func TestUT_DetectVarChanges_NoChanges(t *testing.T) {

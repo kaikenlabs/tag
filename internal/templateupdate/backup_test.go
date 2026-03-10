@@ -182,16 +182,43 @@ func TestUT_Backup_CleanOldBackups_NoDir(t *testing.T) {
 	assert.NoError(t, CleanOldBackups(dir, 30*24*time.Hour))
 }
 
-func TestUT_Backup_CreateFromResults_CleanupOnFailure(t *testing.T) {
-	// Use a non-writable directory to force manifest write failure.
+func TestUT_Backup_CreateFromResults_AddedOnly(t *testing.T) {
 	dir := t.TempDir()
 
 	results := []MergeResult{
 		{Path: "added.txt", Op: MergeAdd},
 	}
 
-	// Create backup successfully first to verify the happy path.
 	backupPath, err := CreateBackupFromResults(dir, results, "a", "b")
 	require.NoError(t, err)
 	assert.NotEmpty(t, backupPath)
+}
+
+func TestUT_Backup_RestoreFromManifest_PathTraversal(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a backup directory with a tampered manifest containing path traversal.
+	backupPath := filepath.Join(dir, ".tag", "backup", "20260310-120000")
+	require.NoError(t, os.MkdirAll(backupPath, 0o755))
+
+	manifest := &BackupManifest{
+		Files: []ManifestEntry{
+			{Path: "../../etc/evil.txt", Action: FileAdded},
+		},
+	}
+	require.NoError(t, WriteManifest(backupPath, manifest))
+
+	err := RestoreFromManifest(dir, backupPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
+func TestUT_Backup_BackupFile_PathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	backupPath := filepath.Join(dir, "backup")
+	require.NoError(t, os.MkdirAll(backupPath, 0o755))
+
+	err := backupFile(dir, backupPath, "../../etc/passwd")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
 }

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kaikenlabs/tag/internal/types"
@@ -61,7 +62,7 @@ func RestoreBackup(projectDir, backupPath string) error {
 			return fmt.Errorf("get relative path: %w", err)
 		}
 
-		if relPath == "." {
+		if relPath == "." || relPath == manifestFileName {
 			return nil
 		}
 
@@ -154,6 +155,10 @@ func RestoreFromManifest(projectDir, backupPath string) error {
 	}
 
 	for _, entry := range manifest.Files {
+		if err := validateContainedPath(projectDir, entry.Path); err != nil {
+			return err
+		}
+
 		filePath := filepath.Join(projectDir, entry.Path)
 
 		switch entry.Action {
@@ -218,6 +223,10 @@ func CleanOldBackups(projectDir string, maxAge time.Duration) error {
 
 // backupFile copies a single file from the project into the backup directory.
 func backupFile(projectDir, backupPath, relPath string) error {
+	if err := validateContainedPath(projectDir, relPath); err != nil {
+		return err
+	}
+
 	srcPath := filepath.Join(projectDir, relPath)
 	dstPath := filepath.Join(backupPath, relPath)
 
@@ -233,6 +242,16 @@ func backupFile(projectDir, backupPath, relPath string) error {
 		return fmt.Errorf("backup %s: %w", relPath, err)
 	}
 
+	return nil
+}
+
+// validateContainedPath checks that relPath does not escape the base directory via traversal.
+func validateContainedPath(base, relPath string) error {
+	resolved := filepath.Clean(filepath.Join(base, relPath))
+	cleanBase := filepath.Clean(base) + string(filepath.Separator)
+	if !strings.HasPrefix(resolved, cleanBase) && resolved != filepath.Clean(base) {
+		return fmt.Errorf("path traversal detected: %s", relPath)
+	}
 	return nil
 }
 
