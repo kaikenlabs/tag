@@ -169,7 +169,7 @@ func doctorCheckTAGVersion(ctx context.Context, version string) doctorResult {
 		return doctorResultWarn(label, fmt.Sprintf("could not check for updates: %v", err))
 	}
 	if strings.TrimPrefix(version, "v") != strings.TrimPrefix(latest, "v") {
-		return doctorResultWarn(label, fmt.Sprintf("update available: %s → %s  (run: tag update)", version, latest))
+		return doctorResultWarn(label, fmt.Sprintf("update available: %s → %s  (run: tag upgrade)", version, latest))
 	}
 	return doctorResultPass(label)
 }

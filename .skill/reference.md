@@ -476,10 +476,40 @@ tag undo --partial                     # Revert unmodified files, skip conflicti
 
 **Backup location**: `.tag/history/backups/<generation-id>/` — stores pre-modification copies for inject/append operations.
 
-### Self-Update
+### Template Lifecycle (Check, Diff, Update)
+
+Commands for keeping scaffolded projects in sync with upstream template changes.
 
 ```bash
-tag update                             # Download and install latest release
+tag check                              # Check if upstream has newer commits (exit 0/1)
+tag check --quiet                      # CI mode: exit code only, no output
+tag check --ref main                   # Check against a specific branch/tag
+
+tag diff                               # Show unified diff of proposed changes
+tag diff --stat                        # Show compact diffstat summary
+tag diff --no-color                    # Pipe-friendly (no ANSI)
+tag diff --ref v2.0.0                  # Diff against a specific ref
+
+tag update                             # Apply upstream template changes (3-way merge)
+tag update --dry-run                   # Preview changes without applying
+tag update --accept-ours               # Auto-resolve conflicts with your version
+tag update --accept-theirs             # Auto-resolve conflicts with template version
+tag update --set author="Jane"         # Override variables during update
+tag update --skip "*.md"               # Skip patterns for this run
+tag update --continue                  # Resume after manual conflict resolution
+tag update --abort                     # Abort and restore from backup
+```
+
+**How update works**: Renders the template at the old commit SHA and the new commit SHA (both with your variables), reads your current project files, then performs a 3-way merge (base=old template, ours=your files, theirs=new template). Conflicts are written with standard `<<<<<<<`/`=======`/`>>>>>>>` markers.
+
+**Conflict workflow**: If conflicts occur, resolve them manually in the affected files, then run `tag update --continue` to finalize. Or run `tag update --abort` to restore from backup.
+
+**`.tagconfig.json` tracking**: After a successful update, `.tagconfig.json` is updated with the new `commit` SHA. The `tag check` command compares this SHA against the latest remote commit.
+
+### Self-Upgrade
+
+```bash
+tag upgrade                            # Download and install latest release
 tag version --check                    # Check if update available
 ```
 

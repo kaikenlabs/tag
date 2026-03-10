@@ -76,7 +76,7 @@ func versionCheckAction(ctx context.Context, w io.Writer, currentVersion, repoUR
 	}
 
 	fmt.Fprintf(w, "Update available: v%s → v%s\n\n", current, latestClean)
-	fmt.Fprintf(w, "  tag update\n")
+	fmt.Fprintf(w, "  tag upgrade\n")
 
 	return nil
 }

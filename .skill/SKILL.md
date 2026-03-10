@@ -202,7 +202,10 @@ my-project/
 | `tag undo` | Revert the last generation |
 | `tag undo --list` | Show generation history |
 | `tag undo --id <id>` | Revert a specific generation |
-| `tag update` | Self-update to latest release |
+| `tag check` | Check if upstream template changed. Exit 0 = up-to-date, 1 = updates available |
+| `tag diff` | Show what would change if you ran `tag update` (read-only) |
+| `tag update` | Apply upstream template changes via 3-way merge |
+| `tag upgrade` | Self-upgrade to latest release |
 | `tag version [--check]` | Print version, check for updates |
 
 ### Key Flags
@@ -217,7 +220,7 @@ my-project/
 | `-l` / `--lib` | template new | Target library template |
 | `-B` / `--in-bundle` | template new generator | Create inside bundle |
 | `-s` / `--self-contained` | template new bundle | Self-contained bundle |
-| `--dry-run` / `-d` | scaffold, generate, convert | Preview without writing |
+| `--dry-run` / `-d` | scaffold, generate, convert, update | Preview without writing |
 | `--all` | generate list, template list | Show all generators/bundles, including those with unmet requirements |
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |

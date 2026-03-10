@@ -13,11 +13,12 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
-// UpdateCommand returns the CLI command for self-updating TAG.
-func UpdateCommand(version string) *cli.Command {
+// UpgradeCommand returns the CLI command for self-updating TAG.
+func UpgradeCommand(version string) *cli.Command {
 	return &cli.Command{
-		Name:  "update",
-		Usage: "Update TAG to the latest version",
+		Name:    "upgrade",
+		Aliases: []string{"u"},
+		Usage:   "Upgrade TAG to the latest version",
 		Description: `Downloads and installs the latest TAG release from GitHub.
 
 Checks the current version against the latest release, downloads the
@@ -25,14 +26,14 @@ appropriate binary for the current platform, verifies its SHA256 checksum,
 and replaces the running binary in-place.
 
 Examples:
-  tag update`,
+  tag upgrade`,
 		Action: func(c *cli.Context) error {
-			return updateAction(c, os.Stdout, version, defaultGitHubRepo)
+			return upgradeAction(c, os.Stdout, version, defaultGitHubRepo)
 		},
 	}
 }
 
-func updateAction(c *cli.Context, w io.Writer, currentVersion, repoURL string) error {
+func upgradeAction(c *cli.Context, w io.Writer, currentVersion, repoURL string) error {
 	fmt.Fprintln(w, "Checking for latest version...")
 
 	latest, err := fetchLatestVersion(c.Context, repoURL)
@@ -49,9 +50,9 @@ func updateAction(c *cli.Context, w io.Writer, currentVersion, repoURL string) e
 	}
 
 	if isDevBuild(currentVersion) {
-		fmt.Fprintf(w, "Development build detected, updating to latest release v%s...\n", latestClean)
+		fmt.Fprintf(w, "Development build detected, upgrading to latest release v%s...\n", latestClean)
 	} else {
-		fmt.Fprintf(w, "Updating tag v%s → v%s...\n", current, latestClean)
+		fmt.Fprintf(w, "Upgrading tag v%s → v%s...\n", current, latestClean)
 	}
 
 	binaryPath, err := resolveBinaryPath()
@@ -61,10 +62,10 @@ func updateAction(c *cli.Context, w io.Writer, currentVersion, repoURL string) e
 
 	updater := update.New(repoURL, w)
 	if err := updater.Update(c.Context, latest, binaryPath); err != nil {
-		return app.Errorf("update failed: %w", err)
+		return app.Errorf("upgrade failed: %w", err)
 	}
 
-	fmt.Fprintf(w, "Successfully updated to v%s!\n", latestClean)
+	fmt.Fprintf(w, "Successfully upgraded to v%s!\n", latestClean)
 
 	return nil
 }

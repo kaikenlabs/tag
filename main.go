@@ -62,8 +62,11 @@ func main() {
 			commands.ConvertCommand(),
 			commands.ExtractCommand(),
 			commands.UndoCommand(),
+			commands.CheckCommand(),
+			commands.DiffCommand(),
+			commands.UpdateTemplateCommand(),
 			commands.VersionCommand(Version),
-			commands.UpdateCommand(Version),
+			commands.UpgradeCommand(Version),
 			commands.DoctorCommand(Version),
 			commands.SkillCommand(Version, commands.SkillDocs{
 				Skill:     skillDoc,
