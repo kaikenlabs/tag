@@ -59,6 +59,11 @@ func WithIsTTY(v bool) ScaffoldOption {
 	return func(s *Scaffold) { s.isTTY = v }
 }
 
+// WithOutput sets the writer for user-facing messages.
+func WithOutput(w io.Writer) ScaffoldOption {
+	return func(s *Scaffold) { s.output = w }
+}
+
 func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
 	s := &Scaffold{
 		output:     os.Stdout,

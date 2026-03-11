@@ -76,6 +76,32 @@
           }
         }
       }
+    },
+    "test": {
+      "type": "object",
+      "description": "Matrix test configuration for validating boolean variable combinations",
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "type": "array",
+          "description": "Validation commands to run after scaffolding each combination",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "project_name": {
+          "type": "string",
+          "description": "Project name used for scaffold output (default: test-scaffold)"
+        },
+        "env": {
+          "type": "object",
+          "description": "Environment variables passed to validation commands",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "$defs": {

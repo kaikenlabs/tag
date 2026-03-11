@@ -592,6 +592,76 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### Matrix Testing
+
+```bash
+tag test [template-dir]                   # Test current directory (or specified path)
+```
+
+Discovers boolean variables in `tag.template.json`, generates all 2^N combinations, scaffolds each one in an isolated temp directory, and optionally runs validation commands. Useful for verifying templates work correctly with all boolean flag permutations before publishing.
+
+**Flags**:
+
+| Flag | Description |
+|------|-------------|
+| `-p` / `--parallel N` | Max concurrent test runs (default: 4) |
+| `-m` / `--meta key=value` | Required variable override (can be repeated) |
+| `--values <file>` | JSON file with variable values |
+| `--skip-var <name>` | Exclude boolean var from permutation (can be repeated) |
+| `--pin key=value` | Fix a variable to a specific value (can be repeated) |
+| `--run <command>` | Validation command, overrides template config (can be repeated) |
+| `--filter <expr>` | Filter combinations by index or key=value pairs |
+| `--fail-fast` | Stop on first failure |
+| `--dry-run` | List combinations without running tests |
+| `--keep-failed` | Keep scaffolded directories on failure for debugging |
+| `--timeout <duration>` | Per-command timeout (default: 5m) |
+| `--max-cases N` | Safety limit for total combinations, 0 = unlimited (default: 64) |
+| `--format text\|json` | Output format (default: text) |
+| `-v` / `--verbose` | Show full command output on failures |
+| `--accept-hooks` | Run hooks and template-defined test commands |
+
+**Template test configuration** (`tag.template.json`):
+
+```json
+{
+  "vars": { "...": "..." },
+  "test": {
+    "commands": ["go build ./...", "go vet ./..."],
+    "project_name": "test-scaffold",
+    "env": { "CGO_ENABLED": "0" }
+  }
+}
+```
+
+- `commands`: Validation commands run after each successful scaffold. Requires `--accept-hooks` to execute (security: prevents untrusted template commands).
+- `project_name`: Project name for scaffold output (default: `test-scaffold`).
+- `env`: Environment variables passed to validation commands.
+
+Use `--run` to provide commands directly without `--accept-hooks`:
+
+```bash
+tag test . --run "go build ./..." --run "go vet ./..."
+```
+
+**Pinning and skipping**:
+
+```bash
+tag test . --pin use_s3=false             # Fix use_s3, permute others
+tag test . --skip-var use_clickhouse      # Use default, don't permute
+```
+
+**Filtering**:
+
+```bash
+tag test . --filter 7                     # Run only combination index 7
+tag test . --filter use_postgres=true     # Only combos with postgres enabled
+tag test . --filter "use_postgres=true,use_amqp=true"
+```
+
+**Exit codes**: `0` = all passed, `1` = failures, `2` = errors (config/setup).
+
+**JSON output**: Use `--format json` for machine-parseable output (no text header, statuses as strings: `"passed"`, `"failed"`, `"errored"`).
+
 ### Self-Upgrade
 
 ```bash

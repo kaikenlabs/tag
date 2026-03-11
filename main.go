@@ -67,6 +67,7 @@ func main() {
 			commands.UpdateTemplateCommand(),
 			commands.VersionCommand(Version),
 			commands.UpgradeCommand(Version),
+			commands.TestCommand(),
 			commands.DoctorCommand(Version),
 			commands.SkillCommand(Version, commands.SkillDocs{
 				Skill:     skillDoc,
