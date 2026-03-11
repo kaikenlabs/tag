@@ -26,6 +26,25 @@ func ParseTemplateConfig(data []byte) (*TemplateConfig, error) {
 	return &config, nil
 }
 
+// TestConfig represents the optional "test" section in tag.template.json.
+type TestConfig struct {
+	Commands    []string          `json:"commands,omitempty"`
+	ProjectName string            `json:"project_name,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
+}
+
+// ParseTestConfig extracts the optional "test" section from raw template config JSON.
+// Returns nil if no test section is present.
+func ParseTestConfig(data []byte) (*TestConfig, error) {
+	var raw struct {
+		Test *TestConfig `json:"test"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse test config: %w", err)
+	}
+	return raw.Test, nil
+}
+
 // parseVariableDef parses a variable definition from its raw JSON form.
 // Supports both short form (just a value) and long form (full object).
 func parseVariableDef(name string, raw any) (VariableDef, error) {
