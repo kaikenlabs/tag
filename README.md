@@ -88,6 +88,7 @@ tag generate handler UserAuth
 | `tag template graph` | Visualize generator dependencies |
 | `tag lib add\|list\|remove\|update\|edit` | Manage the template library |
 | `tag convert cookiecutter <source>` | Convert Cookiecutter template |
+| `tag test [template-dir]` | Matrix-test all boolean variable combinations |
 | `tag version [--check]` | Print version, optionally check for updates |
 | `tag completion <shell>` | Output shell completion script |
 
@@ -105,6 +106,7 @@ tag generate handler UserAuth
 | [Filter Reference](docs/templates/filters.md) | Available template filters |
 | [Hooks Guide](docs/templates/hooks.md) | Pre and post hooks |
 | [Configuration Reference](docs/reference/tag.template.json.md) | `tag.template.json` schema |
+| [Test Command](docs/commands/test.md) | Matrix testing for template validation |
 | [Remote References](docs/reference/remote-refs.md) | Remote template formats |
 
 ## For AI Coding Agents

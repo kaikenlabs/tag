@@ -37,6 +37,7 @@ For IDE autocompletion, add the `$schema` property:
 | `version` | string | No | Template version (semver recommended) |
 | `vars` | object | No | Variable definitions |
 | `hooks` | object | No | Pre and post scaffold hooks |
+| `test` | object | No | Matrix testing configuration |
 
 ### Example
 
@@ -363,6 +364,49 @@ In non-TTY mode the expression is resolved silently, the same as a derived varia
 - Failure is a **warning** (files are kept)
 
 See [Hooks Guide](../templates/hooks.md) for complete documentation.
+
+## Test Configuration
+
+The `test` block configures `tag test` for matrix testing boolean variable combinations.
+
+### Structure
+
+```json
+{
+  "test": {
+    "project_name": "test-project",
+    "commands": ["go build ./...", "go vet ./..."]
+  }
+}
+```
+
+### Test Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `project_name` | string | Fixed project name for test scaffolds (avoids prompt) |
+| `commands` | string[] | Validation commands run inside each scaffolded directory |
+
+### Example
+
+```json
+{
+  "name": "Go API Template",
+  "vars": {
+    "project_name": "my-api",
+    "use_docker": { "type": "boolean", "default": true },
+    "use_grpc": { "type": "boolean", "default": false }
+  },
+  "test": {
+    "project_name": "test-api",
+    "commands": ["go build ./..."]
+  }
+}
+```
+
+With 2 boolean variables, `tag test` generates 4 combinations. Each is scaffolded with `project_name=test-api` and validated by running `go build ./...` in the output directory.
+
+Template-defined `commands` require `--accept-hooks` to execute (same security model as scaffold hooks). See [tag test](../commands/test.md) for full usage.
 
 ## Complete Example
 

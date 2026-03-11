@@ -42,6 +42,9 @@ Generate code in existing project?
 Validate template before publishing?
   → tag template lint [path]
 
+Test all boolean combinations?
+  → tag test [template-dir]
+
 Convert Cookiecutter?
   → tag convert cookiecutter <src> -o <dst>
   → Or just scaffold directly (auto-detects)
@@ -199,6 +202,7 @@ my-project/
 | `tag lib ls` | List installed templates |
 | `tag lib rm <name>` | Remove template |
 | `tag lib update [name]` | Update from source |
+| `tag test [template-dir]` | Matrix-test all boolean variable combinations |
 | `tag undo` | Revert the last generation |
 | `tag undo --list` | Show generation history |
 | `tag undo --id <id>` | Revert a specific generation |
@@ -223,9 +227,9 @@ my-project/
 | `-B` / `--in-bundle` | template new generator | Create inside bundle |
 | `-s` / `--self-contained` | template new bundle | Self-contained bundle |
 | `--skip-hooks` | update | Skip all hook execution during update |
-| `--accept-hooks` | scaffold, update | Run hooks without prompting |
+| `--accept-hooks` | scaffold, update, test | Run hooks and template-defined test commands |
 | `--backup` | update | Create backup before applying (default: true) |
-| `--dry-run` / `-d` | scaffold, generate, convert, update | Preview without writing |
+| `--dry-run` / `-d` | scaffold, generate, convert, update, test | Preview without writing |
 | `--all` | generate list, template list | Show all generators/bundles, including those with unmet requirements |
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |

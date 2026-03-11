@@ -534,3 +534,73 @@ Docker image [registry.myorg.com/payments-api]: ⏎
 | `"_internal": "{{ vars.x }}"` | No | Private — silent |
 
 In non-TTY / `--no-input` mode, all three resolve silently.
+
+---
+
+## Recipe 13: Matrix Testing Boolean Combinations
+
+Validate that a template scaffolds correctly for every combination of boolean variables.
+
+**Template** — `tag.template.json`:
+```json
+{
+  "name": "go-service",
+  "vars": {
+    "project_name": "my-service",
+    "use_docker": { "type": "boolean", "default": true },
+    "use_grpc": { "type": "boolean", "default": false },
+    "use_ci": { "type": "boolean", "default": true }
+  },
+  "test": {
+    "project_name": "test-project",
+    "commands": ["go build ./..."]
+  }
+}
+```
+
+The `test` block defines a fixed `project_name` for scaffolding and validation commands that run inside each scaffolded directory. With 3 boolean vars, `tag test` generates 2³ = 8 combinations and scaffolds each one.
+
+**Basic usage**:
+```bash
+# Preview combinations without running
+tag test ./my-template --dry-run
+
+# Run all combinations (commands require --accept-hooks)
+tag test ./my-template --accept-hooks
+
+# JSON output for CI
+tag test ./my-template --accept-hooks --format json
+```
+
+**Pinning and skipping variables**:
+```bash
+# Pin use_docker=true (not permuted), skip use_ci (uses default)
+tag test ./my-template --pin use_docker=true --skip use_ci --accept-hooks
+
+# Run only combination #3
+tag test ./my-template --filter 3 --accept-hooks
+```
+
+**CI integration** — exit codes:
+- `0` — all combinations passed
+- `1` — one or more combinations failed validation
+- `2` — internal error (e.g., template parse failure)
+
+```bash
+# CI script
+tag test ./my-template --accept-hooks --format json --fail-fast
+echo "Exit code: $?"
+```
+
+**Debugging failures**:
+```bash
+# Keep scaffolded directories for failed cases
+tag test ./my-template --accept-hooks --keep-failed --verbose
+
+# Output shows the kept directory path for each failure:
+#   FAIL [2] use_docker=true use_grpc=true use_ci=false
+#     Phase: validate:go build ./...
+#     Kept:  /tmp/tag-test-abc123
+```
+
+**Safety limits**: Templates with many boolean vars can produce large matrices (2^N). The default limit is 64 combinations. Override with `--max-cases 0` for unlimited, or `--max-cases 128` for a higher cap.
