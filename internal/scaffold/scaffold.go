@@ -320,9 +320,12 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 	}
 
 	// Copy generators, bundles, and shared templates into the output .tag/ dir
-	// so they are available locally without requiring "tag lib add".
-	if err := copyGeneratorsToOutput(ctx.templateDirAbs, ctx.projectRoot); err != nil {
-		return ScaffoldResult{}, fmt.Errorf("failed to copy generators: %w", err)
+	// when the template is not being added to the library (where generators
+	// are resolved from instead).
+	if !ctx.opts.SkipGeneratorCopy {
+		if err := copyGeneratorsToOutput(ctx.templateDirAbs, ctx.projectRoot); err != nil {
+			return ScaffoldResult{}, fmt.Errorf("failed to copy generators: %w", err)
+		}
 	}
 
 	// Run post-scaffold hooks

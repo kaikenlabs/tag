@@ -21,6 +21,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
+	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -150,6 +151,7 @@ func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.En
 	opts.TemplateRef = entry.Source
 	opts.TemplateName = entry.Name
 	opts.IsRemote = false
+	opts.SkipGeneratorCopy = true // generators resolve from library
 
 	return runScaffold(c, opts, func(*scaffold.CookiecutterDetectedError) error {
 		return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", entry.Name, entry.Name)
@@ -206,6 +208,17 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 		opts.TemplateName = remote.DeriveName(templateRef)
 	}
 
+	// Decide whether to add the template to the library.
+	// Remote templates are always added; local templates are added when
+	// --add-to-lib is set or the user confirms interactively.
+	addToLib := isRemote
+	if !isRemote {
+		addToLib = resolveAddToLib(c, templateDir)
+	}
+	if addToLib {
+		opts.SkipGeneratorCopy = true
+	}
+
 	// Verify template lockfile for remote templates.
 	if isRemote {
 		if lockErr := verifyTemplateLock(templateRef, templateDir, opts.UpdateLock, opts.IgnoreLock); lockErr != nil {
@@ -220,12 +233,39 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 		return err
 	}
 
-	// Auto-add remote templates to the library for future use
-	if isRemote {
+	// Add the template to the library for generator resolution.
+	if addToLib {
 		addToLibrary(c, templateRef, templateDir)
 	}
 
 	return nil
+}
+
+// resolveAddToLib determines whether a local template should be added to the
+// library after scaffolding. Returns true if --add-to-lib is set, or if the
+// template has generators and the user confirms interactively.
+func resolveAddToLib(c *cli.Context, templateDir string) bool {
+	if c.Bool(flags.AddToLibFlag) {
+		return true
+	}
+
+	// Only prompt if the template has generators/bundles worth installing.
+	hasGenerators := hasSubdirScaffold(templateDir, types.TemplatesDir) || hasSubdirScaffold(templateDir, types.GeneratorsDir)
+	if !hasGenerators {
+		return false
+	}
+
+	// Non-interactive mode: don't add (safe default, generators copied to .tag/).
+	if c.Bool("no-input") || !scaffold.IsTTY() {
+		return false
+	}
+
+	prompter := scaffold.NewInteractivePrompter()
+	add, err := prompter.Confirm("Add template to library? (enables generator resolution without copying .tag/)", false)
+	if err != nil {
+		return false
+	}
+	return add
 }
 
 // looksLikeBareName returns true if ref is a simple name (no path separators,
@@ -481,11 +521,8 @@ func displayScaffoldSummary(w io.Writer, result scaffold.ScaffoldResult) {
 	// Check if the template has generators
 	hasGenerators := hasSubdirScaffold(templateDir, types.TemplatesDir) || hasSubdirScaffold(templateDir, types.GeneratorsDir)
 
-	if hasGenerators && opts.TemplateName != "" {
+	if hasGenerators {
 		fmt.Fprintln(w, "  tag generate list    # see available generators")
-	} else if hasGenerators && opts.TemplateName == "" {
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "  Add to library for generators: tag lib add %s\n", opts.TemplateRef)
 	}
 	fmt.Fprintln(w)
 
