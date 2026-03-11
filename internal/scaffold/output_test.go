@@ -1143,6 +1143,160 @@ func TestUT_IsSkippedEntry(t *testing.T) {
 	}
 }
 
+// --- copyGeneratorsToOutput ---
+
+func TestUT_CopyGeneratorsToOutput_FromTagDir(t *testing.T) {
+	t.Parallel()
+	templateDir := t.TempDir()
+	projectRoot := t.TempDir()
+
+	// Create .tag/ with a generator and _shared
+	genDir := filepath.Join(templateDir, types.TemplatesDir, "component")
+	require.NoError(t, os.MkdirAll(genDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "main.go.tmpl"), []byte("pkg"), 0o644))
+
+	sharedDir := filepath.Join(templateDir, types.TemplatesDir, types.SharedDir)
+	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, "helper.go"), []byte("shared"), 0o644))
+
+	// Create output .tag/ (simulating TAG already created it for history)
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, types.TemplatesDir), 0o755))
+
+	err := copyGeneratorsToOutput(templateDir, projectRoot)
+	require.NoError(t, err)
+
+	// Generator should be copied
+	content, err := os.ReadFile(filepath.Join(projectRoot, types.TemplatesDir, "component", "main.go.tmpl"))
+	require.NoError(t, err)
+	assert.Equal(t, "pkg", string(content))
+
+	// Shared should be copied
+	content, err = os.ReadFile(filepath.Join(projectRoot, types.TemplatesDir, types.SharedDir, "helper.go"))
+	require.NoError(t, err)
+	assert.Equal(t, "shared", string(content))
+}
+
+func TestUT_CopyGeneratorsToOutput_FromGeneratorsDir(t *testing.T) {
+	t.Parallel()
+	templateDir := t.TempDir()
+	projectRoot := t.TempDir()
+
+	// Create _generators/ with a generator
+	genDir := filepath.Join(templateDir, types.GeneratorsDir, "page")
+	require.NoError(t, os.MkdirAll(genDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "page.go.tmpl"), []byte("page"), 0o644))
+
+	err := copyGeneratorsToOutput(templateDir, projectRoot)
+	require.NoError(t, err)
+
+	// Generator should be copied into .tag/
+	content, err := os.ReadFile(filepath.Join(projectRoot, types.TemplatesDir, "page", "page.go.tmpl"))
+	require.NoError(t, err)
+	assert.Equal(t, "page", string(content))
+}
+
+func TestUT_CopyGeneratorsToOutput_BothSources(t *testing.T) {
+	t.Parallel()
+	templateDir := t.TempDir()
+	projectRoot := t.TempDir()
+
+	// _generators/ has "page"
+	genDir := filepath.Join(templateDir, types.GeneratorsDir, "page")
+	require.NoError(t, os.MkdirAll(genDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "page.go"), []byte("from_generators"), 0o644))
+
+	// .tag/ has "component"
+	tagDir := filepath.Join(templateDir, types.TemplatesDir, "component")
+	require.NoError(t, os.MkdirAll(tagDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tagDir, "comp.go"), []byte("from_tag"), 0o644))
+
+	err := copyGeneratorsToOutput(templateDir, projectRoot)
+	require.NoError(t, err)
+
+	// Both should be present
+	content, err := os.ReadFile(filepath.Join(projectRoot, types.TemplatesDir, "page", "page.go"))
+	require.NoError(t, err)
+	assert.Equal(t, "from_generators", string(content))
+
+	content, err = os.ReadFile(filepath.Join(projectRoot, types.TemplatesDir, "component", "comp.go"))
+	require.NoError(t, err)
+	assert.Equal(t, "from_tag", string(content))
+}
+
+func TestUT_CopyGeneratorsToOutput_SkipsHistoryDir(t *testing.T) {
+	t.Parallel()
+	templateDir := t.TempDir()
+	projectRoot := t.TempDir()
+
+	// Create .tag/ with a "history" directory (should be skipped)
+	histDir := filepath.Join(templateDir, types.TemplatesDir, "history")
+	require.NoError(t, os.MkdirAll(histDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(histDir, "data.json"), []byte("hist"), 0o644))
+
+	// Also create a real generator
+	genDir := filepath.Join(templateDir, types.TemplatesDir, "model")
+	require.NoError(t, os.MkdirAll(genDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "model.go"), []byte("model"), 0o644))
+
+	err := copyGeneratorsToOutput(templateDir, projectRoot)
+	require.NoError(t, err)
+
+	// history should NOT be copied
+	_, err = os.Stat(filepath.Join(projectRoot, types.TemplatesDir, "history"))
+	assert.True(t, os.IsNotExist(err))
+
+	// model should be copied
+	_, err = os.Stat(filepath.Join(projectRoot, types.TemplatesDir, "model", "model.go"))
+	assert.NoError(t, err)
+}
+
+func TestUT_CopyGeneratorsToOutput_NoSourceDirs(t *testing.T) {
+	t.Parallel()
+	templateDir := t.TempDir()
+	projectRoot := t.TempDir()
+
+	// No .tag/ or _generators/ — should succeed silently
+	err := copyGeneratorsToOutput(templateDir, projectRoot)
+	require.NoError(t, err)
+}
+
+func TestUT_CopyGeneratorsToOutput_SkipsFiles(t *testing.T) {
+	t.Parallel()
+	templateDir := t.TempDir()
+	projectRoot := t.TempDir()
+
+	// Create .tag/ with a file (not a directory) — should be skipped
+	tagDir := filepath.Join(templateDir, types.TemplatesDir)
+	require.NoError(t, os.MkdirAll(tagDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tagDir, "notes.txt"), []byte("note"), 0o644))
+
+	err := copyGeneratorsToOutput(templateDir, projectRoot)
+	require.NoError(t, err)
+
+	// The file should NOT be copied
+	_, err = os.Stat(filepath.Join(projectRoot, types.TemplatesDir, "notes.txt"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestUT_CopyGeneratorsToOutput_Bundles(t *testing.T) {
+	t.Parallel()
+	templateDir := t.TempDir()
+	projectRoot := t.TempDir()
+
+	// Create .tag/_bundles/crud/ with a bundle manifest
+	bundleDir := filepath.Join(templateDir, types.TemplatesDir, types.BundlesDir, "crud")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "crud.json"), []byte(`{"generators":["model","handler"]}`), 0o644))
+
+	err := copyGeneratorsToOutput(templateDir, projectRoot)
+	require.NoError(t, err)
+
+	// Bundle should be copied
+	content, err := os.ReadFile(filepath.Join(projectRoot, types.TemplatesDir, types.BundlesDir, "crud", "crud.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "generators")
+}
+
 // --- .tagignore ---
 
 func TestUT_Write_SkipsTagIgnoreFile(t *testing.T) {

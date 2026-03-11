@@ -319,6 +319,12 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		return ScaffoldResult{}, fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
+	// Copy generators, bundles, and shared templates into the output .tag/ dir
+	// so they are available locally without requiring "tag lib add".
+	if err := copyGeneratorsToOutput(ctx.templateDirAbs, ctx.projectRoot); err != nil {
+		return ScaffoldResult{}, fmt.Errorf("failed to copy generators: %w", err)
+	}
+
 	// Run post-scaffold hooks
 	if ctx.hooksAllowed {
 		// When a project wrapper was unwrapped, hook scripts live in the
