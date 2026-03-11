@@ -220,6 +220,35 @@ Directory and file names support template expressions:
   {{ vars.project_name | snake }}_test.go
 ```
 
+### Conditional File Generation
+
+File and directory names can use `{% if %}` blocks to conditionally include or exclude entire files from output. When the condition evaluates to false, the path renders to an empty string and the file is skipped entirely — it is never created.
+
+```
+my-template/
+  {{ vars.project_name | snake }}/
+    main.go
+    {% if vars.use_docker %}Dockerfile{% endif %}
+    {% if vars.use_docker %}docker-compose.yml{% endif %}
+    {% if vars.use_ci %}.github/{% endif %}
+```
+
+- `vars.use_docker = true` → `Dockerfile` and `docker-compose.yml` are generated
+- `vars.use_docker = false` → both files are skipped completely
+- `vars.use_ci = false` → the `.github/` directory is skipped entirely
+
+**Go file caveat**: If you use conditional *content* (rather than a conditional filename) to gate an entire `.go` file, the false path produces an empty file which fails compilation. Either use a conditional filename to skip the file, or provide a fallback:
+
+```go
+{%- if vars.use_grpc %}
+package server
+
+func StartGRPC() { ... }
+{%- else %}
+package server
+{%- endif %}
+```
+
 ### .tagignore
 
 Excludes files from scaffold output using gitignore syntax. Place in template root.
