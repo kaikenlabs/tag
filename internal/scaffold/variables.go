@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/kaikenlabs/tag/internal/chalk"
 	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
@@ -25,11 +27,12 @@ type VariableCollector interface {
 type DefaultVariableCollector struct {
 	prompter Prompter
 	engine   template.TemplateRenderer // optional; resolves expression defaults before prompting
+	output   io.Writer                 // destination for user-facing summary lines
 }
 
 // NewVariableCollector creates a new variable collector with the given prompter.
-func NewVariableCollector(prompter Prompter) *DefaultVariableCollector {
-	return &DefaultVariableCollector{prompter: prompter}
+func NewVariableCollector(prompter Prompter, output io.Writer) *DefaultVariableCollector {
+	return &DefaultVariableCollector{prompter: prompter, output: output}
 }
 
 // WithEngine sets the template engine used to resolve expression defaults at
@@ -196,8 +199,27 @@ func (c *DefaultVariableCollector) promptAll(
 			return err
 		}
 		vars[name] = value
+
+		// Print a summary line so the user can see their choice
+		c.printChoiceSummary(name, value, def.Secret)
 	}
 	return nil
+}
+
+// printChoiceSummary prints a one-line summary of a variable choice.
+func (c *DefaultVariableCollector) printChoiceSummary(name string, value any, secret bool) {
+	if c.output == nil {
+		return
+	}
+	display := fmt.Sprintf("%v", value)
+	if secret {
+		display = "****"
+	}
+	fmt.Fprintf(c.output, "  %s %s %s\n",
+		chalk.Green("✓"),
+		chalk.Dim(name+":"),
+		display,
+	)
 }
 
 // resolveEvaluatedDefault returns a copy of def with its expression default
