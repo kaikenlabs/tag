@@ -1,6 +1,8 @@
 package scaffold
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -68,7 +70,7 @@ func (m *MockPrompter) Number(label string, defaultValue float64) (float64, erro
 
 func TestUT_VariableCollector_DefaultsOnly(t *testing.T) {
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -92,7 +94,7 @@ func TestUT_VariableCollector_DefaultsOnly(t *testing.T) {
 
 func TestUT_VariableCollector_PriorityChain(t *testing.T) {
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -129,7 +131,7 @@ func TestUT_VariableCollector_PriorityChain(t *testing.T) {
 
 func TestUT_VariableCollector_RequiredMissing(t *testing.T) {
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -151,7 +153,7 @@ func TestUT_VariableCollector_RequiredMissing(t *testing.T) {
 
 func TestUT_VariableCollector_RequiredMissing_MultipleVars(t *testing.T) {
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -178,7 +180,7 @@ func TestUT_VariableCollector_RequiredMissing_MultipleVars(t *testing.T) {
 func TestUT_VariableCollector_PromptForRequired(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for project_name"] = "prompted_value"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -197,7 +199,7 @@ func TestUT_VariableCollector_PromptForRequired(t *testing.T) {
 
 func TestUT_VariableCollector_SkipPrivateVars(t *testing.T) {
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -222,7 +224,7 @@ func TestUT_VariableCollector_PromptForVarsWithDefaults(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for project_name"] = "user_provided_value"
 	mockPrompter.InputResults["Enter value for author"] = "Jane Doe"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -246,7 +248,7 @@ func TestUT_VariableCollector_ValuesFileSkipsPrompt(t *testing.T) {
 	// This test verifies that variables provided via values file are NOT re-prompted
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for prompted_var"] = "prompted_value"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -281,7 +283,7 @@ func TestUT_VariableCollector_SkipDerivedVars(t *testing.T) {
 	// are NOT prompted, following Cookiecutter behavior
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for package_display_name"] = "My Package"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -311,7 +313,7 @@ func TestUT_VariableCollector_SkipDerivedVars(t *testing.T) {
 func TestUT_VariableCollector_DerivedVarsWithMethodCalls(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for project_name"] = "My Project"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -337,7 +339,7 @@ func TestUT_VariableCollector_MetaSkipsPrompt(t *testing.T) {
 	// Variables provided via --meta flag should NOT be prompted in interactive mode
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for prompted_var"] = "prompted_value"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -366,7 +368,7 @@ func TestUT_VariableCollector_MetaSkipsPrompt(t *testing.T) {
 func TestUT_VariableCollector_MetaSkipsPromptAllTypes(t *testing.T) {
 	// Verify --meta skips prompts for boolean, number, and choice types too
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -399,7 +401,7 @@ func TestUT_VariableCollector_MetaSkipsPromptAllTypes(t *testing.T) {
 
 func TestUT_VariableCollector_TypeCoercion(t *testing.T) {
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -425,7 +427,7 @@ func TestUT_VariableCollector_TypeCoercion(t *testing.T) {
 
 func TestUT_VariableCollector_InvalidTypeCoercion(t *testing.T) {
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -448,7 +450,7 @@ func TestUT_VariableCollector_InvalidTypeCoercion(t *testing.T) {
 func TestUT_VariableCollector_ChoicePrompt(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	mockPrompter.SelectResults["Select a license"] = "MIT"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -472,7 +474,7 @@ func TestUT_VariableCollector_ChoicePrompt(t *testing.T) {
 func TestUT_VariableCollector_BooleanPrompt(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	mockPrompter.ConfirmResults["Include Docker setup?"] = true
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -495,7 +497,7 @@ func TestUT_VariableCollector_BooleanPrompt(t *testing.T) {
 func TestUT_VariableCollector_NumberPrompt(t *testing.T) {
 	mockPrompter := NewMockPrompter()
 	mockPrompter.NumberResults["Server port"] = 3000
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -575,7 +577,7 @@ func TestUT_VariableCollector_ReplayPriority(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -624,7 +626,7 @@ func TestUT_VariableCollector_ReplayOverridesDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -653,7 +655,7 @@ func TestUT_VariableCollector_ReplayNotFound(t *testing.T) {
 	t.Setenv("HOME", tempHome)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -674,7 +676,7 @@ func TestUT_VariableCollector_ReplayNotFound(t *testing.T) {
 
 func TestUT_VariableCollector_ReplayWithoutTemplateRef(t *testing.T) {
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -706,7 +708,7 @@ func TestUT_VariableCollector_ReplayPromptsForNewVars(t *testing.T) {
 
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Enter value for new_var"] = "prompted_new_value"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	// Config has both var1 (in replay) and new_var (not in replay)
 	config := &TemplateConfig{
@@ -745,7 +747,7 @@ func TestUT_VariableCollector_ReplayTypeCoercion(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	config := &TemplateConfig{
 		Vars: map[string]VariableDef{
@@ -782,7 +784,7 @@ func TestUT_VariableCollector_ReplayIgnoresRemovedVars(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 
 	// Template only has current_var, not removed_var
 	config := &TemplateConfig{
@@ -933,7 +935,7 @@ func TestUT_EvaluatedDefault_PromptShownWithResolvedDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -966,7 +968,7 @@ func TestUT_EvaluatedDefault_UserCanOverride(t *testing.T) {
 
 	mockPrompter := NewMockPrompter()
 	mockPrompter.InputResults["Go module path"] = "github.com/myorg/my-service"
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -995,7 +997,7 @@ func TestUT_EvaluatedDefault_NonTTYResolvesExpression(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1062,7 +1064,7 @@ func TestUT_EvaluatedDefault_SeesPositionalProjectName(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1096,7 +1098,7 @@ func TestUT_EvaluatedDefault_SeesMetaOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1136,7 +1138,7 @@ func TestUT_VariableCollector_DependencyOrdering(t *testing.T) {
 	collector := NewVariableCollector(&orderTrackingPrompter{
 		inner:       NewMockPrompter(),
 		promptOrder: &promptOrder,
-	})
+	}, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1169,7 +1171,7 @@ func TestUT_VariableCollector_CircularDependencyError(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1199,7 +1201,7 @@ func TestUT_VariableCollector_SelfReferenceError(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1227,7 +1229,7 @@ func TestUT_VariableCollector_MultiHopDependencyChain(t *testing.T) {
 	collector := NewVariableCollector(&orderTrackingPrompter{
 		inner:       NewMockPrompter(),
 		promptOrder: &promptOrder,
-	})
+	}, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1267,7 +1269,7 @@ func TestUT_VariableCollector_DeterministicTieBreak(t *testing.T) {
 	collector := NewVariableCollector(&orderTrackingPrompter{
 		inner:       NewMockPrompter(),
 		promptOrder: &promptOrder,
-	})
+	}, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1295,7 +1297,7 @@ func TestUT_EvaluatedDefault_NonTTY_MetaOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	mockPrompter := NewMockPrompter()
-	collector := NewVariableCollector(mockPrompter)
+	collector := NewVariableCollector(mockPrompter, io.Discard)
 	collector.WithEngine(engine)
 
 	config := &TemplateConfig{
@@ -1469,4 +1471,53 @@ func indexOf(slice []string, s string) int {
 		}
 	}
 	return -1
+}
+
+func TestUT_ChoiceSummaryPrintedAfterPrompt(t *testing.T) {
+	t.Parallel()
+
+	mockPrompter := NewMockPrompter()
+	var buf bytes.Buffer
+	collector := NewVariableCollector(mockPrompter, &buf)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"name":    {Type: VarTypeString, Default: "hello"},
+			"verbose": {Type: VarTypeBoolean, Default: true},
+		},
+	}
+
+	vars, err := collector.Collect(config, Options{}, true)
+	require.NoError(t, err)
+	assert.Equal(t, "hello", vars["name"])
+	assert.Equal(t, true, vars["verbose"])
+
+	output := buf.String()
+	assert.Contains(t, output, "name:")
+	assert.Contains(t, output, "hello")
+	assert.Contains(t, output, "verbose:")
+	assert.Contains(t, output, "true")
+}
+
+func TestUT_ChoiceSummaryMasksSecrets(t *testing.T) {
+	t.Parallel()
+
+	mockPrompter := NewMockPrompter()
+	var buf bytes.Buffer
+	collector := NewVariableCollector(mockPrompter, &buf)
+
+	config := &TemplateConfig{
+		Vars: map[string]VariableDef{
+			"api_key": {Type: VarTypeString, Default: "sk-12345", Secret: true},
+		},
+	}
+
+	vars, err := collector.Collect(config, Options{}, true)
+	require.NoError(t, err)
+	assert.Equal(t, "sk-12345", vars["api_key"])
+
+	output := buf.String()
+	assert.Contains(t, output, "api_key:")
+	assert.Contains(t, output, "****")
+	assert.NotContains(t, output, "sk-12345")
 }

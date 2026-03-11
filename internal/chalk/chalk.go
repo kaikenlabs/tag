@@ -16,6 +16,7 @@ var (
 	yellow colourCode = "\033[33m"
 	blue   colourCode = "\033[34m"
 	cyan   colourCode = "\033[36m"
+	dim    colourCode = "\033[2m"
 )
 
 // Red - colour red
@@ -41,6 +42,11 @@ func Blue(msg string) string {
 // Cyan - colour cyan
 func Cyan(msg string) string {
 	return colourTerminalOutput(msg, cyan)
+}
+
+// Dim - colour dim
+func Dim(msg string) string {
+	return colourTerminalOutput(msg, dim)
 }
 
 func colourTerminalOutput(msg string, colourCode colourCode) string {

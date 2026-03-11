@@ -93,7 +93,7 @@ func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
 	prompter := GetPrompter(opts.NoInput)
 
 	// Build remaining components from the (possibly injected) engine
-	collector := NewVariableCollector(prompter)
+	collector := NewVariableCollector(prompter, s.output)
 	collector.WithEngine(s.engine)
 	processor := NewPathProcessor(s.engine)
 	processor.SetAllowRecursiveRender(opts.AllowRecursiveRender)
