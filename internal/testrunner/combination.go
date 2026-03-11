@@ -1,6 +1,7 @@
 package testrunner
 
 import (
+	"fmt"
 	"maps"
 	"sort"
 	"strconv"
@@ -27,6 +28,18 @@ func ExtractBooleanVars(cfg *tmplconfig.TemplateConfig, skipVars []string) []str
 	}
 	sort.Strings(boolVars)
 	return boolVars
+}
+
+// CombinationCount returns the number of combinations that would be generated
+// for the given boolean vars and pin vars, without allocating the full slice.
+func CombinationCount(boolVars []string, pinVars map[string]string) int {
+	permuted := 0
+	for _, v := range boolVars {
+		if _, pinned := pinVars[v]; !pinned {
+			permuted++
+		}
+	}
+	return 1 << permuted
 }
 
 // GenerateCombinations produces all 2^N boolean combinations for the given variable names.
@@ -72,20 +85,20 @@ func GenerateCombinations(boolVars []string, pinVars map[string]string) []Combin
 //   - A numeric index (e.g., "7")
 //   - Comma-separated key=value pairs (e.g., "use_postgres=true,use_amqp=true")
 //
-// Returns the filtered list.
-func FilterCombinations(combos []Combination, filter string) []Combination {
+// Returns an error if the filter expression is malformed.
+func FilterCombinations(combos []Combination, filter string) ([]Combination, error) {
 	if filter == "" {
-		return combos
+		return combos, nil
 	}
 
 	// Numeric filter: match by combo index.
 	if idx, err := strconv.Atoi(filter); err == nil {
 		for _, c := range combos {
 			if c.Index == idx {
-				return []Combination{c}
+				return []Combination{c}, nil
 			}
 		}
-		return nil
+		return nil, nil
 	}
 
 	// Key=value filter: every specified pair must appear in the combo.
@@ -94,7 +107,7 @@ func FilterCombinations(combos []Combination, filter string) []Combination {
 	for _, p := range pairs {
 		k, v, ok := strings.Cut(p, "=")
 		if !ok {
-			continue
+			return nil, fmt.Errorf("invalid filter %q: expected key=value format", p)
 		}
 		filterMap[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}
@@ -112,7 +125,7 @@ func FilterCombinations(combos []Combination, filter string) []Combination {
 			result = append(result, c)
 		}
 	}
-	return result
+	return result, nil
 }
 
 // ComboLabel returns a human-readable label for a combination.

@@ -54,6 +54,30 @@ func TestUT_ExtractBooleanVars(t *testing.T) {
 	}
 }
 
+func TestUT_CombinationCount(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		boolVars []string
+		pinVars  map[string]string
+		want     int
+	}{
+		{name: "2 vars", boolVars: []string{"a", "b"}, want: 4},
+		{name: "3 vars", boolVars: []string{"a", "b", "c"}, want: 8},
+		{name: "0 vars", boolVars: nil, want: 1},
+		{name: "1 pinned of 3", boolVars: []string{"a", "b", "c"}, pinVars: map[string]string{"b": "true"}, want: 4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := testrunner.CombinationCount(tt.boolVars, tt.pinVars)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestUT_GenerateCombinations(t *testing.T) {
 	t.Parallel()
 
@@ -130,18 +154,25 @@ func TestUT_FilterCombinations(t *testing.T) {
 		name    string
 		filter  string
 		wantLen int
+		wantErr bool
 	}{
 		{name: "empty filter returns all", filter: "", wantLen: 4},
 		{name: "numeric filter returns one", filter: "0", wantLen: 1},
 		{name: "kv filter narrows", filter: "a=true", wantLen: 2},
 		{name: "multi kv filter", filter: "a=true,b=true", wantLen: 1},
 		{name: "no match returns nil", filter: "999", wantLen: 0},
+		{name: "malformed filter errors", filter: "noequals", wantErr: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			filtered := testrunner.FilterCombinations(combos, tt.filter)
+			filtered, err := testrunner.FilterCombinations(combos, tt.filter)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
 			assert.Len(t, filtered, tt.wantLen)
 		})
 	}

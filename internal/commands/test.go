@@ -3,14 +3,12 @@ package commands
 import (
 	"fmt"
 	"io"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/testrunner"
-	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -34,6 +32,9 @@ Validation commands can be defined in tag.template.json:
 
 Or overridden via --run flags. If no commands are configured, only
 scaffold success is verified.
+
+Template-defined test commands require --accept-hooks to execute.
+Use --run to provide commands directly without requiring --accept-hooks.
 
 EXAMPLES
   tag test                                  # test current directory
@@ -125,18 +126,18 @@ func testFlags() []cli.Flag {
 		},
 		&cli.BoolFlag{
 			Name:  "accept-hooks",
-			Usage: "Accept and run pre/post scaffold hooks during testing",
+			Usage: "Accept and run hooks and template-defined test commands",
 		},
 	}
 }
 
 func testAction(c *cli.Context, w io.Writer, templateDir string) error {
-	pinVars, err := parseKeyValueSlice(c.StringSlice("pin"))
+	pinVars, err := parse.ParseKeyValues(c.StringSlice("pin"), true)
 	if err != nil {
 		return app.Errorf("invalid --pin value: %w", err)
 	}
 
-	meta, err := parseKeyValueSlice(c.StringSlice("meta"))
+	meta, err := parse.ParseKeyValues(c.StringSlice("meta"), true)
 	if err != nil {
 		return app.Errorf("invalid --meta value: %w", err)
 	}
@@ -160,26 +161,24 @@ func testAction(c *cli.Context, w io.Writer, templateDir string) error {
 		Format:      c.String("format"),
 	}
 
-	// Load template config to extract boolean var names for display.
-	tmplCfg, err := loadTestTemplateConfig(templateDir)
+	plan, err := testrunner.Plan(cfg)
 	if err != nil {
-		return err
+		return app.Errorf("test plan: %w", err)
 	}
-	boolVars := testrunner.ExtractBooleanVars(tmplCfg, cfg.SkipVars)
 
-	// Header.
-	combos := testrunner.GenerateCombinations(boolVars, pinVars)
-	combos = testrunner.FilterCombinations(combos, cfg.Filter)
-	fmt.Fprintf(w, "Template: %s\n", templateDir)
-	fmt.Fprintf(w, "Boolean variables: %v\n", boolVars)
-	fmt.Fprintf(w, "Combinations: %d | Parallel: %d\n\n", len(combos), cfg.Parallel)
+	// Print header (skip for JSON to keep stdout machine-parseable).
+	if cfg.Format != "json" {
+		fmt.Fprintf(w, "Template: %s\n", templateDir)
+		fmt.Fprintf(w, "Boolean variables: %v\n", plan.BoolVars)
+		fmt.Fprintf(w, "Combinations: %d | Parallel: %d\n\n", len(plan.Combos), cfg.Parallel)
+	}
 
 	if cfg.DryRun {
-		testrunner.PrintDryRun(w, combos, boolVars)
+		testrunner.PrintDryRun(w, plan.Combos, plan.BoolVars)
 		return nil
 	}
 
-	report, err := testrunner.Run(c.Context, cfg)
+	report, err := testrunner.Execute(c.Context, plan, cfg)
 	if err != nil {
 		return app.Errorf("test runner: %w", err)
 	}
@@ -190,45 +189,20 @@ func testAction(c *cli.Context, w io.Writer, templateDir string) error {
 			return app.Errorf("write JSON report: %w", jsonErr)
 		}
 	default:
-		testrunner.PrintTextReport(w, report, boolVars, cfg.Verbose)
+		testrunner.PrintTextReport(w, report, plan.BoolVars, cfg.Verbose)
 	}
 
 	switch report.ExitCode() {
-	case 1:
+	case testrunner.ExitFailure:
 		return &app.CommandError{
 			Message: fmt.Sprintf("matrix test: %d failure(s)", report.Failed),
 			Code:    app.ExitGeneral,
 		}
-	case 2:
+	case testrunner.ExitError:
 		return &app.CommandError{
 			Message: fmt.Sprintf("matrix test: %d error(s)", report.Errored),
 			Code:    app.ExitUsage,
 		}
 	}
 	return nil
-}
-
-func loadTestTemplateConfig(templateDir string) (*tmplconfig.TemplateConfig, error) {
-	configPath := templateDir + "/tag.template.json"
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, app.Errorf("read template config: %w", err)
-	}
-	cfg, err := tmplconfig.ParseTemplateConfig(data)
-	if err != nil {
-		return nil, app.Errorf("parse template config: %w", err)
-	}
-	return cfg, nil
-}
-
-func parseKeyValueSlice(pairs []string) (map[string]string, error) {
-	result := make(map[string]string, len(pairs))
-	for _, p := range pairs {
-		k, v, ok := strings.Cut(p, "=")
-		if !ok {
-			return nil, fmt.Errorf("expected key=value format, got %q", p)
-		}
-		result[k] = v
-	}
-	return result, nil
 }

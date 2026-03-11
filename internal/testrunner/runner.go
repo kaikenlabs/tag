@@ -16,22 +16,21 @@ import (
 
 const (
 	defaultParallel    = 4
-	defaultMaxCases    = 64
 	defaultProjectName = "test-scaffold"
-	maxOutputLen       = 4096
 )
 
-// Run executes the matrix test with the given configuration.
-func Run(ctx context.Context, cfg Config) (Report, error) {
+// Plan resolves the test configuration and generates the execution plan.
+// It validates limits before allocating combinations to prevent OOM.
+func Plan(cfg Config) (*TestPlan, error) {
 	templateDir, err := filepath.Abs(cfg.TemplateDir)
 	if err != nil {
-		return Report{}, fmt.Errorf("resolve template dir: %w", err)
+		return nil, fmt.Errorf("resolve template dir: %w", err)
 	}
 
 	// Load and parse template config.
 	tmplCfg, testCfg, err := loadTemplateConfig(templateDir)
 	if err != nil {
-		return Report{}, err
+		return nil, err
 	}
 
 	// Resolve validation commands: CLI override > template config > none.
@@ -40,12 +39,19 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 		commands = testCfg.Commands
 	}
 
-	// Resolve environment variables: CLI env merged over template config env.
+	// Security: require opt-in for template-defined commands.
+	if len(cfg.RunCommands) == 0 && len(commands) > 0 && !cfg.AcceptHooks {
+		return nil, fmt.Errorf(
+			"template defines test commands %v; pass --accept-hooks to allow or --run to override",
+			commands,
+		)
+	}
+
+	// Resolve environment variables from template config.
 	env := make(map[string]string)
 	if testCfg != nil {
 		maps.Copy(env, testCfg.Env)
 	}
-	maps.Copy(env, cfg.Env)
 
 	// Resolve project name.
 	projectName := defaultProjectName
@@ -53,69 +59,54 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 		projectName = testCfg.ProjectName
 	}
 
-	// Extract boolean vars and generate combinations.
+	// Extract boolean vars.
 	boolVars := ExtractBooleanVars(tmplCfg, cfg.SkipVars)
-	combos := GenerateCombinations(boolVars, cfg.PinVars)
-	combos = FilterCombinations(combos, cfg.Filter)
 
-	// Safety limit check.
-	maxCases := cfg.MaxCases
-	if maxCases == 0 {
-		maxCases = defaultMaxCases
-	}
-	if maxCases > 0 && len(combos) > maxCases {
-		return Report{}, fmt.Errorf(
+	// Check safety limit BEFORE allocating combinations to prevent OOM.
+	count := CombinationCount(boolVars, cfg.PinVars)
+	if cfg.MaxCases > 0 && count > cfg.MaxCases {
+		return nil, fmt.Errorf(
 			"combination count %d exceeds safety limit %d (use --max-cases 0 to override)",
-			len(combos), maxCases,
+			count, cfg.MaxCases,
 		)
 	}
 
-	report := Report{
-		TotalCases:  len(combos),
+	// Generate and filter combinations.
+	combos := GenerateCombinations(boolVars, cfg.PinVars)
+	combos, err = FilterCombinations(combos, cfg.Filter)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TestPlan{
 		TemplateDir: templateDir,
-	}
+		BoolVars:    boolVars,
+		Combos:      combos,
+		Commands:    commands,
+		Env:         env,
+		ProjectName: projectName,
+	}, nil
+}
 
-	// Dry run: just return the report with all cases listed.
-	if cfg.DryRun {
-		for _, c := range combos {
-			report.Cases = append(report.Cases, CaseResult{
-				Combination: c,
-				Status:      CasePassed,
-				Phase:       "dry-run",
-			})
-			report.Passed++
-		}
-		return report, nil
-	}
-
-	// Run tests with worker pool.
+// Execute runs the test plan with the given configuration and returns the report.
+func Execute(ctx context.Context, plan *TestPlan, cfg Config) (Report, error) {
 	parallel := cfg.Parallel
 	if parallel <= 0 {
 		parallel = defaultParallel
 	}
-	if parallel > len(combos) {
-		parallel = len(combos)
+	if parallel > len(plan.Combos) {
+		parallel = len(plan.Combos)
 	}
 
 	start := time.Now()
 
-	results := runWorkerPool(ctx, workerConfig{
-		combos:      combos,
-		templateDir: templateDir,
-		projectName: projectName,
-		meta:        cfg.Meta,
-		valuesFile:  cfg.ValuesFile,
-		commands:    commands,
-		env:         env,
-		timeout:     cfg.Timeout,
-		acceptHooks: cfg.AcceptHooks,
-		keepFailed:  cfg.KeepFailed,
-		verbose:     cfg.Verbose,
-		parallel:    parallel,
-		failFast:    cfg.FailFast,
-	})
+	results := runWorkerPool(ctx, plan, cfg, parallel)
 
-	report.Duration = time.Since(start)
+	report := Report{
+		TotalCases:  len(plan.Combos),
+		TemplateDir: plan.TemplateDir,
+		Duration:    time.Since(start),
+	}
 
 	for _, r := range results {
 		report.Cases = append(report.Cases, r)
@@ -132,45 +123,29 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 	return report, nil
 }
 
-type workerConfig struct {
-	combos      []Combination
-	templateDir string
-	projectName string
-	meta        map[string]string
-	valuesFile  string
-	commands    []string
-	env         map[string]string
-	timeout     time.Duration
-	acceptHooks bool
-	keepFailed  bool
-	verbose     bool
-	parallel    int
-	failFast    bool
-}
-
-func runWorkerPool(ctx context.Context, wcfg workerConfig) []CaseResult {
+func runWorkerPool(ctx context.Context, plan *TestPlan, cfg Config, parallel int) []CaseResult {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	comboCh := make(chan Combination, len(wcfg.combos))
-	for _, c := range wcfg.combos {
+	comboCh := make(chan Combination, len(plan.Combos))
+	for _, c := range plan.Combos {
 		comboCh <- c
 	}
 	close(comboCh)
 
-	resultCh := make(chan CaseResult, len(wcfg.combos))
+	resultCh := make(chan CaseResult, len(plan.Combos))
 
 	var wg sync.WaitGroup
-	for range wcfg.parallel {
+	for range parallel {
 		wg.Go(func() {
 			for combo := range comboCh {
 				if ctx.Err() != nil {
 					return
 				}
-				result := runSingleTest(ctx, wcfg, combo)
+				result := runSingleTest(ctx, plan, cfg, combo)
 				resultCh <- result
 
-				if wcfg.failFast && result.Status != CasePassed {
+				if cfg.FailFast && result.Status != CasePassed {
 					cancel()
 					return
 				}
@@ -181,14 +156,14 @@ func runWorkerPool(ctx context.Context, wcfg workerConfig) []CaseResult {
 	wg.Wait()
 	close(resultCh)
 
-	results := make([]CaseResult, 0, len(wcfg.combos))
+	results := make([]CaseResult, 0, len(plan.Combos))
 	for r := range resultCh {
 		results = append(results, r)
 	}
 	return results
 }
 
-func runSingleTest(ctx context.Context, wcfg workerConfig, combo Combination) CaseResult {
+func runSingleTest(ctx context.Context, plan *TestPlan, cfg Config, combo Combination) CaseResult {
 	start := time.Now()
 
 	// Create isolated temp directory for this combination.
@@ -211,21 +186,21 @@ func runSingleTest(ctx context.Context, wcfg workerConfig, combo Combination) Ca
 	}()
 
 	// Build meta map: base meta + boolean combo vars.
-	meta := make(map[string]string, len(wcfg.meta)+len(combo.Vars))
-	maps.Copy(meta, wcfg.meta)
+	meta := make(map[string]string, len(cfg.Meta)+len(combo.Vars))
+	maps.Copy(meta, cfg.Meta)
 	maps.Copy(meta, combo.Vars)
 
 	// Scaffold programmatically.
 	opts := scaffold.Options{
-		TemplateDir: wcfg.templateDir,
+		TemplateDir: plan.TemplateDir,
 		OutputDir:   tmpDir,
-		ProjectName: wcfg.projectName,
+		ProjectName: plan.ProjectName,
 		Meta:        meta,
-		ValuesFile:  wcfg.valuesFile,
+		ValuesFile:  cfg.ValuesFile,
 		NoInput:     true,
 		Force:       true,
 		NoSave:      true,
-		AcceptHooks: wcfg.acceptHooks,
+		AcceptHooks: cfg.AcceptHooks,
 	}
 
 	s, err := scaffold.NewScaffold(opts, scaffold.WithOutput(io.Discard))
@@ -250,18 +225,20 @@ func runSingleTest(ctx context.Context, wcfg workerConfig, combo Combination) Ca
 		}
 	}
 
-	return runValidation(ctx, wcfg, combo, result.OutputDir, &shouldClean, start)
+	return runValidation(ctx, plan, cfg, combo, result.OutputDir, tmpDir, &shouldClean, start)
 }
 
 func runValidation(
 	ctx context.Context,
-	wcfg workerConfig,
+	plan *TestPlan,
+	cfg Config,
 	combo Combination,
 	outputDir string,
+	tmpDir string,
 	shouldClean *bool,
 	start time.Time,
 ) CaseResult {
-	if len(wcfg.commands) == 0 {
+	if len(plan.Commands) == 0 {
 		return CaseResult{
 			Combination: combo,
 			Status:      CasePassed,
@@ -269,7 +246,7 @@ func runValidation(
 		}
 	}
 
-	vResult := RunValidationCommands(ctx, outputDir, wcfg.commands, wcfg.env, wcfg.timeout)
+	vResult := RunValidationCommands(ctx, outputDir, plan.Commands, plan.Env, cfg.Timeout)
 	if vResult == nil {
 		return CaseResult{
 			Combination: combo,
@@ -279,12 +256,14 @@ func runValidation(
 	}
 
 	output := vResult.Output
-	if !wcfg.verbose {
+	if !cfg.Verbose {
 		output = TruncateOutput(output, maxOutputLen)
 	}
 
-	if wcfg.keepFailed {
+	var keptDir string
+	if cfg.KeepFailed {
 		*shouldClean = false
+		keptDir = tmpDir
 	}
 
 	errMsg := fmt.Sprintf("command %q failed (exit %d)", vResult.Command, vResult.ExitCode)
@@ -298,6 +277,7 @@ func runValidation(
 		Phase:       "validate: " + vResult.Command,
 		Output:      output,
 		Error:       errMsg,
+		KeptDir:     keptDir,
 		Duration:    time.Since(start),
 	}
 }

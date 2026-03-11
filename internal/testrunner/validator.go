@@ -5,9 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 )
+
+const maxOutputLen = 4096
 
 // ValidationResult holds the outcome of running a single validation command.
 type ValidationResult struct {
@@ -92,8 +95,9 @@ func TruncateOutput(output string, maxLen int) string {
 		if total+len(lines[i]) > maxLen {
 			break
 		}
-		kept = append([]string{lines[i]}, kept...)
+		kept = append(kept, lines[i])
 		total += len(lines[i]) + 1
 	}
+	slices.Reverse(kept)
 	return "…(truncated)\n" + strings.Join(kept, "\n")
 }
