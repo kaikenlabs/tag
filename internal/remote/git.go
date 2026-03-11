@@ -144,9 +144,26 @@ func (f *GitFetcher) FetchAtCommit(ctx context.Context, url, commitSHA, destDir 
 }
 
 // clone performs the Git clone operation.
-// If HTTPS auth fails and the ref has a known provider with SSH support,
-// it falls back to cloning via SSH (git@host:owner/repo.git).
+// When the URL is HTTPS and no token is configured, it tries SSH first
+// (leveraging the user's SSH agent/keys), then falls back to unauthenticated HTTPS.
+// When a token is available, it clones via HTTPS and falls back to SSH on auth errors.
 func (f *GitFetcher) clone(ctx context.Context, ref *Reference, destDir string) (*git.Repository, error) {
+	// If the URL is HTTPS with no token available, try SSH first —
+	// this transparently supports users who rely on SSH keys for private repos.
+	if !isSSHURL(ref.URL) && canFallbackToSSH(ref) {
+		if _, hasToken := f.auth.TokenFor(ref.Provider); !hasToken {
+			repo, err := f.cloneViaSSH(ctx, ref, destDir)
+			if err == nil {
+				return repo, nil
+			}
+			// SSH failed — fall through to HTTPS (may be a public repo)
+			os.RemoveAll(destDir)
+			if mkErr := os.MkdirAll(destDir, types.DirMode); mkErr != nil {
+				return nil, &FetchError{Ref: ref, Message: "cannot recreate temp directory", Err: mkErr}
+			}
+		}
+	}
+
 	// Get auth if available
 	auth, err := f.auth.GitAuth(ref)
 	if err != nil {
@@ -156,26 +173,36 @@ func (f *GitFetcher) clone(ctx context.Context, ref *Reference, destDir string) 
 	repo, err := f.doClone(ctx, ref.URL, ref, destDir, auth)
 	if err != nil && isAuthError(err) && canFallbackToSSH(ref) {
 		// HTTPS auth failed — retry with SSH
-		sshURL := fmt.Sprintf("git@%s:%s/%s.git", ref.Host, ref.Owner, ref.Repo)
-		fallbackRef := &Reference{URL: sshURL, Provider: ref.Provider}
-		sshAuth, sshErr := f.auth.GitAuth(fallbackRef)
-		if sshErr == nil {
-			// Clean destDir for retry (clone requires empty directory)
-			os.RemoveAll(destDir)
-			if mkErr := os.MkdirAll(destDir, types.DirMode); mkErr != nil {
-				return nil, &FetchError{Ref: ref, Message: "cannot recreate temp directory", Err: mkErr}
-			}
-
-			// Build full ref for clone with version/subpath info
-			cloneRef := *ref
-			cloneRef.URL = sshURL
-			repo, err = f.doClone(ctx, sshURL, &cloneRef, destDir, sshAuth)
+		if sshRepo, sshErr := f.cloneViaSSH(ctx, ref, destDir); sshErr == nil {
+			return sshRepo, nil
 		}
 	}
 	if err != nil {
 		return nil, f.wrapCloneError(ref, err)
 	}
 	return repo, nil
+}
+
+// cloneViaSSH attempts to clone using SSH (git@host:owner/repo.git).
+func (f *GitFetcher) cloneViaSSH(ctx context.Context, ref *Reference, destDir string) (*git.Repository, error) {
+	sshURL := fmt.Sprintf("git@%s:%s/%s.git", ref.Host, ref.Owner, ref.Repo)
+	fallbackRef := &Reference{URL: sshURL, Provider: ref.Provider}
+
+	sshAuth, err := f.auth.GitAuth(fallbackRef)
+	if err != nil {
+		return nil, err
+	}
+
+	// Clean destDir for retry (clone requires empty directory)
+	os.RemoveAll(destDir)
+	if mkErr := os.MkdirAll(destDir, types.DirMode); mkErr != nil {
+		return nil, &FetchError{Ref: ref, Message: "cannot recreate temp directory", Err: mkErr}
+	}
+
+	cloneRef := *ref
+	cloneRef.URL = sshURL
+
+	return f.doClone(ctx, sshURL, &cloneRef, destDir, sshAuth)
 }
 
 // doClone performs the actual git clone with the given URL and auth.
