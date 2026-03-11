@@ -33,14 +33,6 @@ func NewLoader(baseDir string) *Loader {
 	}
 }
 
-// NewLoaderFS creates a new template loader with a custom filesystem.
-func NewLoaderFS(baseDir string, fsys fs.FS) *Loader {
-	return &Loader{
-		baseDir: baseDir,
-		fs:      fsys,
-	}
-}
-
 // Load reads a template from the filesystem.
 func (l *Loader) Load(path string) (string, error) {
 	fullPath, err := l.resolvePath(path)

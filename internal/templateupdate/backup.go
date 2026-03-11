@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -38,7 +39,7 @@ func CreateBackup(projectDir string, filePaths []string) (string, error) {
 			return "", fmt.Errorf("create backup dir for %s: %w", relPath, err)
 		}
 
-		if err := copyFile(srcPath, dstPath); err != nil {
+		if err := fileutil.CopyFile(srcPath, dstPath); err != nil {
 			return "", fmt.Errorf("backup %s: %w", relPath, err)
 		}
 	}
@@ -72,7 +73,7 @@ func RestoreBackup(projectDir, backupPath string) error {
 			return os.MkdirAll(dstPath, types.DirMode)
 		}
 
-		return copyFile(path, dstPath)
+		return fileutil.CopyFile(path, dstPath)
 	})
 }
 
@@ -169,7 +170,7 @@ func RestoreFromManifest(projectDir, backupPath string) error {
 				return fmt.Errorf("create dir for %s: %w", entry.Path, err)
 			}
 
-			if err := copyFile(src, filePath); err != nil {
+			if err := fileutil.CopyFile(src, filePath); err != nil {
 				return fmt.Errorf("restore %s: %w", entry.Path, err)
 			}
 		case FileAdded:
@@ -238,7 +239,7 @@ func backupFile(projectDir, backupPath, relPath string) error {
 		return fmt.Errorf("create backup dir for %s: %w", relPath, err)
 	}
 
-	if err := copyFile(srcPath, dstPath); err != nil {
+	if err := fileutil.CopyFile(srcPath, dstPath); err != nil {
 		return fmt.Errorf("backup %s: %w", relPath, err)
 	}
 
@@ -253,19 +254,4 @@ func validateContainedPath(base, relPath string) error {
 		return fmt.Errorf("path traversal detected: %s", relPath)
 	}
 	return nil
-}
-
-// copyFile copies src to dst preserving file mode.
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-
-	info, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(dst, data, info.Mode())
 }

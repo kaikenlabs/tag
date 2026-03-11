@@ -268,7 +268,7 @@ func (s *renderState) processFile(srcPath, relPath, normalizedPath string, d fs.
 		return fmt.Errorf("stat file %s: %w", relPath, err)
 	}
 
-	mode := sanitizeFileMode(info.Mode())
+	mode := fileutil.SanitizeFileMode(info.Mode())
 
 	if !fileutil.IsTextContent(content) {
 		s.files[normalizedPath] = RenderedFile{
@@ -368,9 +368,4 @@ func loadIgnorePatterns(templateRoot string) (gitignore.Matcher, error) {
 	}
 
 	return gitignore.NewMatcher(patterns), nil
-}
-
-// sanitizeFileMode removes setuid, setgid, and sticky bits from a file mode.
-func sanitizeFileMode(mode fs.FileMode) fs.FileMode {
-	return mode &^ (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky)
 }

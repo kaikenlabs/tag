@@ -62,7 +62,7 @@ func ReadProjectFiles(projectDir string) (map[string]*RenderedFile, error) {
 
 		files[normalizedPath] = &RenderedFile{
 			Content:  content,
-			Mode:     sanitizeFileMode(info.Mode()),
+			Mode:     fileutil.SanitizeFileMode(info.Mode()),
 			IsBinary: !fileutil.IsTextContent(content),
 		}
 
