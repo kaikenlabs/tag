@@ -361,6 +361,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 	success = true
 	return ScaffoldResult{
 		OutputDir:   ctx.outputDir,
+		ProjectRoot: ctx.projectRoot,
 		TemplateDir: ctx.templateDirAbs,
 		Vars:        ctx.vars,
 		Opts:        ctx.opts,

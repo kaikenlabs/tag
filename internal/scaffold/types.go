@@ -49,7 +49,8 @@ type Options struct {
 // It carries the information needed by the commands layer to render
 // a post-scaffold summary (output location, resolved variables, etc.).
 type ScaffoldResult struct {
-	OutputDir   string         // Absolute path to the generated project
+	OutputDir   string         // Absolute path to the top-level output directory
+	ProjectRoot string         // Absolute path to the project root (may differ from OutputDir with wrapper dirs)
 	TemplateDir string         // Absolute path to the template directory (for README)
 	Vars        map[string]any // Resolved template variables
 	Opts        Options        // Options used for this scaffold run

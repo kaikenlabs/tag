@@ -225,7 +225,15 @@ func runSingleTest(ctx context.Context, plan *TestPlan, cfg Config, combo Combin
 		}
 	}
 
-	return runValidation(ctx, plan, cfg, combo, result.OutputDir, tmpDir, &shouldClean, start)
+	// Use ProjectRoot (not OutputDir) so validation commands run inside the
+	// actual project directory, not the parent temp dir. With wrapper-style
+	// templates the scaffold creates a subdirectory (e.g. tmpDir/project-name/).
+	projectDir := result.ProjectRoot
+	if projectDir == "" {
+		projectDir = result.OutputDir
+	}
+
+	return runValidation(ctx, plan, cfg, combo, projectDir, tmpDir, &shouldClean, start)
 }
 
 func runValidation(
