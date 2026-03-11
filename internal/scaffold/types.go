@@ -42,6 +42,7 @@ type Options struct {
 	UpdateLock           bool              // Refresh lockfile entry for this template (--update-lock flag)
 	IgnoreLock           bool              // Skip lockfile verification (--ignore-lock flag)
 	DryRun               bool              // Preview changes without writing files (--dry-run flag)
+	SkipGeneratorCopy    bool              // Skip copying generators/bundles to output .tag/ directory
 }
 
 // ScaffoldResult contains the output of a successful scaffold run.

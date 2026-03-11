@@ -155,6 +155,10 @@ func commonScaffoldFlags() []cli.Flag {
 			Aliases: []string{"d"},
 			Usage:   "Preview what would be written without creating any files",
 		},
+		&cli.BoolFlag{
+			Name:  flags.AddToLibFlag,
+			Usage: "Add the template to the library after scaffolding (enables generator resolution from library)",
+		},
 	}
 }
 
