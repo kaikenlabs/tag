@@ -142,15 +142,18 @@ func (p *DefaultPathProcessor) processSegment(segment string, vars map[string]an
 	return result, nil
 }
 
+func (p *DefaultPathProcessor) escapeNonDerivedVars(vars map[string]any) map[string]any {
+	return escapeNonDerivedVars(p.derivedVarNames, vars)
+}
+
 // escapeNonDerivedVars returns a copy of vars where template delimiters in
 // non-derived string values are escaped with sentinel tokens. This prevents
 // user-provided values containing {{ }}, {% %}, or {# #} from being
 // interpreted as template code during rendering.
-func (p *DefaultPathProcessor) escapeNonDerivedVars(vars map[string]any) map[string]any {
+func escapeNonDerivedVars(derivedVarNames map[string]bool, vars map[string]any) map[string]any {
 	safe := make(map[string]any, len(vars))
 	for k, v := range vars {
-		if p.derivedVarNames[k] {
-			// Derived variables retain their template expressions
+		if derivedVarNames[k] {
 			safe[k] = v
 			continue
 		}

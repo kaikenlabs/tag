@@ -17,37 +17,6 @@ import (
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
-// MockHookRunner is a mock implementation of HookRunner for testing.
-type MockHookRunner struct {
-	RunFunc func(phase HookPhase, commands []string, workDir string, env []string) ([]HookResult, error)
-	Calls   []MockHookCall
-}
-
-type MockHookCall struct {
-	Phase    HookPhase
-	Commands []string
-	WorkDir  string
-	Env      []string
-}
-
-func (m *MockHookRunner) Run(phase HookPhase, commands []string, workDir string, env []string) ([]HookResult, error) {
-	m.Calls = append(m.Calls, MockHookCall{
-		Phase:    phase,
-		Commands: commands,
-		WorkDir:  workDir,
-		Env:      env,
-	})
-	if m.RunFunc != nil {
-		return m.RunFunc(phase, commands, workDir, env)
-	}
-	// Default: return success for all commands
-	results := make([]HookResult, len(commands))
-	for i, cmd := range commands {
-		results[i] = HookResult{Command: cmd, ExitCode: 0}
-	}
-	return results, nil
-}
-
 // --- Unit Tests for BuildHookEnv ---
 
 func TestUT_BuildHookEnv_BasicVariables(t *testing.T) {

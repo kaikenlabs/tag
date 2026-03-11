@@ -70,22 +70,8 @@ func (w *DefaultOutputWriter) SetDerivedVarNames(names map[string]bool) {
 	w.derivedVarNames = names
 }
 
-// escapeNonDerivedVars returns a copy of vars where template delimiters in
-// non-derived string values are escaped with sentinel tokens, preventing SSTI.
 func (w *DefaultOutputWriter) escapeNonDerivedVars(vars map[string]any) map[string]any {
-	safe := make(map[string]any, len(vars))
-	for k, v := range vars {
-		if w.derivedVarNames[k] {
-			safe[k] = v
-			continue
-		}
-		if s, ok := v.(string); ok {
-			safe[k] = escapeTemplateSyntax(s)
-		} else {
-			safe[k] = v
-		}
-	}
-	return safe
+	return escapeNonDerivedVars(w.derivedVarNames, vars)
 }
 
 // Ensure DefaultOutputWriter implements OutputWriter.
@@ -224,7 +210,7 @@ func (w *DefaultOutputWriter) processFile(srcPath, destPath string, ctx template
 	defer f.Close()
 
 	// Read a sample for text detection (same size as fileutil.IsTextContent uses)
-	sample := make([]byte, 8192)
+	sample := make([]byte, fileutil.TextSampleSize)
 	n, readErr := f.Read(sample)
 	sample = sample[:n]
 
@@ -335,7 +321,7 @@ func openRegularFile(path string) (*os.File, fs.FileMode, error) {
 	}
 
 	// Sanitize file mode to remove dangerous permission bits
-	mode := sanitizeFileMode(fstatInfo.Mode())
+	mode := fileutil.SanitizeFileMode(fstatInfo.Mode())
 
 	return f, mode, nil
 }
@@ -455,12 +441,6 @@ func loadIgnorePatterns(templateRoot string) (gitignore.Matcher, error) {
 		return nil, nil
 	}
 	return gitignore.NewMatcher(patterns), nil
-}
-
-// sanitizeFileMode removes dangerous permission bits (setuid, setgid, sticky).
-func sanitizeFileMode(mode fs.FileMode) fs.FileMode {
-	// Remove setuid, setgid, and sticky bits
-	return mode &^ (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky)
 }
 
 // TagConfigOptions provides template metadata for enriched .tagconfig.json generation.

@@ -1,6 +1,7 @@
 package fileutil
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,32 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUT_SanitizeFileMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    fs.FileMode
+		expected fs.FileMode
+	}{
+		{"normal file permissions", 0o644, 0o644},
+		{"normal dir permissions", 0o755, 0o755},
+		{"setuid bit removed", fs.ModeSetuid | 0o755, 0o755},
+		{"setgid bit removed", fs.ModeSetgid | 0o755, 0o755},
+		{"sticky bit removed", fs.ModeSticky | 0o755, 0o755},
+		{"all dangerous bits removed", fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky | 0o755, 0o755},
+		{"zero permissions", 0, 0},
+		{"only setuid no perms", fs.ModeSetuid, 0},
+		{"executable preserved", 0o755, 0o755},
+		{"read only preserved", 0o444, 0o444},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SanitizeFileMode(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
 
 func TestUT_IsTextContent(t *testing.T) {
 	tests := []struct {

@@ -9,6 +9,16 @@ import (
 	"unicode/utf8"
 )
 
+// TextSampleSize is the number of bytes sampled from a file to determine
+// whether it is text or binary.
+const TextSampleSize = 8192
+
+// SanitizeFileMode strips setuid, setgid, and sticky bits from a file mode
+// to prevent privilege escalation from untrusted template sources.
+func SanitizeFileMode(mode fs.FileMode) fs.FileMode {
+	return mode &^ (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky)
+}
+
 // IsTextContent checks if content appears to be text rather than binary.
 // It inspects the first 8KB for null bytes, invalid UTF-8, and non-printable characters.
 func IsTextContent(content []byte) bool {
@@ -18,8 +28,8 @@ func IsTextContent(content []byte) bool {
 
 	// Check first 8KB for binary indicators
 	sample := content
-	if len(sample) > 8192 {
-		sample = sample[:8192]
+	if len(sample) > TextSampleSize {
+		sample = sample[:TextSampleSize]
 	}
 
 	// Null bytes are a strong binary indicator
@@ -57,9 +67,7 @@ func CopyFile(src, dst string) error {
 		return err
 	}
 
-	// Strip setuid, setgid, and sticky bits to prevent privilege escalation
-	// from untrusted template sources.
-	mode := srcInfo.Mode() &^ (os.ModeSetuid | os.ModeSetgid | os.ModeSticky)
+	mode := SanitizeFileMode(srcInfo.Mode())
 
 	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) //nolint:gosec // G703: dst is resolved by scaffold's path processor before reaching here
 	if err != nil {

@@ -53,16 +53,6 @@ func (s *Scaffold) SetRecorder(r *history.Recorder) {
 // ScaffoldOption is a functional option for NewScaffold.
 type ScaffoldOption func(*Scaffold)
 
-// WithEngine injects a custom template engine (primarily for testing).
-func WithEngine(e template.TemplateRenderer) ScaffoldOption {
-	return func(s *Scaffold) { s.engine = e }
-}
-
-// WithValidator injects a custom schema validator (primarily for testing).
-func WithValidator(v *schema.Validator) ScaffoldOption {
-	return func(s *Scaffold) { s.validator = v }
-}
-
 // WithIsTTY overrides the TTY detection for testing. In production, IsTTY()
 // is called automatically by NewScaffold.
 func WithIsTTY(v bool) ScaffoldOption {
