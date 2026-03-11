@@ -410,6 +410,51 @@ func isSkippedEntry(relPath, name string) bool {
 	return false
 }
 
+// copyGeneratorsToOutput copies generators, bundles, and shared templates from
+// the template source into the scaffolded project's .tag/ directory. This makes
+// generators available locally without requiring "tag lib add".
+//
+// Two source directories are checked (later entries take precedence):
+//  1. _generators/ — alternative generator location
+//  2. .tag/        — primary generator location
+func copyGeneratorsToOutput(templateRoot, projectRoot string) error {
+	outputTagDir := filepath.Join(projectRoot, types.TemplatesDir)
+
+	sources := []string{
+		filepath.Join(templateRoot, types.GeneratorsDir),
+		filepath.Join(templateRoot, types.TemplatesDir),
+	}
+
+	for _, srcDir := range sources {
+		entries, err := os.ReadDir(srcDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("read generator source %s: %w", srcDir, err)
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			// Skip TAG-managed directories (history/backups).
+			if name == "history" {
+				continue
+			}
+
+			src := filepath.Join(srcDir, name)
+			dst := filepath.Join(outputTagDir, name)
+			if err := fileutil.CopyDir(src, dst, types.DirMode); err != nil {
+				return fmt.Errorf("copy generator %s: %w", name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // loadIgnorePatterns reads a .tagignore file from the template root and returns
 // a gitignore-style matcher. Returns nil, nil if the file does not exist or is empty.
 //
