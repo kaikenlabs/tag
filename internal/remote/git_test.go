@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -216,6 +218,123 @@ func TestIT_GitFetcher_PublicGitHubRepo(t *testing.T) {
 }
 
 // --- Unit Tests for sanitizeErrorMessage ---
+
+func TestUT_Clone_SSHFirstWhenNoToken(t *testing.T) {
+	// When no token is available and the ref has enough info for SSH,
+	// clone should attempt SSH before HTTPS.
+	var cloneAttempts []string
+
+	mockAuth := &recordingAuthProvider{
+		tokens: map[Provider]string{}, // no tokens
+		recordCloneURL: func(url string) {
+			cloneAttempts = append(cloneAttempts, url)
+		},
+	}
+
+	fetcher := &GitFetcher{auth: mockAuth, out: nil}
+	ref := &Reference{
+		Original: "bb:whalar/go-service-template",
+		Type:     ReferenceTypeGit,
+		Provider: ProviderBitbucket,
+		Host:     "bitbucket.org",
+		Owner:    "whalar",
+		Repo:     "go-service-template",
+		URL:      "https://bitbucket.org/whalar/go-service-template.git",
+	}
+
+	destDir := t.TempDir()
+	// clone will fail (no real server), but we can verify the attempt order
+	_, _ = fetcher.clone(context.Background(), ref, destDir)
+
+	require.GreaterOrEqual(t, len(cloneAttempts), 1, "should have attempted at least one clone")
+	assert.Equal(t, "git@bitbucket.org:whalar/go-service-template.git", cloneAttempts[0],
+		"first attempt should be SSH when no token is available")
+}
+
+func TestUT_Clone_HTTPSFirstWhenTokenAvailable(t *testing.T) {
+	// When a token IS available, clone should try HTTPS first (not SSH).
+	var cloneAttempts []string
+
+	mockAuth := &recordingAuthProvider{
+		tokens: map[Provider]string{
+			ProviderBitbucket: "some-token",
+		},
+		recordCloneURL: func(url string) {
+			cloneAttempts = append(cloneAttempts, url)
+		},
+	}
+
+	fetcher := &GitFetcher{auth: mockAuth, out: nil}
+	ref := &Reference{
+		Original: "bb:whalar/go-service-template",
+		Type:     ReferenceTypeGit,
+		Provider: ProviderBitbucket,
+		Host:     "bitbucket.org",
+		Owner:    "whalar",
+		Repo:     "go-service-template",
+		URL:      "https://bitbucket.org/whalar/go-service-template.git",
+	}
+
+	destDir := t.TempDir()
+	_, _ = fetcher.clone(context.Background(), ref, destDir)
+
+	require.GreaterOrEqual(t, len(cloneAttempts), 1, "should have attempted at least one clone")
+	assert.Equal(t, "https://bitbucket.org/whalar/go-service-template.git", cloneAttempts[0],
+		"first attempt should be HTTPS when token is available")
+}
+
+func TestUT_Clone_SSHFirstAlsoForGitHub(t *testing.T) {
+	// SSH-first should work for all providers, not just Bitbucket.
+	var cloneAttempts []string
+
+	mockAuth := &recordingAuthProvider{
+		tokens:         map[Provider]string{},
+		recordCloneURL: func(url string) { cloneAttempts = append(cloneAttempts, url) },
+	}
+
+	fetcher := &GitFetcher{auth: mockAuth, out: nil}
+	ref := &Reference{
+		Original: "gh:user/repo",
+		Type:     ReferenceTypeGit,
+		Provider: ProviderGitHub,
+		Host:     "github.com",
+		Owner:    "user",
+		Repo:     "repo",
+		URL:      "https://github.com/user/repo.git",
+	}
+
+	destDir := t.TempDir()
+	_, _ = fetcher.clone(context.Background(), ref, destDir)
+
+	require.GreaterOrEqual(t, len(cloneAttempts), 1)
+	assert.Equal(t, "git@github.com:user/repo.git", cloneAttempts[0],
+		"SSH-first should apply to GitHub as well")
+}
+
+// recordingAuthProvider tracks which URLs are cloned, for verifying attempt order.
+type recordingAuthProvider struct {
+	tokens         map[Provider]string
+	recordCloneURL func(string)
+}
+
+func (r *recordingAuthProvider) TokenFor(provider Provider) (string, bool) {
+	token, ok := r.tokens[provider]
+	return token, ok
+}
+
+func (r *recordingAuthProvider) GitAuth(ref *Reference) (transport.AuthMethod, error) {
+	if r.recordCloneURL != nil {
+		r.recordCloneURL(ref.URL)
+	}
+	token, ok := r.tokens[ref.Provider]
+	if !ok || token == "" {
+		return nil, nil //nolint:nilnil // nil means no auth
+	}
+	return &githttp.BasicAuth{
+		Username: "x-access-token",
+		Password: token,
+	}, nil
+}
 
 func TestUT_SanitizeErrorMessage_RedactsGitHubToken(t *testing.T) {
 	msg := `authentication failed: https://ghp_abc123XYZ789@github.com/owner/repo.git`
