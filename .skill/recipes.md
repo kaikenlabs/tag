@@ -268,7 +268,55 @@ type {{ name | pascal }}Service struct{}
 
 ---
 
-## Recipe 6: Go Service Scaffold Template
+## Recipe 6: Conditional File Generation
+
+Skip entire files or directories based on variable values using `{% if %}` in filenames.
+
+**Template structure**:
+```
+my-template/
+  tag.template.json
+  {{ vars.project_name | snake }}/
+    main.go
+    {% if vars.use_docker %}Dockerfile{% endif %}
+    {% if vars.use_docker %}docker-compose.yml{% endif %}
+    {% if vars.use_grpc %}proto/{% endif %}
+```
+
+**tag.template.json**:
+```json
+{
+  "vars": {
+    "project_name": "my-service",
+    "use_docker": { "type": "boolean", "prompt": "Include Docker support?", "default": true },
+    "use_grpc": { "type": "boolean", "prompt": "Include gRPC?", "default": false }
+  }
+}
+```
+
+**Result with `use_docker=true, use_grpc=false`**:
+```
+my-service/
+  main.go
+  Dockerfile
+  docker-compose.yml
+  # proto/ is NOT created
+```
+
+**Result with `use_docker=false, use_grpc=false`**:
+```
+my-service/
+  main.go
+  # Dockerfile, docker-compose.yml, proto/ are all skipped
+```
+
+**How it works**: When the `{% if %}` condition is false, the filename renders to an empty string and TAG skips the file entirely — it is never written to disk. This works for both files and directories.
+
+**Go file caveat**: Don't wrap Go file *contents* in a conditional without a fallback — the false path produces an empty file that fails compilation. Use a conditional filename instead, or add `{%- else %}\npackage name\n{%- endif %}`.
+
+---
+
+## Recipe 7: Go Service Scaffold Template
 
 Full scaffold with variables, conditionals, hooks, and bundled generators.
 
@@ -338,7 +386,7 @@ cd my-api && tag generate endpoint users
 
 ---
 
-## Recipe 7: Self-Contained Bundles
+## Recipe 8: Self-Contained Bundles
 
 Distributable bundle with generators inside:
 
@@ -363,7 +411,7 @@ Works with `--lib` to add bundles to library templates.
 
 ---
 
-## Recipe 8: Converting Cookiecutter Templates
+## Recipe 9: Converting Cookiecutter Templates
 
 ```bash
 # Direct scaffold (auto-detects and converts on the fly)
@@ -380,7 +428,7 @@ Conversion maps: `cookiecutter.json` → `tag.template.json`, `{{ cookiecutter.v
 
 ---
 
-## Recipe 9: Non-Interactive / CI Scaffolding
+## Recipe 10: Non-Interactive / CI Scaffolding
 
 ```bash
 # All variables via flags
@@ -401,7 +449,7 @@ tag scaffold gh:user/template another-project --replay
 
 ---
 
-## Recipe 10: .tagignore for Template Authoring
+## Recipe 11: .tagignore for Template Authoring
 
 Exclude development artifacts from scaffolded output:
 
@@ -438,7 +486,7 @@ my-template/
 
 ---
 
-## Recipe 11: Evaluated-Default Variables
+## Recipe 12: Evaluated-Default Variables
 
 Offer a smart, context-aware default while still letting the user change it.
 Use the **expanded form** with an explicit `prompt` and a template-expression `default`.
