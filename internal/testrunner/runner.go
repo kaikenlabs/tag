@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -33,19 +34,8 @@ func Plan(cfg Config) (*TestPlan, error) {
 		return nil, err
 	}
 
-	// Resolve validation commands: CLI override > template config > none.
-	commands := cfg.RunCommands
-	if len(commands) == 0 && testCfg != nil {
-		commands = testCfg.Commands
-	}
-
-	// Security: require opt-in for template-defined commands.
-	if len(cfg.RunCommands) == 0 && len(commands) > 0 && !cfg.AcceptHooks {
-		return nil, fmt.Errorf(
-			"template defines test commands %v; pass --accept-hooks to allow or --run to override",
-			commands,
-		)
-	}
+	// Extract boolean vars.
+	boolVars := ExtractBooleanVars(tmplCfg, cfg.SkipVars)
 
 	// Resolve environment variables from template config.
 	env := make(map[string]string)
@@ -59,21 +49,8 @@ func Plan(cfg Config) (*TestPlan, error) {
 		projectName = testCfg.ProjectName
 	}
 
-	// Extract boolean vars.
-	boolVars := ExtractBooleanVars(tmplCfg, cfg.SkipVars)
-
-	// Check safety limit BEFORE allocating combinations to prevent OOM.
-	count := CombinationCount(boolVars, cfg.PinVars)
-	if cfg.MaxCases > 0 && count > cfg.MaxCases {
-		return nil, fmt.Errorf(
-			"combination count %d exceeds safety limit %d (use --max-cases 0 to override)",
-			count, cfg.MaxCases,
-		)
-	}
-
-	// Generate and filter combinations.
-	combos := GenerateCombinations(boolVars, cfg.PinVars)
-	combos, err = FilterCombinations(combos, cfg.Filter)
+	// Build test case plans.
+	cases, err := buildCasePlans(cfg, testCfg, boolVars)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +58,95 @@ func Plan(cfg Config) (*TestPlan, error) {
 	return &TestPlan{
 		TemplateDir: templateDir,
 		BoolVars:    boolVars,
-		Combos:      combos,
-		Commands:    commands,
+		Cases:       cases,
 		Env:         env,
 		ProjectName: projectName,
 	}, nil
+}
+
+func buildCasePlans(cfg Config, testCfg *tmplconfig.TestConfig, boolVars []string) ([]TestCasePlan, error) {
+	// Resolve test cases: CLI --run overrides everything, otherwise use template config.
+	var templateCases []tmplconfig.TestCase
+	if len(cfg.RunCommands) > 0 {
+		// CLI override: single anonymous case with the provided commands.
+		templateCases = []tmplconfig.TestCase{
+			{Name: "default", Commands: cfg.RunCommands},
+		}
+	} else if testCfg != nil && len(testCfg.Cases) > 0 {
+		templateCases = testCfg.Cases
+
+		// Security: require opt-in for template-defined commands.
+		if !cfg.AcceptHooks {
+			return nil, fmt.Errorf(
+				"template defines %d test case(s); pass --accept-hooks to allow or --run to override",
+				len(templateCases),
+			)
+		}
+	}
+
+	if len(templateCases) == 0 {
+		// No test cases defined — create a single case with no commands
+		// so combinations are still generated (scaffold-only validation).
+		templateCases = []tmplconfig.TestCase{
+			{Name: "default"},
+		}
+	}
+
+	// Filter by --case if specified.
+	if cfg.CaseName != "" {
+		var found bool
+		for _, tc := range templateCases {
+			if tc.Name == cfg.CaseName {
+				templateCases = []tmplconfig.TestCase{tc}
+				found = true
+				break
+			}
+		}
+		if !found {
+			names := make([]string, 0, len(templateCases))
+			for _, tc := range templateCases {
+				names = append(names, tc.Name)
+			}
+			return nil, fmt.Errorf("test case %q not found; available: %v", cfg.CaseName, names)
+		}
+	}
+
+	// Build a TestCasePlan for each case.
+	var totalCombos int
+	var plans []TestCasePlan
+	for _, tc := range templateCases {
+		// Merge CLI pin vars with case-level filters.
+		mergedPins := make(map[string]string, len(cfg.PinVars)+len(tc.Filters))
+		maps.Copy(mergedPins, cfg.PinVars)
+		for k, v := range tc.Filters {
+			mergedPins[k] = strconv.FormatBool(v)
+		}
+
+		count := CombinationCount(boolVars, mergedPins)
+		totalCombos += count
+
+		combos := GenerateCombinations(boolVars, mergedPins)
+		combos, err := FilterCombinations(combos, cfg.Filter)
+		if err != nil {
+			return nil, err
+		}
+
+		plans = append(plans, TestCasePlan{
+			Name:     tc.Name,
+			Combos:   combos,
+			Commands: tc.Commands,
+		})
+	}
+
+	// Check safety limit against total combinations across all cases.
+	if cfg.MaxCases > 0 && totalCombos > cfg.MaxCases {
+		return nil, fmt.Errorf(
+			"total combination count %d exceeds safety limit %d (use --max-cases 0 to override)",
+			totalCombos, cfg.MaxCases,
+		)
+	}
+
+	return plans, nil
 }
 
 // Execute runs the test plan with the given configuration and returns the report.
@@ -94,46 +155,65 @@ func Execute(ctx context.Context, plan *TestPlan, cfg Config) (Report, error) {
 	if parallel <= 0 {
 		parallel = defaultParallel
 	}
-	if parallel > len(plan.Combos) {
-		parallel = len(plan.Combos)
-	}
 
 	start := time.Now()
 
-	results := runWorkerPool(ctx, plan, cfg, parallel)
-
-	report := Report{
-		TotalCases:  len(plan.Combos),
-		TemplateDir: plan.TemplateDir,
-		Duration:    time.Since(start),
+	// Count total combinations across all cases.
+	totalCombos := 0
+	for _, cp := range plan.Cases {
+		totalCombos += len(cp.Combos)
 	}
 
-	for _, r := range results {
-		report.Cases = append(report.Cases, r)
-		switch r.Status {
-		case CasePassed:
-			report.Passed++
-		case CaseFailed:
-			report.Failed++
-		case CaseErrored:
-			report.Errored++
+	report := Report{
+		TemplateDir: plan.TemplateDir,
+	}
+
+	// Execute each test case.
+	for _, cp := range plan.Cases {
+		if ctx.Err() != nil {
+			break
+		}
+
+		p := min(parallel, len(cp.Combos))
+		if p <= 0 {
+			continue
+		}
+
+		results := runWorkerPool(ctx, plan, cfg, cp, p)
+		for _, r := range results {
+			report.Cases = append(report.Cases, r)
+			switch r.Status {
+			case CasePassed:
+				report.Passed++
+			case CaseFailed:
+				report.Failed++
+			case CaseErrored:
+				report.Errored++
+			}
+		}
+
+		if cfg.FailFast && (report.Failed > 0 || report.Errored > 0) {
+			break
 		}
 	}
 
-	return report, nil
+	report.TotalCases = len(report.Cases)
+	report.Duration = time.Since(start)
+
+	return report, nil //nolint:nilerr // ctx.Err above is for early loop exit, not a returned error
 }
 
-func runWorkerPool(ctx context.Context, plan *TestPlan, cfg Config, parallel int) []CaseResult {
+func runWorkerPool(ctx context.Context, plan *TestPlan, cfg Config, cp TestCasePlan, parallel int) []CaseResult {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	comboCh := make(chan Combination, len(plan.Combos))
-	for _, c := range plan.Combos {
+	comboCh := make(chan Combination, len(cp.Combos))
+	for _, c := range cp.Combos {
 		comboCh <- c
 	}
 	close(comboCh)
 
-	resultCh := make(chan CaseResult, len(plan.Combos))
+	resultCh := make(chan CaseResult, len(cp.Combos))
 
 	var wg sync.WaitGroup
 	for range parallel {
@@ -142,7 +222,7 @@ func runWorkerPool(ctx context.Context, plan *TestPlan, cfg Config, parallel int
 				if ctx.Err() != nil {
 					return
 				}
-				result := runSingleTest(ctx, plan, cfg, combo)
+				result := runSingleTest(ctx, plan, cfg, cp, combo)
 				resultCh <- result
 
 				if cfg.FailFast && result.Status != CasePassed {
@@ -156,20 +236,21 @@ func runWorkerPool(ctx context.Context, plan *TestPlan, cfg Config, parallel int
 	wg.Wait()
 	close(resultCh)
 
-	results := make([]CaseResult, 0, len(plan.Combos))
+	results := make([]CaseResult, 0, len(cp.Combos))
 	for r := range resultCh {
 		results = append(results, r)
 	}
 	return results
 }
 
-func runSingleTest(ctx context.Context, plan *TestPlan, cfg Config, combo Combination) CaseResult {
+func runSingleTest(ctx context.Context, plan *TestPlan, cfg Config, cp TestCasePlan, combo Combination) CaseResult {
 	start := time.Now()
 
 	// Create isolated temp directory for this combination.
 	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("tag-test-%d-*", combo.Index))
 	if err != nil {
 		return CaseResult{
+			CaseName:    cp.Name,
 			Combination: combo,
 			Status:      CaseErrored,
 			Phase:       "setup",
@@ -206,6 +287,7 @@ func runSingleTest(ctx context.Context, plan *TestPlan, cfg Config, combo Combin
 	s, err := scaffold.NewScaffold(opts, scaffold.WithOutput(io.Discard))
 	if err != nil {
 		return CaseResult{
+			CaseName:    cp.Name,
 			Combination: combo,
 			Status:      CaseErrored,
 			Phase:       "scaffold-init",
@@ -217,6 +299,7 @@ func runSingleTest(ctx context.Context, plan *TestPlan, cfg Config, combo Combin
 	result, err := s.Run(opts)
 	if err != nil {
 		return CaseResult{
+			CaseName:    cp.Name,
 			Combination: combo,
 			Status:      CaseFailed,
 			Phase:       "scaffold",
@@ -233,30 +316,33 @@ func runSingleTest(ctx context.Context, plan *TestPlan, cfg Config, combo Combin
 		projectDir = result.OutputDir
 	}
 
-	return runValidation(ctx, plan, cfg, combo, projectDir, tmpDir, &shouldClean, start)
+	return runValidation(ctx, plan, cfg, cp, combo, projectDir, tmpDir, &shouldClean, start)
 }
 
 func runValidation(
 	ctx context.Context,
 	plan *TestPlan,
 	cfg Config,
+	cp TestCasePlan,
 	combo Combination,
 	outputDir string,
 	tmpDir string,
 	shouldClean *bool,
 	start time.Time,
 ) CaseResult {
-	if len(plan.Commands) == 0 {
+	if len(cp.Commands) == 0 {
 		return CaseResult{
+			CaseName:    cp.Name,
 			Combination: combo,
 			Status:      CasePassed,
 			Duration:    time.Since(start),
 		}
 	}
 
-	vResult := RunValidationCommands(ctx, outputDir, plan.Commands, plan.Env, cfg.Timeout)
+	vResult := RunValidationCommands(ctx, outputDir, cp.Commands, plan.Env, cfg.Timeout)
 	if vResult == nil {
 		return CaseResult{
+			CaseName:    cp.Name,
 			Combination: combo,
 			Status:      CasePassed,
 			Duration:    time.Since(start),
@@ -280,6 +366,7 @@ func runValidation(
 	}
 
 	return CaseResult{
+		CaseName:    cp.Name,
 		Combination: combo,
 		Status:      CaseFailed,
 		Phase:       "validate: " + vResult.Command,

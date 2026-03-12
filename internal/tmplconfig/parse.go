@@ -28,9 +28,16 @@ func ParseTemplateConfig(data []byte) (*TemplateConfig, error) {
 
 // TestConfig represents the optional "test" section in tag.template.json.
 type TestConfig struct {
-	Commands    []string          `json:"commands,omitempty"`
+	Cases       []TestCase        `json:"cases,omitempty"`
 	ProjectName string            `json:"project_name,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
+}
+
+// TestCase defines a named test case with optional filters and validation commands.
+type TestCase struct {
+	Name     string          `json:"name"`
+	Filters  map[string]bool `json:"filters,omitempty"`
+	Commands []string        `json:"commands"`
 }
 
 // ParseTestConfig extracts the optional "test" section from raw template config JSON.

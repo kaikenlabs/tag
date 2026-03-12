@@ -22,6 +22,7 @@ type Config struct {
 	PinVars     map[string]string // Vars to fix at a specific value (not permuted)
 	RunCommands []string          // Validation commands (overrides template config)
 	Filter      string            // Filter expression (index or key=value pairs)
+	CaseName    string            // Run only the test case with this name
 	Parallel    int               // Max concurrent test runs
 	FailFast    bool              // Stop on first failure
 	DryRun      bool              // List combinations without running
@@ -37,10 +38,16 @@ type Config struct {
 type TestPlan struct {
 	TemplateDir string
 	BoolVars    []string
-	Combos      []Combination
-	Commands    []string
+	Cases       []TestCasePlan
 	Env         map[string]string
 	ProjectName string
+}
+
+// TestCasePlan represents a single named test case with its filtered combinations and commands.
+type TestCasePlan struct {
+	Name     string
+	Combos   []Combination
+	Commands []string
 }
 
 // Combination represents a single set of boolean variable assignments.
@@ -90,6 +97,7 @@ func (s *CaseStatus) UnmarshalJSON(data []byte) error {
 
 // CaseResult holds the outcome of testing a single combination.
 type CaseResult struct {
+	CaseName    string        `json:"case_name"`
 	Combination Combination   `json:"combination"`
 	Status      CaseStatus    `json:"status"`
 	Phase       string        `json:"phase,omitempty"`    // "scaffold", "validate:<cmd>", etc.
