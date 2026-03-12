@@ -82,11 +82,34 @@
       "description": "Matrix test configuration for validating boolean variable combinations",
       "additionalProperties": false,
       "properties": {
-        "commands": {
+        "cases": {
           "type": "array",
-          "description": "Validation commands to run after scaffolding each combination",
+          "description": "Named test cases, each with optional filters and validation commands",
           "items": {
-            "type": "string"
+            "type": "object",
+            "required": ["name", "commands"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Identifier for the test case (used with --case flag)"
+              },
+              "filters": {
+                "type": "object",
+                "description": "Boolean variable pins for this case (e.g., {\"use_docker\": true})",
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "commands": {
+                "type": "array",
+                "description": "Validation commands to run after scaffolding each combination",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            }
           },
           "minItems": 1
         },
