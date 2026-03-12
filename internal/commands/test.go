@@ -92,6 +92,10 @@ func testFlags() []cli.Flag {
 			Name:  "filter",
 			Usage: "Filter combinations by index or key=value pairs (comma-separated)",
 		},
+		&cli.StringFlag{
+			Name:  "case",
+			Usage: "Run only the test case with this name",
+		},
 		&cli.BoolFlag{
 			Name:  "fail-fast",
 			Usage: "Stop on first failure",
@@ -150,6 +154,7 @@ func testAction(c *cli.Context, w io.Writer, templateDir string) error {
 		PinVars:     pinVars,
 		RunCommands: c.StringSlice("run"),
 		Filter:      c.String("filter"),
+		CaseName:    c.String("case"),
 		Parallel:    c.Int("parallel"),
 		FailFast:    c.Bool("fail-fast"),
 		DryRun:      c.Bool("dry-run"),
@@ -166,15 +171,22 @@ func testAction(c *cli.Context, w io.Writer, templateDir string) error {
 		return app.Errorf("test plan: %w", err)
 	}
 
+	// Count total combinations across all cases.
+	totalCombos := 0
+	for _, cp := range plan.Cases {
+		totalCombos += len(cp.Combos)
+	}
+
 	// Print header (skip for JSON to keep stdout machine-parseable).
 	if cfg.Format != "json" {
 		fmt.Fprintf(w, "Template: %s\n", templateDir)
 		fmt.Fprintf(w, "Boolean variables: %v\n", plan.BoolVars)
-		fmt.Fprintf(w, "Combinations: %d | Parallel: %d\n\n", len(plan.Combos), cfg.Parallel)
+		fmt.Fprintf(w, "Test cases: %d | Combinations: %d | Parallel: %d\n\n",
+			len(plan.Cases), totalCombos, cfg.Parallel)
 	}
 
 	if cfg.DryRun {
-		testrunner.PrintDryRun(w, plan.Combos, plan.BoolVars)
+		testrunner.PrintDryRun(w, plan)
 		return nil
 	}
 

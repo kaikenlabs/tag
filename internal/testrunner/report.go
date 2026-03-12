@@ -11,35 +11,62 @@ import (
 
 // PrintTextReport writes a human-readable test report to w.
 func PrintTextReport(w io.Writer, report Report, boolVars []string, verbose bool) {
-	// Sort results by combination index for deterministic output.
-	sorted := make([]CaseResult, len(report.Cases))
-	copy(sorted, report.Cases)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Combination.Index < sorted[j].Combination.Index
-	})
+	// Group results by case name, preserving order.
+	type caseGroup struct {
+		name    string
+		results []CaseResult
+	}
+	var groups []caseGroup
+	groupIdx := make(map[string]int)
+	for _, c := range report.Cases {
+		idx, ok := groupIdx[c.CaseName]
+		if !ok {
+			idx = len(groups)
+			groupIdx[c.CaseName] = idx
+			groups = append(groups, caseGroup{name: c.CaseName})
+		}
+		groups[idx].results = append(groups[idx].results, c)
+	}
 
-	for _, c := range sorted {
-		label := ComboLabel(c.Combination, boolVars)
-		switch c.Status {
-		case CasePassed:
-			fmt.Fprintf(w, "  ✓  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
-		case CaseFailed:
-			fmt.Fprintf(w, "  ✗  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
-			fmt.Fprintf(w, "       Phase: %s\n", c.Phase)
-			fmt.Fprintf(w, "       Error: %s\n", c.Error)
-			if c.KeptDir != "" {
-				fmt.Fprintf(w, "       Kept:  %s\n", c.KeptDir)
-			}
-			if verbose && c.Output != "" {
-				fmt.Fprintf(w, "       Output:\n")
-				for line := range strings.SplitSeq(c.Output, "\n") {
-					fmt.Fprintf(w, "         %s\n", line)
+	multiCase := len(groups) > 1
+
+	for _, g := range groups {
+		// Sort results by combination index for deterministic output.
+		sort.Slice(g.results, func(i, j int) bool {
+			return g.results[i].Combination.Index < g.results[j].Combination.Index
+		})
+
+		if multiCase {
+			fmt.Fprintf(w, "── %s ──\n", g.name)
+		}
+
+		for _, c := range g.results {
+			label := ComboLabel(c.Combination, boolVars)
+			switch c.Status {
+			case CasePassed:
+				fmt.Fprintf(w, "  ✓  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
+			case CaseFailed:
+				fmt.Fprintf(w, "  ✗  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
+				fmt.Fprintf(w, "       Phase: %s\n", c.Phase)
+				fmt.Fprintf(w, "       Error: %s\n", c.Error)
+				if c.KeptDir != "" {
+					fmt.Fprintf(w, "       Kept:  %s\n", c.KeptDir)
 				}
+				if verbose && c.Output != "" {
+					fmt.Fprintf(w, "       Output:\n")
+					for line := range strings.SplitSeq(c.Output, "\n") {
+						fmt.Fprintf(w, "         %s\n", line)
+					}
+				}
+			case CaseErrored:
+				fmt.Fprintf(w, "  !  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
+				fmt.Fprintf(w, "       Phase: %s\n", c.Phase)
+				fmt.Fprintf(w, "       Error: %s\n", c.Error)
 			}
-		case CaseErrored:
-			fmt.Fprintf(w, "  !  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
-			fmt.Fprintf(w, "       Phase: %s\n", c.Phase)
-			fmt.Fprintf(w, "       Error: %s\n", c.Error)
+		}
+
+		if multiCase {
+			fmt.Fprintln(w)
 		}
 	}
 
@@ -61,10 +88,24 @@ func PrintJSONReport(w io.Writer, report Report) error {
 }
 
 // PrintDryRun lists all combinations that would be tested.
-func PrintDryRun(w io.Writer, combos []Combination, boolVars []string) {
-	fmt.Fprintf(w, "Combinations to test (%d total):\n\n", len(combos))
-	for _, c := range combos {
-		label := ComboLabel(c, boolVars)
-		fmt.Fprintf(w, "  [%d] %s\n", c.Index, label)
+func PrintDryRun(w io.Writer, plan *TestPlan) {
+	multiCase := len(plan.Cases) > 1
+	total := 0
+	for _, cp := range plan.Cases {
+		total += len(cp.Combos)
+	}
+
+	fmt.Fprintf(w, "Combinations to test (%d total):\n\n", total)
+	for _, cp := range plan.Cases {
+		if multiCase {
+			fmt.Fprintf(w, "── %s ──\n", cp.Name)
+		}
+		for _, c := range cp.Combos {
+			label := ComboLabel(c, plan.BoolVars)
+			fmt.Fprintf(w, "  [%d] %s\n", c.Index, label)
+		}
+		if multiCase {
+			fmt.Fprintln(w)
+		}
 	}
 }

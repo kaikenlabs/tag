@@ -553,12 +553,24 @@ Validate that a template scaffolds correctly for every combination of boolean va
   },
   "test": {
     "project_name": "test-project",
-    "commands": ["go build ./..."]
+    "cases": [
+      {
+        "name": "Full test",
+        "filters": { "use_docker": true, "use_grpc": true },
+        "commands": ["go build ./...", "go vet ./..."]
+      },
+      {
+        "name": "Light test",
+        "commands": ["go build ./..."]
+      }
+    ]
   }
 }
 ```
 
-The `test` block defines a fixed `project_name` for scaffolding and validation commands that run inside each scaffolded directory. With 3 boolean vars, `tag test` generates 2³ = 8 combinations and scaffolds each one.
+The `test` block defines named test cases, each with optional `filters` to pin boolean variables and `commands` to validate the scaffold output. Cases without filters run across all 2^N boolean combinations. Cases with filters pin specific variables, reducing the matrix. With 3 boolean vars and no filters, `tag test` generates 2³ = 8 combinations per case.
+
+Use `--case "Full test"` to run a single case:
 
 **Basic usage**:
 ```bash

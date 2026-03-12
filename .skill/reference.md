@@ -611,6 +611,7 @@ Discovers boolean variables in `tag.template.json`, generates all 2^N combinatio
 | `--pin key=value` | Fix a variable to a specific value (can be repeated) |
 | `--run <command>` | Validation command, overrides template config (can be repeated) |
 | `--filter <expr>` | Filter combinations by index or key=value pairs |
+| `--case <name>` | Run only the test case with this name |
 | `--fail-fast` | Stop on first failure |
 | `--dry-run` | List combinations without running tests |
 | `--keep-failed` | Keep scaffolded directories on failure for debugging |
@@ -626,16 +627,29 @@ Discovers boolean variables in `tag.template.json`, generates all 2^N combinatio
 {
   "vars": { "...": "..." },
   "test": {
-    "commands": ["go build ./...", "go vet ./..."],
     "project_name": "test-scaffold",
-    "env": { "CGO_ENABLED": "0" }
+    "env": { "CGO_ENABLED": "0" },
+    "cases": [
+      {
+        "name": "Full test",
+        "filters": { "use_docker": true, "use_postgres": true },
+        "commands": ["go build ./...", "go vet ./...", "golangci-lint run ./..."]
+      },
+      {
+        "name": "Light test",
+        "commands": ["go build ./..."]
+      }
+    ]
   }
 }
 ```
 
-- `commands`: Validation commands run after each successful scaffold. Requires `--accept-hooks` to execute (security: prevents untrusted template commands).
-- `project_name`: Project name for scaffold output (default: `test-scaffold`).
-- `env`: Environment variables passed to validation commands.
+- `cases`: Array of named test cases, each with optional `filters` and `commands`.
+  - `name`: Identifier for the test case (used with `--case` flag).
+  - `filters`: Boolean variable pins for this case (e.g., `{"use_docker": true}` runs only combinations where `use_docker=true`).
+  - `commands`: Validation commands run after each successful scaffold. Requires `--accept-hooks` to execute.
+- `project_name`: Project name for scaffold output (default: `test-scaffold`), shared across all cases.
+- `env`: Environment variables passed to validation commands, shared across all cases.
 
 Use `--run` to provide commands directly without `--accept-hooks`:
 
