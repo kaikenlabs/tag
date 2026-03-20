@@ -372,12 +372,12 @@ Hello {{ .Name }}`
 }
 
 func TestUT_RunHooks_EmptyHooks(t *testing.T) {
-	err := runHooks([][]string{}, hooks.HookPhasePreGen, nil, io.Discard)
+	err := runHooks([][]string{}, hooks.HookPhasePreGen, nil, io.Discard, "testgen", "testtarget")
 	require.NoError(t, err)
 }
 
 func TestUT_RunHooks_NilHooks(t *testing.T) {
-	err := runHooks(nil, hooks.HookPhasePreGen, nil, io.Discard)
+	err := runHooks(nil, hooks.HookPhasePreGen, nil, io.Discard, "testgen", "testtarget")
 	require.NoError(t, err)
 }
 
@@ -397,7 +397,7 @@ func TestUT_RunHooks_ValidHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative path with ./ prefix to indicate it's a local file
-	err = runHooks([][]string{{"./test-hook.sh"}}, hooks.HookPhasePreGen, nil, io.Discard)
+	err = runHooks([][]string{{"./test-hook.sh"}}, hooks.HookPhasePreGen, nil, io.Discard, "testgen", "testtarget")
 	require.NoError(t, err)
 }
 
@@ -416,7 +416,7 @@ func TestUT_RunHooks_FailingHook(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative path with ./ prefix to indicate it's a local file
-	err = runHooks([][]string{{"./failing-hook.sh"}}, hooks.HookPhasePreGen, nil, io.Discard)
+	err = runHooks([][]string{{"./failing-hook.sh"}}, hooks.HookPhasePreGen, nil, io.Discard, "testgen", "testtarget")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hook failed")
 }
@@ -442,7 +442,7 @@ func TestUT_RunHooks_StopsOnFailure(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Use relative paths with ./ prefix to indicate they are local files
-	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}}, hooks.HookPhasePreGen, nil, io.Discard)
+	err = runHooks([][]string{{"./hook1.sh"}, {"./hook2.sh"}}, hooks.HookPhasePreGen, nil, io.Discard, "testgen", "testtarget")
 	require.Error(t, err)
 
 	// Verify second hook didn't run
@@ -459,13 +459,13 @@ func TestUT_RunHooks_NonexistentCommand(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-	err = runHooks([][]string{{"nonexistent-command-xyz"}}, hooks.HookPhasePreGen, nil, io.Discard)
+	err = runHooks([][]string{{"nonexistent-command-xyz"}}, hooks.HookPhasePreGen, nil, io.Discard, "testgen", "testtarget")
 	require.Error(t, err)
 }
 
 func TestUT_RunHooks_PathCommand(t *testing.T) {
 	// Test that PATH commands work (e.g., "echo" should be found in PATH)
-	err := runHooks([][]string{{"echo", "hello"}}, hooks.HookPhasePreGen, nil, io.Discard)
+	err := runHooks([][]string{{"echo", "hello"}}, hooks.HookPhasePreGen, nil, io.Discard, "testgen", "testtarget")
 	require.NoError(t, err)
 }
 
@@ -484,7 +484,7 @@ func TestUT_RunHooks_RelativePathCommand(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	// Relative path should resolve from working directory
-	err = runHooks([][]string{{"./myscript.sh"}}, hooks.HookPhasePreGen, nil, io.Discard)
+	err = runHooks([][]string{{"./myscript.sh"}}, hooks.HookPhasePreGen, nil, io.Discard, "testgen", "testtarget")
 	require.NoError(t, err)
 }
 
@@ -1763,4 +1763,313 @@ Hello {{ .Name }}`
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, generateCalls, "generator should run when no tag.template.json exists")
+}
+
+// --- Enhancement 1: Bundle Variables tests ---
+
+func TestUT_GenerateBundle_BundleVarsMerged(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := "---\nto: output/{{ .Name }}.txt\n---\nHello {{ .Name }}"
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","vars":{"domain":"tenant","use_db":true},"generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	var capturedData engine.Data
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(_ *template.Engine, _ bool, _ string, _ string, _ *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		return &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				capturedData = data
+				return engine.GenerateResult{}, nil
+			},
+		}, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	assert.Equal(t, "tenant", capturedData.ScaffoldVars["domain"])
+	assert.Equal(t, true, capturedData.ScaffoldVars["use_db"])
+}
+
+func TestUT_GenerateBundle_BundleVarsOverrideScaffoldVars(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := "---\nto: output/{{ .Name }}.txt\n---\nHello"
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","vars":{"domain":"admin"},"generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{
+		"domain":       "default",
+		"project_name": "myproj",
+	}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	var capturedData engine.Data
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(_ *template.Engine, _ bool, _ string, _ string, _ *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		return &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				capturedData = data
+				return engine.GenerateResult{}, nil
+			},
+		}, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	assert.Equal(t, "admin", capturedData.ScaffoldVars["domain"], "bundle vars should override scaffold vars")
+	assert.Equal(t, "myproj", capturedData.ScaffoldVars["project_name"], "scaffold vars not in bundle should be preserved")
+}
+
+func TestUT_GenerateBundle_EmptyBundleVars(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := "---\nto: output/{{ .Name }}.txt\n---\nHello"
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","vars":{},"generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{"project_name": "myproj"}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	var capturedData engine.Data
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(_ *template.Engine, _ bool, _ string, _ string, _ *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		return &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				capturedData = data
+				return engine.GenerateResult{}, nil
+			},
+		}, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	assert.Equal(t, "myproj", capturedData.ScaffoldVars["project_name"], "scaffold vars preserved with empty bundle vars")
+}
+
+func TestUT_GenerateBundle_NilBundleVars(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := "---\nto: output/{{ .Name }}.txt\n---\nHello"
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","generators":[{"name":"hello"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{"project_name": "myproj"}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	var capturedData engine.Data
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(_ *template.Engine, _ bool, _ string, _ string, _ *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		return &mockGenerator{
+			GenerateFunc: func(data engine.Data) (engine.GenerateResult, error) {
+				capturedData = data
+				return engine.GenerateResult{}, nil
+			},
+		}, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	assert.Equal(t, "myproj", capturedData.ScaffoldVars["project_name"], "scaffold vars preserved when bundle has no vars")
+}
+
+func TestUT_GenerateBundle_BundleVarsDoNotMutateCfg(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	templateContent := "---\nto: output/{{ .Name }}.txt\n---\nHello"
+	createGenerator(t, tmpDir, "gen1", templateContent)
+	createGenerator(t, tmpDir, "gen2", templateContent)
+	createSharedDir(t, tmpDir)
+
+	bundleJSON := `{"name":"mybundle","vars":{"domain":"tenant"},"generators":[{"name":"gen1"},{"name":"gen2"}]}`
+	createBundle(t, tmpDir, "mybundle", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Variables = map[string]any{"project_name": "myproj"}
+
+	ctx := createTestCLIContext(t, []string{"mybundle", "world"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: "_shared",
+		flags.BundlePathFlag: "_bundles",
+	})
+
+	fac := defaultGeneratorFactories()
+	fac.newBundleEngine = func(_ *template.Engine, _ bool, _ string, _ string, _ *history.Recorder, _ io.Writer) (engine.Generator, error) {
+		return &mockGenerator{}, nil
+	}
+
+	err := generateAction(ctx, cfg, fac)
+
+	require.NoError(t, err)
+	_, hasDomain := cfg.Variables["domain"]
+	assert.False(t, hasDomain, "cfg.Variables should not be mutated by bundle vars merge")
+}
+
+// --- Enhancement 2a: Hook Env Vars tests ---
+
+func TestUT_RunHooks_SetsGeneratorNameEnv(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	markerFile := filepath.Join(tmpDir, "gen-name.txt")
+	scriptContent := "#!/bin/bash\necho \"$TAG_GENERATOR_NAME\" > " + markerFile
+	scriptPath := filepath.Join(tmpDir, "check-env.sh")
+	require.NoError(t, os.WriteFile(scriptPath, []byte(scriptContent), 0o755))
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	err = runHooks([][]string{{"./check-env.sh"}}, hooks.HookPhasePreGen, nil, io.Discard, "my-generator", "my-target")
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(markerFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, "my-generator\n", string(content))
+}
+
+func TestUT_RunHooks_SetsTargetNameEnv(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	markerFile := filepath.Join(tmpDir, "target-name.txt")
+	scriptContent := "#!/bin/bash\necho \"$TAG_TARGET_NAME\" > " + markerFile
+	scriptPath := filepath.Join(tmpDir, "check-env.sh")
+	require.NoError(t, os.WriteFile(scriptPath, []byte(scriptContent), 0o755))
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	err = runHooks([][]string{{"./check-env.sh"}}, hooks.HookPhasePreGen, nil, io.Discard, "my-generator", "my-target")
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(markerFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, "my-target\n", string(content))
+}
+
+func TestUT_RunHooks_EnvVarsPresentWithNilVars(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	markerFile := filepath.Join(tmpDir, "env-check.txt")
+	scriptContent := "#!/bin/bash\necho \"GEN=$TAG_GENERATOR_NAME TARGET=$TAG_TARGET_NAME\" > " + markerFile
+	scriptPath := filepath.Join(tmpDir, "check-env.sh")
+	require.NoError(t, os.WriteFile(scriptPath, []byte(scriptContent), 0o755))
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	err = runHooks([][]string{{"./check-env.sh"}}, hooks.HookPhasePreGen, nil, io.Discard, "crud-tenant", "widget")
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(markerFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, "GEN=crud-tenant TARGET=widget\n", string(content))
+}
+
+// --- Enhancement 2b: Post-Hook Warning tests ---
+
+func TestUT_GenerateWithHooks_PostHookFailureIsWarning(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	scriptPath := filepath.Join(tmpDir, "post-fail.sh")
+	require.NoError(t, os.WriteFile(scriptPath, []byte("#!/bin/bash\nexit 1"), 0o755))
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Hooks.Post = [][]string{{scriptPath}}
+
+	var buf bytes.Buffer
+	ctx := createTestCLIContext(t, []string{"mygen", "mytarget"}, map[string]any{
+		flags.PathFlag: tmpDir,
+	})
+	ctx.App.Writer = &buf
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	// Suppress slog warning output in test.
+	origLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { slog.SetDefault(origLogger) })
+
+	err = generateWithHooks(ctx, cfg, "mygen", "mytarget", func(_ *history.Recorder) (engine.GenerateResult, error) {
+		return engine.GenerateResult{Created: 1}, nil
+	})
+
+	require.NoError(t, err, "post-hook failure should not return error")
+	assert.Contains(t, buf.String(), "warning:")
+}
+
+func TestUT_GenerateWithHooks_PreHookFailureIsFatal(t *testing.T) {
+	tmpDir := setupTempDir(t)
+
+	scriptPath := filepath.Join(tmpDir, "pre-fail.sh")
+	require.NoError(t, os.WriteFile(scriptPath, []byte("#!/bin/bash\nexit 1"), 0o755))
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Hooks.Pre = [][]string{{scriptPath}}
+
+	ctx := createTestCLIContext(t, []string{"mygen", "mytarget"}, map[string]any{
+		flags.PathFlag: tmpDir,
+	})
+
+	oldDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
+
+	err = generateWithHooks(ctx, cfg, "mygen", "mytarget", func(_ *history.Recorder) (engine.GenerateResult, error) {
+		t.Fatal("generate function should not be called when pre-hook fails")
+		return engine.GenerateResult{}, nil
+	})
+
+	require.Error(t, err, "pre-hook failure should return error")
+	assert.Contains(t, err.Error(), "hook failed")
 }

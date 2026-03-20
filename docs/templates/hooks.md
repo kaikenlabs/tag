@@ -478,10 +478,16 @@ Generate hooks receive scaffold-time variables as environment variables:
 |---------------------|-------------|
 | `TAG_PROJECT_NAME` | Value of the `project_name` variable (if set) |
 | `TAG_VAR_<NAME>` | Each scaffold variable as `TAG_VAR_` + uppercase name |
+| `TAG_GENERATOR_NAME` | Generator or bundle name being run |
+| `TAG_TARGET_NAME` | The positional name argument |
 
 Variable names follow the same transformation rules as scaffold hooks (uppercase, non-alphanumeric characters become underscores).
 
 > **Note**: Generate hooks do **not** receive `TAG_TEMPLATE_DIR` or `TAG_OUTPUT_DIR` — those are scaffold-specific.
+
+### Post-Hook Failure Behavior
+
+Post-generate hook failures are treated as **warnings** — generated files are preserved and the user is notified. Pre-generate hook failures remain **fatal** and abort generation before any files are written.
 
 ### Example
 

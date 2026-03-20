@@ -279,7 +279,7 @@ Templates can include generators in `_generators/` — copied to scaffolded proj
 | `pre_scaffold` | Template dir | Before generation | Fatal — stops |
 | `post_scaffold` | Output dir | After generation | Warning only |
 | `pre_generate` | Project dir | Before codegen | Fatal |
-| `post_generate` | Project dir | After codegen | Fatal |
+| `post_generate` | Project dir | After codegen | Warning only |
 
 ### Environment Variables
 
@@ -289,6 +289,8 @@ Templates can include generators in `_generators/` — copied to scaffolded proj
 | `TAG_OUTPUT_DIR` | Absolute path to project root |
 | `TAG_PROJECT_NAME` | Value of `project_name` variable |
 | `TAG_VAR_<NAME>` | Each variable as `TAG_VAR_` + UPPER_SNAKE |
+| `TAG_GENERATOR_NAME` | Generator or bundle name being run (generate hooks only) |
+| `TAG_TARGET_NAME` | Positional name argument (generate hooks only) |
 
 ### Execution Rules
 
@@ -394,6 +396,9 @@ Bundles and generators can declare a `requires` field — an array of `.tagconfi
 ```json
 {
   "name": "crud",
+  "vars": {
+    "domain": "tenant"
+  },
   "requires": ["use_db"],
   "generators": [
     { "name": "model" },

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -182,9 +183,9 @@ type generateFunc func(rec *history.Recorder) (engine.GenerateResult, error)
 // post-hooks, records history, and prints the final summary.
 // When fn returns an error it may have already printed a partial-progress summary;
 // generateWithHooks returns the error immediately without printing again.
-func generateWithHooks(c *cli.Context, cfg *config.Config, generatorName string, fn generateFunc) error {
+func generateWithHooks(c *cli.Context, cfg *config.Config, generatorName, targetName string, fn generateFunc) error {
 	if !c.Bool(flags.NoHooksFlag) {
-		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables, c.App.Writer); err != nil {
+		if err := runHooks(cfg.Hooks.Pre, hooks.HookPhasePreGen, cfg.Variables, c.App.Writer, generatorName, targetName); err != nil {
 			return err
 		}
 	}
@@ -202,8 +203,10 @@ func generateWithHooks(c *cli.Context, cfg *config.Config, generatorName string,
 	}
 
 	if !c.Bool(flags.NoHooksFlag) {
-		if err := runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables, c.App.Writer); err != nil {
-			return err
+		if hookErr := runHooks(cfg.Hooks.Post, hooks.HookPhasePostGen, cfg.Variables, c.App.Writer, generatorName, targetName); hookErr != nil {
+			slog.Warn("post-generation hook failed", "error", hookErr)
+			fmt.Fprintf(c.App.Writer, "\n%s post-hook failed: %s (generated files preserved)\n",
+				chalk.Yellow("warning:"), hookErr)
 		}
 	}
 
@@ -216,6 +219,18 @@ func generateWithHooks(c *cli.Context, cfg *config.Config, generatorName string,
 
 	printGenerateSummary(c.App.Writer, result, c.Bool(flags.VerboseFlag))
 	return nil
+}
+
+// mergeVars creates a new map merging base and overlay without mutating either.
+// Keys in overlay take precedence over keys in base.
+func mergeVars(base, overlay map[string]any) map[string]any {
+	if len(base) == 0 && len(overlay) == 0 {
+		return nil
+	}
+	merged := make(map[string]any, len(base)+len(overlay))
+	maps.Copy(merged, base)
+	maps.Copy(merged, overlay)
+	return merged
 }
 
 func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, generatorName, targetName, bundlePath string, onExisting engine.OnExistingPolicy) error {
@@ -238,13 +253,17 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 		return reqErr
 	}
 
+	// Merge variable layers: ScaffoldVars (base) <- BundleVars (override).
+	// CLI --meta flags are handled later by the engine (highest precedence).
+	mergedVars := mergeVars(cfg.Variables, bundle.Vars)
+
 	tmplEngine, err := template.NewEngine()
 	if err != nil {
 		return app.Errorf("cannot create template engine: %w", err)
 	}
 
 	slog.Info(chalk.Green("running bundle"), "bundle", generatorName, "target", targetName)
-	return generateWithHooks(c, cfg, generatorName, func(rec *history.Recorder) (engine.GenerateResult, error) {
+	return generateWithHooks(c, cfg, generatorName, targetName, func(rec *history.Recorder) (engine.GenerateResult, error) {
 		var total engine.GenerateResult
 		for _, generator := range bundle.Generators {
 			var genDirPath, sharedPath string
@@ -273,12 +292,10 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 			}
 
 			genData := engine.Data{
-				Name:       targetName,
-				RawMeta:    c.StringSlice(flags.MetaFlag),
-				OnExisting: onExisting,
-			}
-			if cfg.Variables != nil {
-				genData.ScaffoldVars = cfg.Variables
+				Name:         targetName,
+				RawMeta:      c.StringSlice(flags.MetaFlag),
+				ScaffoldVars: mergedVars,
+				OnExisting:   onExisting,
 			}
 
 			genResult, genRunErr := runGenerate(gen, genData)
@@ -312,7 +329,7 @@ func generateTemplate(c *cli.Context, cfg *config.Config, fac generatorFactories
 	}
 
 	slog.Info(chalk.Green("running generator"), "generator", generatorName, "target", targetName)
-	return generateWithHooks(c, cfg, generatorName, func(rec *history.Recorder) (engine.GenerateResult, error) {
+	return generateWithHooks(c, cfg, generatorName, targetName, func(rec *history.Recorder) (engine.GenerateResult, error) {
 		gen, err := fac.newEngine(c.Bool(flags.DryRunFlag), dirPath, sharedPath, rec, c.App.Writer)
 		if err != nil {
 			return engine.GenerateResult{}, app.Errorf("error creating engine: %w", err)
@@ -329,7 +346,7 @@ func generateTemplate(c *cli.Context, cfg *config.Config, fac generatorFactories
 	})
 }
 
-func runHooks(hookCmds [][]string, phase hooks.HookPhase, vars map[string]any, w io.Writer) error {
+func runHooks(hookCmds [][]string, phase hooks.HookPhase, vars map[string]any, w io.Writer, generatorName, targetName string) error {
 	if len(hookCmds) == 0 {
 		return nil
 	}
@@ -342,7 +359,11 @@ func runHooks(hookCmds [][]string, phase hooks.HookPhase, vars map[string]any, w
 	var env []string
 	if len(vars) > 0 {
 		env = hooks.BuildVarEnv(vars, os.Stderr)
+	} else {
+		env = os.Environ()
 	}
+
+	env = append(env, "TAG_GENERATOR_NAME="+generatorName, "TAG_TARGET_NAME="+targetName)
 
 	results, err := hooks.RunArgvHooks(phase, hookCmds, dir, env)
 

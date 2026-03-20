@@ -45,6 +45,59 @@ func advancePastNewline(s string, pos int) int {
 
 // mergeInjection injects data before or after the first occurrence of a matcher within source.
 // If the matcher is not found, the source is returned unchanged with an error.
+// leadingWhitespace returns the leading whitespace prefix of a line.
+func leadingWhitespace(line string) string {
+	for i, ch := range line {
+		if ch != ' ' && ch != '\t' {
+			return line[:i]
+		}
+	}
+	return line
+}
+
+// reindentLines adjusts the indentation of data so it aligns with the marker line.
+// It detects the base indent from the first non-empty line of data, strips it from
+// all lines, and prepends markerIndent. Empty lines are left empty.
+// When markerIndent is empty and baseIndent is empty, this is a no-op.
+func reindentLines(data, markerIndent, lineEnd string) string {
+	if data == "" || markerIndent == "" {
+		return data
+	}
+
+	lines := strings.Split(data, "\n")
+	// Handle CRLF: strip trailing \r from each line for processing, re-add after.
+	isCRLF := lineEnd == "\r\n"
+	if isCRLF {
+		for i, l := range lines {
+			lines[i] = strings.TrimRight(l, "\r")
+		}
+	}
+
+	// Find the base indent from the first non-empty line.
+	var baseIndent string
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			baseIndent = leadingWhitespace(l)
+			break
+		}
+	}
+
+	var b strings.Builder
+	for i, l := range lines {
+		if i > 0 {
+			b.WriteString(lineEnd)
+		}
+		if strings.TrimSpace(l) == "" {
+			// Preserve empty lines without adding trailing whitespace.
+			continue
+		}
+		stripped := strings.TrimPrefix(l, baseIndent)
+		b.WriteString(markerIndent)
+		b.WriteString(stripped)
+	}
+	return b.String()
+}
+
 func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error) {
 	if err := inject.Validate(); err != nil {
 		return source, err
@@ -56,12 +109,15 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 		return source, ErrNoMatchingExpression
 	}
 
+	// Detect the marker line's leading whitespace for indentation alignment.
+	lineStart := lineStartOffset(src, idx)
+	markerIndent := leadingWhitespace(src[lineStart:])
+
 	var before, after string
 	switch inject.Clause {
 	case types.InjectBefore:
 		// Split at the start of the line containing the marker so that
 		// the marker's leading whitespace stays with the marker.
-		lineStart := lineStartOffset(src, idx)
 		before = src[:lineStart]
 		after = src[lineStart:]
 	case types.InjectAfter:
@@ -79,6 +135,9 @@ func mergeInjection(source, dataInjection []byte, inject Inject) ([]byte, error)
 	if strings.Contains(src, "\r\n") {
 		lineEnd = "\r\n"
 	}
+
+	// Reindent injected content to match the marker's indentation level.
+	data = reindentLines(data, markerIndent, lineEnd)
 
 	// Ensure injected content is separated from the marker by a newline.
 	// For InjectBefore: data must end with a newline so the marker stays on its own line.
