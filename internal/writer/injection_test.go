@@ -296,3 +296,118 @@ func TestUT_InjectAfter_MarkerAtEOF_CRLF(t *testing.T) {
 	// CRLF source at EOF should use \r\n separator
 	assert.Equal(t, "content\r\n// marker\r\nappended", string(got))
 }
+
+// --- Enhancement 3: Indentation-Aware Injection tests ---
+
+func TestUT_InjectAfter_IndentationAware_Spaces(t *testing.T) {
+	source := []byte("components:\n  schemas:\n    User:\n      type: object\n    # TAG:SCHEMAS\n")
+	data := []byte("Widget:\n  type: object\n  properties:\n    id:\n      type: string\n")
+	inject := Inject{Matcher: "# TAG:SCHEMAS", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	expected := "components:\n  schemas:\n    User:\n      type: object\n    # TAG:SCHEMAS\n    Widget:\n      type: object\n      properties:\n        id:\n          type: string\n"
+	assert.Equal(t, expected, string(got))
+}
+
+func TestUT_InjectAfter_IndentationAware_Tabs(t *testing.T) {
+	source := []byte("func main() {\n\t// TAG:INIT\n\tfmt.Println(\"done\")\n}\n")
+	data := []byte("setup()\nconfig()\n")
+	inject := Inject{Matcher: "// TAG:INIT", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	expected := "func main() {\n\t// TAG:INIT\n\tsetup()\n\tconfig()\n\tfmt.Println(\"done\")\n}\n"
+	assert.Equal(t, expected, string(got))
+}
+
+func TestUT_InjectAfter_IndentationAware_ColumnZero(t *testing.T) {
+	// Marker at column 0: behavior should be identical to pre-indentation code.
+	source := []byte("// TAG:IMPORTS\npackage main\n")
+	data := []byte("import \"fmt\"\n")
+	inject := Inject{Matcher: "// TAG:IMPORTS", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	assert.Equal(t, "// TAG:IMPORTS\nimport \"fmt\"\npackage main\n", string(got))
+}
+
+func TestUT_InjectAfter_IndentationAware_EmptyLines(t *testing.T) {
+	source := []byte("  // TAG:BLOCK\n  rest\n")
+	data := []byte("line1\n\nline2\n")
+	inject := Inject{Matcher: "// TAG:BLOCK", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	// Empty lines should not be padded with whitespace.
+	expected := "  // TAG:BLOCK\n  line1\n\n  line2\n  rest\n"
+	assert.Equal(t, expected, string(got))
+}
+
+func TestUT_InjectAfter_IndentationAware_BaseIndentStripped(t *testing.T) {
+	// Template itself has 2-space base indent; marker has 4-space indent.
+	// Base indent should be stripped, then marker indent applied.
+	source := []byte("    // TAG:HERE\n    existing\n")
+	data := []byte("  foo:\n    bar: baz\n")
+	inject := Inject{Matcher: "// TAG:HERE", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	expected := "    // TAG:HERE\n    foo:\n      bar: baz\n    existing\n"
+	assert.Equal(t, expected, string(got))
+}
+
+func TestUT_InjectBefore_IndentationAware(t *testing.T) {
+	source := []byte("items:\n    # TAG:ITEMS\n    existing: value\n")
+	data := []byte("new_item: added\n")
+	inject := Inject{Matcher: "# TAG:ITEMS", Clause: types.InjectBefore}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	expected := "items:\n    new_item: added\n    # TAG:ITEMS\n    existing: value\n"
+	assert.Equal(t, expected, string(got))
+}
+
+func TestUT_InjectAfter_IndentationAware_MixedIndentLevels(t *testing.T) {
+	// Relative indentation within the template should be preserved.
+	source := []byte("  // TAG:CODE\n  done()\n")
+	data := []byte("if true {\n  inner()\n  if nested {\n    deep()\n  }\n}\n")
+	inject := Inject{Matcher: "// TAG:CODE", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	expected := "  // TAG:CODE\n  if true {\n    inner()\n    if nested {\n      deep()\n    }\n  }\n  done()\n"
+	assert.Equal(t, expected, string(got))
+}
+
+func TestUT_InjectAfter_IndentationAware_CRLF(t *testing.T) {
+	source := []byte("  // TAG:MARKER\r\n  rest\r\n")
+	data := []byte("line1\r\nline2\r\n")
+	inject := Inject{Matcher: "// TAG:MARKER", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	expected := "  // TAG:MARKER\r\n  line1\r\n  line2\r\n  rest\r\n"
+	assert.Equal(t, expected, string(got))
+}
+
+func TestUT_InjectAfter_IndentationAware_LeadingNewline(t *testing.T) {
+	// Data starts with an empty line — indentation should apply to subsequent lines.
+	source := []byte("  // TAG:BLOCK\n  rest\n")
+	data := []byte("\nfoo\nbar\n")
+	inject := Inject{Matcher: "// TAG:BLOCK", Clause: types.InjectAfter}
+
+	got, err := mergeInjection(source, data, inject)
+
+	require.NoError(t, err)
+	expected := "  // TAG:BLOCK\n\n  foo\n  bar\n  rest\n"
+	assert.Equal(t, expected, string(got))
+}

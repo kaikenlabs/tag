@@ -91,6 +91,7 @@ type GeneratorRef struct {
 type Bundle struct {
 	Name          string         `json:"name" yaml:"name"`
 	Description   string         `json:"description,omitempty" yaml:"description,omitempty"`
+	Vars          map[string]any `json:"vars,omitempty" yaml:"vars,omitempty"`
 	SelfContained bool           `json:"self_contained,omitempty" yaml:"self_contained,omitempty"`
 	Requires      []string       `json:"requires,omitempty" yaml:"requires,omitempty"`
 	Generators    []GeneratorRef `json:"generators" yaml:"generators"`

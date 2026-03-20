@@ -94,14 +94,19 @@ inject: true
 after: "// ROUTES"
 desc: Inject route registration
 ---
-	{{ name | camel }}Handler := handler.New{{ name | pascal }}Handler({{ name | camel }}Repo)
-	r.Get("/{{ name | kebab | plural }}", {{ name | camel }}Handler.Get)
+{{ name | camel }}Handler := handler.New{{ name | pascal }}Handler({{ name | camel }}Repo)
+r.Get("/{{ name | kebab | plural }}", {{ name | camel }}Handler.Get)
 ```
+
+Injection is **indentation-aware**: injected content automatically aligns to the marker's leading whitespace. Template content can be written at column 0 — TAG adjusts indentation to match where the marker sits in the target file.
 
 **Bundle** — `.tag/_bundles/resource/resource.json`:
 ```json
 {
   "name": "resource",
+  "vars": {
+    "domain": "core"
+  },
   "requires": ["use_db"],
   "generators": [
     { "name": "model" },
@@ -112,7 +117,7 @@ desc: Inject route registration
 }
 ```
 
-The `requires` field ensures this bundle only runs when the project's `.tagconfig.json` has `"use_db": true`. Without it, `tag generate list` hides the bundle and `tag generate resource product` aborts with a clear error.
+The `requires` field ensures this bundle only runs when the project's `.tagconfig.json` has `"use_db": true`. The `vars` field sets default variables for all generators in the bundle — CLI `-m` flags override them. Precedence: `.tagconfig.json` ← bundle `vars` ← CLI `--meta`.
 
 **Usage**: `tag generate resource product` creates all 4 files.
 

@@ -82,7 +82,7 @@ type {{ name | pascal }}Service struct{}
 ### Actions
 
 - **Create** (default): Write new file. Fails if file already exists (use `--on-existing` to change behavior).
-- **Inject**: Insert at marker (`after:` or `before:` with `inject: true`).
+- **Inject**: Insert at marker (`after:` or `before:` with `inject: true`). Indentation-aware: injected content is automatically aligned to the marker's leading whitespace.
 - **Append**: Add to end of file (`append: true`).
 
 Execution order: Create → Inject → Append (files exist before injection).
@@ -120,6 +120,23 @@ Bundles run multiple generators sequentially. Stored as JSON in `.tag/_bundles/`
 }
 ```
 
+### Bundle Default Variables
+
+Bundles can define default variables passed to all generators via `vars`. CLI `-m` flags override bundle defaults. Precedence: `.tagconfig.json` variables (base) ← bundle `vars` ← CLI `--meta` (highest).
+
+```json
+{
+  "name": "crud-tenant",
+  "vars": {
+    "domain": "tenant"
+  },
+  "generators": [
+    { "name": "model" },
+    { "name": "repository" }
+  ]
+}
+```
+
 ### Bundle Prerequisites
 
 Bundles and generators can declare `requires` — a list of `.tagconfig.json` variable names that must be present and truthy. If unmet, `tag generate` aborts with an error listing the missing variables.
@@ -127,6 +144,7 @@ Bundles and generators can declare `requires` — a list of `.tagconfig.json` va
 ```json
 {
   "name": "crud",
+  "vars": { "domain": "tenant" },
   "requires": ["use_db"],
   "generators": [
     { "name": "model" },
