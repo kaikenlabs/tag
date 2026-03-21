@@ -49,6 +49,26 @@ The `past` filter handles irregular verbs, consonant doubling, and preserves cas
 | `default` | `default(value)` | Fallback if nil/empty |
 | `truncate` | `truncate(len, ellipsis?)` | Truncate with "..." |
 
+### Global Functions
+
+| Function | Description |
+|----------|-------------|
+| `now()` | Current time in RFC3339 format |
+| `now("20060102150405")` | Current time with Go format layout |
+| `range(stop)` | Integer range (Gonja built-in) |
+| `dict(key=val)` | Create dict (Gonja built-in) |
+
+**Common `now()` patterns:**
+
+| Template | Output |
+|----------|--------|
+| `{{ now("20060102150405") }}` | `20260321143022` (migration number) |
+| `{{ now("2006-01-02") }}` | `2026-03-21` (date only) |
+| `{{ now("2006-01-02T15:04:05Z07:00") }}` | RFC3339 |
+| `{{ now() }}` | RFC3339 (default) |
+
+Format uses Go's `time.Format` layout (reference time: `Mon Jan 2 15:04:05 MST 2006`).
+
 ### String Methods
 
 Python-style method calls on strings:

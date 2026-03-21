@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/nikolalohinski/gonja/v2"
 	"github.com/nikolalohinski/gonja/v2/builtins"
@@ -99,6 +100,11 @@ func (e *Engine) createEnvironment() (*exec.Environment, error) {
 		ControlStructures: builtins.ControlStructures,
 		Methods:           customMethods,
 	}
+
+	// Register TAG global functions on top of builtins
+	env.Context.Update(exec.NewContext(map[string]any{
+		"now": nowFunction,
+	}))
 
 	// Register our custom filters on top of builtins
 	if err := RegisterFilters(env.Filters); err != nil {
@@ -278,6 +284,17 @@ func (e *Engine) CacheLen() int {
 	e.cache.mu.RLock()
 	defer e.cache.mu.RUnlock()
 	return len(e.cache.items)
+}
+
+// nowFunction implements the now() global template function.
+// With no arguments it returns the current time in RFC3339 format.
+// With a format string argument it uses Go's time.Format layout.
+func nowFunction(_ *exec.Evaluator, params *exec.VarArgs) (string, error) {
+	layout := time.RFC3339
+	if len(params.Args) > 0 {
+		layout = params.Args[0].String()
+	}
+	return time.Now().Format(layout), nil
 }
 
 // Compile-time interface checks

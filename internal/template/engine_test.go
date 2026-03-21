@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -237,4 +238,64 @@ func TestUT_Engine_BuiltinFilters(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestUT_Engine_NowFunction_NoArgs(t *testing.T) {
+	engine := MustNewEngine()
+	ctx := NewContext("test", nil)
+
+	result, err := engine.ExecuteToString("{{ now() }}", ctx)
+	require.NoError(t, err)
+
+	// Should be valid RFC3339
+	_, parseErr := time.Parse(time.RFC3339, result)
+	assert.NoError(t, parseErr, "now() without args should return valid RFC3339, got: %s", result)
+}
+
+func TestUT_Engine_NowFunction_DateFormat(t *testing.T) {
+	engine := MustNewEngine()
+	ctx := NewContext("test", nil)
+
+	result, err := engine.ExecuteToString(`{{ now("20060102") }}`, ctx)
+	require.NoError(t, err)
+
+	expected := time.Now().Format("20060102")
+	assert.Equal(t, expected, result)
+}
+
+func TestUT_Engine_NowFunction_TimeFormat(t *testing.T) {
+	engine := MustNewEngine()
+	ctx := NewContext("test", nil)
+
+	result, err := engine.ExecuteToString(`{{ now("15:04:05") }}`, ctx)
+	require.NoError(t, err)
+
+	// Parse to verify it's a valid time — allow 1s tolerance for test execution
+	_, parseErr := time.Parse("15:04:05", result)
+	assert.NoError(t, parseErr, "now(\"15:04:05\") should return valid time, got: %s", result)
+}
+
+func TestUT_Engine_NowFunction_MigrationFormat(t *testing.T) {
+	engine := MustNewEngine()
+	ctx := NewContext("test", nil)
+
+	result, err := engine.ExecuteToString(`{{ now("20060102150405") }}`, ctx)
+	require.NoError(t, err)
+
+	assert.Len(t, result, 14, "migration format should be 14 digits")
+	// Verify it starts with today's date
+	assert.Equal(t, time.Now().Format("20060102"), result[:8])
+}
+
+func TestUT_Engine_NowFunction_InFilePath(t *testing.T) {
+	engine := MustNewEngine()
+	ctx := NewContext("users", nil)
+
+	tmpl := `migrations/{{ now("20060102150405") }}_create_{{ name }}.up.sql`
+	result, err := engine.ExecuteToString(tmpl, ctx)
+	require.NoError(t, err)
+
+	assert.Contains(t, result, "migrations/")
+	assert.Contains(t, result, "_create_users.up.sql")
+	assert.Len(t, result, len("migrations/")+14+len("_create_users.up.sql"))
 }
