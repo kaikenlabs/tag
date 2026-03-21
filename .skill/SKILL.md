@@ -181,6 +181,43 @@ tag template new generator hello --in-bundle examples
 tag generate examples world
 ```
 
+## Dialect Type-Mapping
+
+Dialects map canonical type names to language-specific types via the `to()` filter, enabling a single template to target multiple languages.
+
+```jinja
+{{ field.type | to("go") }}       → time.Time (for datetime)
+{{ field.type | to("postgres") }} → UUID (for uuid)
+```
+
+**Built-in dialects:** `go`, `postgres`, `mysql`, `typescript`, `openapi`, `protobuf`
+
+**Canonical types:** `string`, `text`, `int`, `int32`, `int64`, `float`, `float32`, `float64`, `bool`, `byte`, `bytes`, `uuid`, `datetime`, `date`, `decimal`, `json`
+
+### Three-Tier Loading
+
+1. **Built-in** — 6 embedded dialects (always available)
+2. **User-global** — `~/.local/share/tag/dialects/*.yaml` (personal overrides)
+3. **Template-local** — `_dialects/*.yaml` within a template (project-specific)
+
+Later tiers override individual type mappings (deep merge). Unknown types or dialects produce template rendering errors (not silent passthrough).
+
+### Dialect Override Example
+
+```yaml
+# _dialects/go.yaml — override Go's uuid mapping
+name: go
+types:
+  uuid: uuid.UUID  # override built-in "string" mapping
+```
+
+### CLI
+
+```bash
+tag dialect list            # Show all available dialects
+tag dialect show postgres   # Show type mappings for a dialect
+```
+
 ## Scaffold Templates
 
 For full template syntax, variable types, hooks, and remote references, see [reference.md](reference.md).
@@ -217,6 +254,8 @@ my-project/
 | `tag template lint [path]` | Validate template (schema, syntax, vars) |
 | `tag template variables [path]` | Audit variable declarations vs usage (`--format json`, `--strict`) |
 | `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template |
+| `tag dialect list` | List available type-mapping dialects |
+| `tag dialect show <name>` | Show type mappings for a dialect |
 | `tag lib add <ref>` | Install template to library |
 | `tag lib ls` | List installed templates |
 | `tag lib rm <name>` | Remove template |

@@ -20,9 +20,11 @@ my-template/
 │   │   └── logo.png                     # Copied as-is (no .tmpl)
 │   ├── README.md.tmpl
 │   └── .gitignore
-└── _generators/                         # Optional: becomes .tag/ in output
-    └── handler/
-        └── handler.go
+├── _generators/                         # Optional: becomes .tag/ in output
+│   └── handler/
+│       └── handler.go
+└── _dialects/                           # Optional: dialect type-mapping overrides
+    └── go.yaml                          # Override individual type mappings
 ```
 
 ## File Processing Rules

@@ -621,3 +621,65 @@ tag test ./my-template --accept-hooks --keep-failed --verbose
 ```
 
 **Safety limits**: Templates with many boolean vars can produce large matrices (2^N). The default limit is 64 combinations. Override with `--max-cases 0` for unlimited, or `--max-cases 128` for a higher cap.
+
+## Recipe 14: Multi-Target Template with Dialects
+
+Generate both Go structs and SQL migrations from the same field definitions using the `to()` dialect filter.
+
+**Scaffold template** — `tag.template.json`:
+```json
+{
+  "name": "Go + Postgres",
+  "vars": {
+    "model_name": { "prompt": "Model name" },
+    "table_name": { "prompt": "Table name", "default": "{{ vars.model_name | snake | plural }}" },
+    "fields": {
+      "prompt": "Fields (name:type pairs)",
+      "type": "list",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+**Go model** — `{{ vars.model_name | snake }}.go`:
+```jinja
+package models
+
+type {{ vars.model_name | pascal }} struct {
+{% for field in vars.fields %}
+    {{ field.name | pascal }} {{ field.type | to("go") }} `json:"{{ field.name | snake }}" db:"{{ field.name | snake }}"`
+{% endfor %}
+}
+```
+
+**SQL migration** — `migrations/create_{{ vars.table_name | snake }}.sql`:
+```jinja
+CREATE TABLE {{ vars.table_name | snake }} (
+    id SERIAL PRIMARY KEY,
+{% for field in vars.fields %}
+    {{ field.name | snake }} {{ field.type | to("postgres") }}{% if not loop.last %},{% endif %}
+{% endfor %}
+);
+```
+
+**Override a built-in mapping** — `_dialects/go.yaml`:
+```yaml
+name: go
+types:
+  uuid: github.com/google/uuid.UUID
+```
+
+This override changes only the `uuid` mapping for Go; all other Go types inherit from the built-in dialect.
+
+**Inspect available dialects**:
+```bash
+tag dialect list              # See all 6 built-in dialects
+tag dialect show postgres     # See all type mappings for Postgres
+```
