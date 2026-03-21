@@ -512,7 +512,7 @@ echo "Formatting code for $TAG_PROJECT_NAME..."
 Use `--no-hooks` to skip hook execution:
 
 ```bash
-tag generate model User --no-hooks
+tag generate --no-hooks model User
 ```
 
 ## See Also

@@ -193,6 +193,130 @@ Hello {{ .Name }}`
 	assert.Equal(t, []string{"key1=value1", "key2=value2"}, capturedData.RawMeta)
 }
 
+func TestUT_GenerateAction_MetaRenderedInOutput(t *testing.T) {
+	// Full-flow reproduction test: CLI -m flags must be accessible as {{ vars.* }} in rendered output.
+	// Unlike TestUT_GenerateAction_WithMeta (which uses a mock), this uses the real Gonja engine
+	// and verifies the actual file content written to disk.
+	tmpDir := setupTempDir(t)
+
+	// Use real Gonja template syntax (not the mock {{ .Name }} syntax).
+	templateContent := "---\nto: {{ name }}.txt\n---\nname: {{ name }}\nfields: {{ vars.fields }}\ndomain: {{ vars.domain }}\n"
+
+	createGenerator(t, tmpDir, "hello", templateContent)
+	createSharedDir(t, tmpDir)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Hooks = config.Hooks{Pre: [][]string{}, Post: [][]string{}}
+
+	ctx := createTestCLIContext(t, []string{"hello", "widget"}, map[string]any{
+		flags.PathFlag:       tmpDir,
+		flags.SharedPathFlag: filepath.Join(tmpDir, "_shared"),
+		flags.MetaFlag:       []string{"fields=name:string", "domain=tenant"},
+		flags.NoHooksFlag:    true,
+	})
+
+	// Chdir to temp dir so the file writer creates output there.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// Use the real engine factory — no mocks.
+	fac := defaultGeneratorFactories()
+
+	err = generateAction(ctx, cfg, fac)
+	require.NoError(t, err)
+
+	// Verify the rendered file was written with correct content.
+	output, err := os.ReadFile(filepath.Join(tmpDir, "widget.txt"))
+	require.NoError(t, err, "expected widget.txt to be created")
+
+	assert.Contains(t, string(output), "name: widget")
+	assert.Contains(t, string(output), "fields: name:string")
+	assert.Contains(t, string(output), "domain: tenant")
+}
+
+func TestUT_GenerateAction_MetaViaAppRun(t *testing.T) {
+	// End-to-end test: exercises real CLI arg parsing via app.Run() with -m flags.
+	// This is the only test that covers the actual urfave/cli StringSlice parsing path,
+	// which is the last untested layer between the user's shell and the engine.
+	//
+	// urfave/cli v2 requires flags BEFORE positional args (POSIX compliance).
+	// "tag generate -m key=val gen name" works; "tag generate gen name -m key=val" does NOT.
+	tests := []struct {
+		name     string
+		args     []string
+		wantMeta bool
+	}{
+		{
+			name:     "flags before args",
+			args:     []string{"tag", "generate", "-m", "fields=name:string", "-m", "domain=tenant", "--no-hooks", "hello", "widget"},
+			wantMeta: true,
+		},
+		{
+			name:     "flags after args are silently ignored by urfave/cli v2",
+			args:     []string{"tag", "generate", "hello", "widget", "-m", "fields=name:string", "-m", "domain=tenant", "--no-hooks"},
+			wantMeta: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := setupTempDir(t)
+
+			templateContent := "---\nto: {{ name }}.txt\n---\nname: {{ name }}\nfields: {{ vars.fields }}\ndomain: {{ vars.domain }}\n"
+
+			createGenerator(t, tmpDir, "hello", templateContent)
+			createSharedDir(t, tmpDir)
+
+			origDir, err := os.Getwd()
+			require.NoError(t, err)
+			require.NoError(t, os.Chdir(tmpDir))
+			t.Cleanup(func() { os.Chdir(origDir) })
+
+			cfg := createTestConfig(t, tmpDir)
+			cfg.Hooks = config.Hooks{Pre: [][]string{}, Post: [][]string{}}
+
+			cliApp := &cli.App{
+				Writer: io.Discard,
+				Commands: []*cli.Command{
+					{
+						Name: "generate",
+						Flags: []cli.Flag{
+							&cli.StringSliceFlag{Name: "meta", Aliases: []string{"m"}},
+							&cli.BoolFlag{Name: flags.DryRunFlag},
+							&cli.BoolFlag{Name: flags.NoHooksFlag},
+							&cli.StringFlag{Name: flags.OnExistingFlag, Value: ""},
+							&cli.BoolFlag{Name: flags.VerboseFlag},
+						},
+						Action: func(c *cli.Context) error {
+							return generateAction(c, cfg, defaultGeneratorFactories())
+						},
+					},
+				},
+			}
+
+			err = cliApp.Run(tt.args)
+			require.NoError(t, err)
+
+			output, err := os.ReadFile(filepath.Join(tmpDir, "widget.txt"))
+			require.NoError(t, err, "expected widget.txt to be created")
+
+			content := string(output)
+			assert.Contains(t, content, "name: widget")
+
+			if tt.wantMeta {
+				assert.Contains(t, content, "fields: name:string")
+				assert.Contains(t, content, "domain: tenant")
+			} else {
+				// Documents the bug: flags after args are swallowed as extra args.
+				assert.NotContains(t, content, "fields: name:string")
+				assert.NotContains(t, content, "domain: tenant")
+			}
+		})
+	}
+}
+
 func TestUT_GenerateAction_GeneratorError(t *testing.T) {
 	tmpDir := setupTempDir(t)
 

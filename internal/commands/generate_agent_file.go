@@ -118,7 +118,7 @@ func buildAgentContent(lists generatorLists) string {
 	writeRows(lists.localBundles, "bundle")
 
 	b.WriteString("\n### Usage\n\n")
-	b.WriteString("```\ntag generate <generator-or-bundle> <name> [--meta key=value ...]\n```\n\n")
+	b.WriteString("```\ntag generate [--meta key=value ...] <generator-or-bundle> <name>\n```\n\n")
 	b.WriteString(agentMarkerEnd)
 	b.WriteString("\n")
 

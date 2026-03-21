@@ -244,7 +244,7 @@ type {{ name | pascal }}Service struct{}
 
 ```bash
 tag generate service auth                       # → internal/services/auth.go
-tag generate service auth -m package=pkg/svc    # → pkg/svc/auth.go
+tag generate -m package=pkg/svc service auth    # → pkg/svc/auth.go
 ```
 
 ---
