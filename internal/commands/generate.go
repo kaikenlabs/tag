@@ -77,11 +77,11 @@ FLAGS
 
 EXAMPLES
   tag generate model User
-  tag generate api-endpoint users --meta package=handlers
-  tag generate crud Product --no-hooks
-  tag generate crud Product --dry-run
-  tag generate crud Product --on-existing=skip
-  tag generate crud Product --on-existing=overwrite --verbose
+  tag generate --meta package=handlers api-endpoint users
+  tag generate --no-hooks crud Product
+  tag generate --dry-run crud Product
+  tag generate --on-existing=skip crud Product
+  tag generate --on-existing=overwrite --verbose crud Product
   tag generate list                    # List available generators and bundles
   tag generate info model              # Show JSON metadata for a generator or bundle
   tag generate agent-file claude       # Generate AI agent reference file`,
@@ -91,7 +91,7 @@ EXAMPLES
 			generateAgentFileCommand(cfg),
 		},
 		Args:      true,
-		ArgsUsage: "<bundle-or-generator> <name> [args]",
+		ArgsUsage: "[flags] <bundle-or-generator> <name>",
 		Action: func(c *cli.Context) error {
 			return generateAction(c, cfg, defaultGeneratorFactories())
 		},

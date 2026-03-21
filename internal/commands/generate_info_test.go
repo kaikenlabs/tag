@@ -60,7 +60,8 @@ func TestUT_GenerateInfo_Generator(t *testing.T) {
 	require.NotNil(t, info.Hooks)
 	assert.Equal(t, []string{"go fmt ./..."}, info.Hooks.PostScaffold)
 	assert.GreaterOrEqual(t, len(info.Files), 2)
-	assert.Contains(t, info.Usage, "tag generate api-endpoint")
+	assert.Contains(t, info.Usage, "tag generate")
+	assert.Contains(t, info.Usage, "api-endpoint <name>")
 
 	// Check file actions.
 	var hasCreate, hasInject bool
@@ -103,7 +104,8 @@ func TestUT_GenerateInfo_Bundle(t *testing.T) {
 	assert.Equal(t, "Full CRUD stack", info.Description)
 	assert.Equal(t, []string{"model", "repository", "service"}, info.Generators)
 	assert.Nil(t, info.SelfContained)
-	assert.Contains(t, info.Usage, "tag generate crud")
+	assert.Contains(t, info.Usage, "tag generate")
+	assert.Contains(t, info.Usage, "crud <name>")
 }
 
 func TestUT_GenerateInfo_GeneratorNoConfig(t *testing.T) {

@@ -5,7 +5,7 @@ Run a generator or bundle to add code to an existing project.
 ## Synopsis
 
 ```bash
-tag generate <generator-or-bundle> <name> [args] [flags]
+tag generate [flags] <generator-or-bundle> <name>
 tag generate list
 ```
 
@@ -100,7 +100,7 @@ Generators for this project (template: gh:acme/nextjs-starter@v1.2.0)
   BUNDLES
   feature              Component + page + test (template)
 
-Run: tag generate <name> <target> [args]
+Run: tag generate [flags] <name> <target>
 ```
 
 ## Examples
@@ -119,10 +119,10 @@ tag generate model User "name:string,email:string,age:int"
 
 ```bash
 # Pass single metadata value
-tag generate handler User -m package=api
+tag generate -m package=api handler User
 
 # Pass multiple metadata values
-tag generate handler User -m package=api -m version=v1
+tag generate -m package=api -m version=v1 handler User
 ```
 
 ### Running Bundles
@@ -141,7 +141,7 @@ Dry run renders all templates and shows a colored unified diff for each file —
 
 ```bash
 # Preview what would be generated
-tag generate handler User --dry-run
+tag generate --dry-run handler User
 ```
 
 When connected to a TTY, each file's diff is followed by an interactive prompt:
@@ -170,10 +170,10 @@ By default, `tag generate` fails atomically if any `create`-action file already 
 tag generate handler User
 
 # Skip files that already exist (others are still created)
-tag generate handler User --on-existing skip
+tag generate --on-existing skip handler User
 
 # Overwrite existing files (pre-modification backup recorded for undo)
-tag generate handler User --on-existing overwrite
+tag generate --on-existing overwrite handler User
 ```
 
 A post-generation summary shows how many files were created, skipped, or overwritten.
@@ -182,7 +182,7 @@ A post-generation summary shows how many files were created, skipped, or overwri
 
 ```bash
 # Custom templates directory
-tag generate handler User --path custom.tag
+tag generate --path custom.tag handler User
 ```
 
 ## Template Data

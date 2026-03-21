@@ -99,7 +99,7 @@ TAG creates `humidity.go` and injects the route into `main.go`.
 Pass extra variables with `--meta` / `-m`:
 
 ```bash
-tag generate endpoint air-quality -m version=v2
+tag generate -m version=v2 endpoint air-quality
 ```
 
 Access them in generator templates as `{{ vars.version }}`. You can set defaults in the generator's `tag.template.json`:
@@ -187,7 +187,7 @@ Add pre/post hooks in `.tagconfig.json`:
 Skip hooks with `--no-hooks`:
 
 ```bash
-tag generate endpoint test --no-hooks
+tag generate --no-hooks endpoint test
 ```
 
 ## 6. Dry-Run Workflow
@@ -195,7 +195,7 @@ tag generate endpoint test --no-hooks
 Preview changes before writing anything:
 
 ```bash
-tag generate endpoint forecast --dry-run
+tag generate --dry-run endpoint forecast
 ```
 
 This renders all templates and shows a colored unified diff for each file:
@@ -216,7 +216,7 @@ Apply this change? [y]es/[n]o/[a]ll/[q]uit
 
 Nothing is written to disk regardless of your answers. Hooks are not executed.
 
-> **Tip:** Dry-run is useful in code review workflows — pipe it to a file for comparison: `tag generate endpoint forecast --dry-run 2>&1 | tee preview.diff`
+> **Tip:** Dry-run is useful in code review workflows — pipe it to a file for comparison: `tag generate --dry-run endpoint forecast 2>&1 | tee preview.diff`
 
 ## 7. Undo
 
@@ -259,7 +259,7 @@ Options:
 | Run generator | `tag generate <name> <target>` |
 | Create bundle | Create `.tag/_bundles/<name>.json` |
 | Run bundle | `tag generate <bundle> <target>` |
-| Preview changes | `tag generate <name> <target> --dry-run` |
+| Preview changes | `tag generate --dry-run <name> <target>` |
 | Undo last generation | `tag undo` |
 | View history | `tag undo --list` |
 

@@ -137,7 +137,7 @@ func buildBundleInfo(name, bundlePath string) (generatorInfoJSON, error) {
 		Requires:      bundle.Requires,
 		SelfContained: selfContained,
 		Generators:    generators,
-		Usage:         "tag generate " + name + " <name> [--meta key=value ...]",
+		Usage:         "tag generate [--meta key=value ...] " + name + " <name>",
 	}, nil
 }
 
@@ -145,7 +145,7 @@ func buildGeneratorInfo(cfg *config.Config, name, genDir string) (generatorInfoJ
 	info := generatorInfoJSON{
 		Name:  name,
 		Type:  "generator",
-		Usage: "tag generate " + name + " <name> [--meta key=value ...]",
+		Usage: "tag generate [--meta key=value ...] " + name + " <name>",
 	}
 
 	// Read tag.template.json if present.

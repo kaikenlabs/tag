@@ -255,6 +255,58 @@ func TestUT_Generate_WithScaffoldVars(t *testing.T) {
 	assert.Contains(t, string(fw.writeCalls[0].Data), "project=my-app")
 }
 
+func TestUT_Generate_RawMetaAccessibleInVars(t *testing.T) {
+	// Reproduction test: -m flags should be accessible via {{ vars.* }} in generator templates.
+	// This exercises the full pipeline: RawMeta → ParseKeyValues → buildParserContext → Gonja render.
+	fw := &mockFileWriter{}
+	te := newTestParser(t)
+	te.templates = map[string]string{
+		"t.tmpl": "---\nto: {{ name }}.go\n---\nname: {{ name }}\nname|pascal: {{ name | pascal }}\nvars.fields: {{ vars.fields }}\nvars.domain: {{ vars.domain }}\n",
+	}
+	core := NewCore(te, fw, io.Discard)
+
+	_, err := core.Generate(Data{
+		Name:    "widget",
+		RawMeta: []string{"fields=name:string", "domain=tenant"},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, fw.writeCalls, 1)
+
+	output := string(fw.writeCalls[0].Data)
+	assert.Contains(t, output, "name: widget")
+	assert.Contains(t, output, "name|pascal: Widget")
+	assert.Contains(t, output, "vars.fields: name:string")
+	assert.Contains(t, output, "vars.domain: tenant")
+}
+
+func TestUT_Generate_RawMetaAndScaffoldVarsMerge(t *testing.T) {
+	// Verify that RawMeta values override ScaffoldVars, while non-overlapping ScaffoldVars are preserved.
+	fw := &mockFileWriter{}
+	te := newTestParser(t)
+	te.templates = map[string]string{
+		"t.tmpl": "---\nto: output.go\n---\nfields: {{ vars.fields }}\ndomain: {{ vars.domain }}\nproject: {{ vars.project_name }}\n",
+	}
+	core := NewCore(te, fw, io.Discard)
+
+	_, err := core.Generate(Data{
+		Name:    "widget",
+		RawMeta: []string{"fields=name:string", "domain=tenant"},
+		ScaffoldVars: map[string]any{
+			"project_name": "my-app",
+			"domain":       "default-domain", // should be overridden by RawMeta
+		},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, fw.writeCalls, 1)
+
+	output := string(fw.writeCalls[0].Data)
+	assert.Contains(t, output, "fields: name:string")
+	assert.Contains(t, output, "domain: tenant")  // meta overrides scaffold var
+	assert.Contains(t, output, "project: my-app") // scaffold var preserved
+}
+
 func TestUT_Generate_WithNotes(t *testing.T) {
 	fw := &mockFileWriter{}
 	mock := &mockExecutor{
