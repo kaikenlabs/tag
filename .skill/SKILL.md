@@ -91,6 +91,7 @@ Execution order: Create → Inject → Append (files exist before injection).
 
 - `{{ name }}` — the CLI argument from `tag generate <gen> <name>`
 - `{{ vars.x }}` — meta values from `--meta`/`-m` flags or `.tagconfig.json`
+- `{{ now("20060102150405") }}` — current timestamp (Go format layout). No args = RFC3339.
 - **Never bare names**: `{{ project_name }}` does NOT work. Always `{{ vars.project_name }}`.
 
 ### Name Shortcuts
