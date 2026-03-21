@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 
+	"github.com/kaikenlabs/tag/internal/dialect"
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
@@ -87,7 +89,18 @@ func (r *HistoricalRenderer) RenderAt(
 		return nil, configErr
 	}
 
-	engine, err := template.NewEngine()
+	// Load dialects (all 3 tiers) for the to() filter.
+	reg, dialectErr := dialect.LoadForTemplate(checkoutDir, types.DialectsDir)
+	if dialectErr != nil {
+		slog.Debug("dialect loading failed, continuing without dialects", "error", dialectErr)
+	}
+
+	var engineOpts []template.Option
+	if reg != nil {
+		engineOpts = append(engineOpts, template.WithDialectRegistry(reg))
+	}
+
+	engine, err := template.NewEngine(engineOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create template engine: %w", err)
 	}
@@ -323,6 +336,11 @@ func isSkippedEntry(relPath, name string) bool {
 
 	// _generators directory tree.
 	if relPath == types.GeneratorsDir || strings.HasPrefix(relPath, types.GeneratorsDir+string(filepath.Separator)) {
+		return true
+	}
+
+	// _dialects directory tree.
+	if relPath == types.DialectsDir || strings.HasPrefix(relPath, types.DialectsDir+string(filepath.Separator)) {
 		return true
 	}
 

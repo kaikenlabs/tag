@@ -1,0 +1,19 @@
+name: postgres
+description: PostgreSQL database type mappings
+types:
+  string: TEXT
+  text: TEXT
+  int: INTEGER
+  int32: INTEGER
+  int64: BIGINT
+  float: DOUBLE PRECISION
+  float32: REAL
+  float64: DOUBLE PRECISION
+  bool: BOOLEAN
+  byte: SMALLINT
+  bytes: BYTEA
+  uuid: UUID
+  datetime: TIMESTAMPTZ
+  date: DATE
+  decimal: NUMERIC
+  json: JSONB

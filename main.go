@@ -58,6 +58,7 @@ func main() {
 			commands.ScaffoldCommand(),
 			commands.TemplateCommand(cfg),
 			commands.LibCommand(),
+			commands.DialectCommand(),
 			commands.CacheCommand(),
 			commands.ConvertCommand(),
 			commands.ExtractCommand(),

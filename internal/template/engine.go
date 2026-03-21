@@ -13,6 +13,8 @@ import (
 	"github.com/nikolalohinski/gonja/v2/config"
 	"github.com/nikolalohinski/gonja/v2/exec"
 	"github.com/nikolalohinski/gonja/v2/loaders"
+
+	"github.com/kaikenlabs/tag/internal/dialect"
 )
 
 // templateCache provides thread-safe caching of parsed Gonja templates.
@@ -53,6 +55,7 @@ type Engine struct {
 	sharedContent     map[string]string // raw shared template content for {% include %} in string-parsed templates
 	sharedContentHash string            // hash of sharedContent for cache key differentiation
 	cache             *templateCache
+	dialectRegistry   *dialect.Registry // optional dialect registry for to() filter
 }
 
 // gonjaTemplate wraps a Gonja template to implement our Template interface.
@@ -87,15 +90,22 @@ func NewEngine(opts ...Option) (*Engine, error) {
 }
 
 // createEnvironment creates a Gonja environment with our custom configuration.
+// Each engine gets its own copy of the filter set to prevent leaking filter
+// state (e.g., the to() dialect filter closure) across engine instances.
 func (e *Engine) createEnvironment() (*exec.Environment, error) {
 	// Create custom methods with our modifications (e.g., replace with optional count)
 	customMethods := builtins.Methods
 	customMethods.Str = createCustomStringMethods()
 
-	// Use builtins directly - they're already initialized properly
+	// Create a per-engine copy of the filter set to ensure isolation.
+	// Without this, registering the to() filter with a specific registry
+	// would leak across all engines sharing builtins.Filters.
+	filters := exec.NewFilterSet(map[string]exec.FilterFunction{})
+	filters.Update(builtins.Filters)
+
 	env := &exec.Environment{
 		Context:           exec.EmptyContext().Update(builtins.GlobalFunctions),
-		Filters:           builtins.Filters,
+		Filters:           filters,
 		Tests:             builtins.Tests,
 		ControlStructures: builtins.ControlStructures,
 		Methods:           customMethods,
@@ -111,7 +121,23 @@ func (e *Engine) createEnvironment() (*exec.Environment, error) {
 		return nil, fmt.Errorf("failed to create environment: %w", err)
 	}
 
+	// Register dialect to() filter if a registry was provided
+	if e.dialectRegistry != nil {
+		if err := RegisterDialectFilter(env.Filters, e.dialectRegistry); err != nil {
+			return nil, fmt.Errorf("failed to register dialect filter: %w", err)
+		}
+	}
+
 	return env, nil
+}
+
+// WithDialectRegistry returns an Option that configures the engine with a
+// dialect registry for the to() filter. The registry is immutable after
+// engine creation.
+func WithDialectRegistry(reg *dialect.Registry) Option {
+	return func(e *Engine) {
+		e.dialectRegistry = reg
+	}
 }
 
 // ParseString parses a template from a string.

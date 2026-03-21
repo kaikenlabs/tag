@@ -49,6 +49,26 @@ The `past` filter handles irregular verbs, consonant doubling, and preserves cas
 | `default` | `default(value)` | Fallback if nil/empty |
 | `truncate` | `truncate(len, ellipsis?)` | Truncate with "..." |
 
+#### Dialect Type-Mapping
+
+| Filter | Signature | Description |
+|--------|-----------|-------------|
+| `to` | `to("dialect")` | Map canonical type to dialect-specific type |
+
+**Built-in dialects:** `go`, `postgres`, `mysql`, `typescript`, `openapi`, `protobuf`
+
+**Canonical types:** `string`, `text`, `int`, `int32`, `int64`, `float`, `float32`, `float64`, `bool`, `byte`, `bytes`, `uuid`, `datetime`, `date`, `decimal`, `json`
+
+```jinja
+{{ "uuid" | to("postgres") }}     → UUID
+{{ "datetime" | to("go") }}       → time.Time
+{{ field.type | to("go") | upper }} → chaining works
+```
+
+Override built-in mappings by placing YAML files in `_dialects/` within a template. Three-tier loading: built-in → user-global (`~/.local/share/tag/dialects/`) → template-local.
+
+CLI: `tag dialect list`, `tag dialect show <name>`
+
 ### Global Functions
 
 | Function | Description |

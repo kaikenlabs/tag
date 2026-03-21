@@ -1,0 +1,19 @@
+name: go
+description: Go language type mappings
+types:
+  string: string
+  text: string
+  int: int
+  int32: int32
+  int64: int64
+  float: float64
+  float32: float32
+  float64: float64
+  bool: bool
+  byte: byte
+  bytes: "[]byte"
+  uuid: string
+  datetime: time.Time
+  date: time.Time
+  decimal: decimal.Decimal
+  json: json.RawMessage

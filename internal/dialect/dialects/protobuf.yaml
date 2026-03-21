@@ -1,0 +1,19 @@
+name: protobuf
+description: Protocol Buffers type mappings
+types:
+  string: string
+  text: string
+  int: int32
+  int32: int32
+  int64: int64
+  float: double
+  float32: float
+  float64: double
+  bool: bool
+  byte: int32
+  bytes: bytes
+  uuid: string
+  datetime: google.protobuf.Timestamp
+  date: google.protobuf.Timestamp
+  decimal: string
+  json: google.protobuf.Struct

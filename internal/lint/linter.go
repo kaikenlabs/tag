@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 
+	"github.com/kaikenlabs/tag/internal/dialect"
 	"github.com/kaikenlabs/tag/internal/schema"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
@@ -46,7 +48,18 @@ func NewLinter(root string) (*Linter, error) {
 		return nil, fmt.Errorf("%s not found in %s", types.TemplateConfigFile, root)
 	}
 
-	engine, err := template.NewEngine()
+	// Load dialects (all 3 tiers) for the to() filter.
+	reg, dialectErr := dialect.LoadForTemplate(absRoot, types.DialectsDir)
+	if dialectErr != nil {
+		slog.Debug("dialect loading failed, continuing without dialects", "error", dialectErr)
+	}
+
+	var engineOpts []template.Option
+	if reg != nil {
+		engineOpts = append(engineOpts, template.WithDialectRegistry(reg))
+	}
+
+	engine, err := template.NewEngine(engineOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create template engine: %w", err)
 	}

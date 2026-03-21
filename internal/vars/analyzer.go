@@ -372,6 +372,11 @@ func isSkippedEntry(relPath, name string, isRoot bool) bool {
 		}
 	}
 
+	// _dialects directory tree.
+	if relPath == types.DialectsDir || strings.HasPrefix(relPath, types.DialectsDir+string(filepath.Separator)) {
+		return true
+	}
+
 	// .tag directory tree.
 	if relPath == types.TemplatesDir || strings.HasPrefix(relPath, types.TemplatesDir+string(filepath.Separator)) {
 		return true

@@ -64,6 +64,13 @@ func WithOutput(w io.Writer) ScaffoldOption {
 	return func(s *Scaffold) { s.output = w }
 }
 
+// WithEngine injects a pre-configured template engine. This allows callers to
+// create an engine with specific options (e.g., dialect registry) before
+// scaffold construction. If not provided, a default engine is created.
+func WithEngine(e *template.Engine) ScaffoldOption {
+	return func(s *Scaffold) { s.engine = e }
+}
+
 func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
 	s := &Scaffold{
 		output:     os.Stdout,

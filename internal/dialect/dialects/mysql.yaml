@@ -1,0 +1,19 @@
+name: mysql
+description: MySQL database type mappings
+types:
+  string: VARCHAR(255)
+  text: TEXT
+  int: INT
+  int32: INT
+  int64: BIGINT
+  float: DOUBLE
+  float32: FLOAT
+  float64: DOUBLE
+  bool: TINYINT(1)
+  byte: TINYINT
+  bytes: BLOB
+  uuid: CHAR(36)
+  datetime: DATETIME
+  date: DATE
+  decimal: DECIMAL
+  json: JSON

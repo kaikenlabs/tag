@@ -41,7 +41,18 @@ type generatorFactories struct {
 func defaultGeneratorFactories() generatorFactories {
 	return generatorFactories{
 		newEngine: func(dryRun bool, dirPath, sharedPath string, rec *history.Recorder, out io.Writer) (engine.Generator, error) {
-			tmplEngine, err := template.NewEngine()
+			// Load dialects (built-in + user-global only; generators don't have template-local).
+			reg, dialectErr := loadDialectRegistryGlobal()
+			if dialectErr != nil {
+				slog.Debug("dialect loading failed, continuing without dialects", "error", dialectErr)
+			}
+
+			var opts []template.Option
+			if reg != nil {
+				opts = append(opts, template.WithDialectRegistry(reg))
+			}
+
+			tmplEngine, err := template.NewEngine(opts...)
 			if err != nil {
 				return nil, fmt.Errorf("cannot create template engine: %w", err)
 			}
@@ -257,7 +268,18 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 	// CLI --meta flags are handled later by the engine (highest precedence).
 	mergedVars := mergeVars(cfg.Variables, bundle.Vars)
 
-	tmplEngine, err := template.NewEngine()
+	// Load dialects (built-in + user-global only) for bundle's shared engine.
+	reg, dialectErr := loadDialectRegistryGlobal()
+	if dialectErr != nil {
+		slog.Debug("dialect loading failed, continuing without dialects", "error", dialectErr)
+	}
+
+	var engineOpts []template.Option
+	if reg != nil {
+		engineOpts = append(engineOpts, template.WithDialectRegistry(reg))
+	}
+
+	tmplEngine, err := template.NewEngine(engineOpts...)
 	if err != nil {
 		return app.Errorf("cannot create template engine: %w", err)
 	}

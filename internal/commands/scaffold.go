@@ -20,6 +20,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
+	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -114,7 +115,23 @@ func scaffoldAction(c *cli.Context) error {
 // onCookiecutter handles the CookiecutterDetectedError case, allowing callers to
 // provide context-specific error messages or recovery logic.
 func runScaffold(c *cli.Context, opts scaffold.Options, onCookiecutter func(*scaffold.CookiecutterDetectedError) error) error {
-	s, err := scaffold.NewScaffold(opts)
+	// Load dialect registry (all 3 tiers: built-in + user-global + template-local).
+	reg, err := loadDialectRegistry(opts.TemplateDir)
+	if err != nil {
+		slog.Debug("dialect loading failed, continuing without dialects", "error", err)
+		reg = nil
+	}
+
+	var sopts []scaffold.ScaffoldOption
+	if reg != nil {
+		tmplEngine, engineErr := template.NewEngine(template.WithDialectRegistry(reg))
+		if engineErr != nil {
+			return app.Errorf("failed to create template engine: %w", engineErr)
+		}
+		sopts = append(sopts, scaffold.WithEngine(tmplEngine))
+	}
+
+	s, err := scaffold.NewScaffold(opts, sopts...)
 	if err != nil {
 		return app.Errorf("failed to initialize scaffold: %w", err)
 	}
@@ -372,18 +389,11 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 	// Update opts to use the converted template directory
 	opts.TemplateDir = result.Destination
 
-	// Retry scaffolding with converted template
-	s, err := scaffold.NewScaffold(opts)
-	if err != nil {
-		return app.Errorf("failed to reinitialize scaffold: %w", err)
-	}
-	s.SetRecorder(history.NewRecorder(""))
-	scaffoldResult, err := s.Run(opts)
-	if err != nil {
-		return app.Errorf("scaffolding failed: %w", err)
-	}
-	displayScaffoldSummary(c.App.Writer, scaffoldResult)
-	return nil
+	// Retry scaffolding with converted template — reuse runScaffold to
+	// ensure dialect loading and all other initialization happens correctly.
+	return runScaffold(c, opts, func(*scaffold.CookiecutterDetectedError) error {
+		return app.Errorf("unexpected Cookiecutter detection after conversion")
+	})
 }
 
 // promptForConversion asks the user to confirm Cookiecutter conversion and select a destination.
