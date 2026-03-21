@@ -199,6 +199,48 @@ Truncate a string to a maximum length.
 
 The default ellipsis is `...`.
 
+## Dialect Type-Mapping Filter
+
+The `to` filter maps canonical type names to language-specific types using the dialect system. This enables a single template to target multiple languages or standards by switching the dialect name.
+
+### to
+
+**Syntax:** `to("dialect_name")`
+
+```jinja
+{{ "uuid" | to("go") }}         {# string #}
+{{ "uuid" | to("postgres") }}   {# UUID #}
+{{ "datetime" | to("go") }}     {# time.Time #}
+{{ "int64" | to("mysql") }}     {# BIGINT #}
+{{ "bool" | to("typescript") }} {# boolean #}
+```
+
+**Built-in dialects:** `go`, `postgres`, `mysql`, `typescript`, `openapi`, `protobuf`
+
+**Canonical types:** `string`, `text`, `int`, `int32`, `int64`, `float`, `float32`, `float64`, `bool`, `byte`, `bytes`, `uuid`, `datetime`, `date`, `decimal`, `json`
+
+**Error behavior:** Using an unmapped type or unknown dialect produces a template rendering error (not silent passthrough). This ensures generated code is always correct.
+
+**Example — multi-target template:**
+
+```jinja
+{# Go struct #}
+type {{ vars.model_name | pascal }} struct {
+{% for field in vars.fields %}
+    {{ field.name | pascal }} {{ field.type | to("go") }}
+{% endfor %}
+}
+
+{# SQL table #}
+CREATE TABLE {{ vars.table_name | snake }} (
+{% for field in vars.fields %}
+    {{ field.name | snake }} {{ field.type | to("postgres") }}{% if not loop.last %},{% endif %}
+{% endfor %}
+);
+```
+
+**Dialect overrides:** Place YAML files in `_dialects/` within a template to override built-in mappings. See `tag dialect list` and `tag dialect show <name>` for available dialects and their mappings.
+
 ## Built-in Gonja Filters
 
 TAG also includes all standard Gonja/Jinja2 filters:

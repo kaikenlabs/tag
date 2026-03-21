@@ -1,0 +1,19 @@
+name: openapi
+description: OpenAPI 3.x schema type mappings
+types:
+  string: string
+  text: string
+  int: integer
+  int32: integer
+  int64: integer
+  float: number
+  float32: number
+  float64: number
+  bool: boolean
+  byte: integer
+  bytes: string
+  uuid: string
+  datetime: string
+  date: string
+  decimal: string
+  json: object

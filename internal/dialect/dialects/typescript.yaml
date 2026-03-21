@@ -1,0 +1,19 @@
+name: typescript
+description: TypeScript language type mappings
+types:
+  string: string
+  text: string
+  int: number
+  int32: number
+  int64: number
+  float: number
+  float32: number
+  float64: number
+  bool: boolean
+  byte: number
+  bytes: Uint8Array
+  uuid: string
+  datetime: Date
+  date: Date
+  decimal: string
+  json: unknown
