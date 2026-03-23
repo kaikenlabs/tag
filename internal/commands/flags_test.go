@@ -27,7 +27,7 @@ func newTestContext(t *testing.T, flags []cli.Flag, args []string) *cli.Context 
 
 func TestUT_ReparseTrailingFlags(t *testing.T) {
 	// Shared flag definitions used across tests.
-	testFlags := func() []cli.Flag {
+	reparseFlags := func() []cli.Flag {
 		return []cli.Flag{
 			&cli.StringSliceFlag{Name: "meta", Aliases: []string{"m"}},
 			&cli.BoolFlag{Name: "no-input"},
@@ -116,7 +116,7 @@ func TestUT_ReparseTrailingFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			flags := testFlags()
+			flags := reparseFlags()
 			c := newTestContext(t, flags, tt.args)
 
 			positional, err := reparseTrailingFlags(c, flags)
