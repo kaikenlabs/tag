@@ -38,7 +38,7 @@ tag generate handler UserAuth
 
 **Scaffold and generate in one tool.** Most scaffolding tools (Cookiecutter, Yeoman) create a project and walk away. Code generators (Plop, Hygen) only work inside existing projects. TAG does both — scaffold a complete project from a template, then keep generating code into it as your project grows.
 
-**Built for AI coding agents.** TAG templates include [`.skill/`](.skill/SKILL.md) files that AI coding assistants understand. Your AI agent can scaffold projects, create generators, and run code generation without manual copy-paste.
+**Built for AI coding agents.** TAG templates include [`.skills/`](.skills/SKILL.md) files that AI coding assistants understand. Your AI agent can scaffold projects, create generators, and run code generation without manual copy-paste.
 
 **Single binary, familiar syntax.** One `curl` to install. No Python, no Node, no runtime. Templates use [Jinja2 syntax](docs/templates/syntax.md) you already know.
 
@@ -111,7 +111,7 @@ tag generate handler UserAuth
 
 ## For AI Coding Agents
 
-If you're an AI agent working with a TAG template, start with [`.skill/SKILL.md`](.skill/SKILL.md) — it has a decision tree, generator anatomy, CLI quick reference, and common pitfalls in an LLM-optimized format. Detailed reference and recipes are in `.skill/reference.md` and `.skill/recipes.md`.
+If you're an AI agent working with a TAG template, start with [`.skills/SKILL.md`](.skills/SKILL.md) — it has a decision tree, generator anatomy, CLI quick reference, and common pitfalls in an LLM-optimized format. Detailed reference and recipes are in `.skills/reference.md` and `.skills/recipes.md`.
 
 ## License
 

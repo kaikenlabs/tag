@@ -10,14 +10,14 @@
    - Reserve Write/Edit for new files or non-code files
 3. Use **sequential thinking MCP** for complex reasoning
 4. Use **ref MCP** for library documentation lookups
-5. After code changes, update `.skill/` files if CLI commands, flags, behavior, or workflows changed
+5. After code changes, update `.skills/` files if CLI commands, flags, behavior, or workflows changed
 6. ALWAYS follow the instructions in the global $HOME/.claude/CLAUDE.md
 
 ## Project Overview
 
 Go CLI for template-driven code generation and project scaffolding. Uses Gonja (Jinja2-compatible) templates with `{{ vars.* }}` namespace.
 
-For command reference and template authoring details, see `.skill/SKILL.md` and `.skill/reference.md`.
+For command reference and template authoring details, see `.skills/SKILL.md` and `.skills/reference.md`.
 
 ## Commands
 

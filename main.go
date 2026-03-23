@@ -26,13 +26,13 @@ var (
 	BuildDate  string
 )
 
-//go:embed .skill/SKILL.md
+//go:embed .skills/SKILL.md
 var skillDoc string
 
-//go:embed .skill/reference.md
+//go:embed .skills/reference.md
 var referenceDoc string
 
-//go:embed .skill/recipes.md
+//go:embed .skills/recipes.md
 var recipesDoc string
 
 func main() {
