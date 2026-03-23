@@ -1,5 +1,10 @@
 # TAG
 
+[![CI](https://github.com/kaikenlabs/tag/actions/workflows/ci.yml/badge.svg)](https://github.com/kaikenlabs/tag/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/kaikenlabs/tag/branch/main/graph/badge.svg)](https://codecov.io/gh/kaikenlabs/tag)
+[![Go Reference](https://pkg.go.dev/badge/github.com/kaikenlabs/tag.svg)](https://pkg.go.dev/github.com/kaikenlabs/tag)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kaikenlabs/tag)](https://goreportcard.com/report/github.com/kaikenlabs/tag)
+
 The scaffolding tool that keeps working after day one.
 
 Most scaffolding tools create a project and disappear. TAG stays — generating code into your project as it grows. One binary, Jinja2 templates, built for AI coding agents.

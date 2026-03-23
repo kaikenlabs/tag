@@ -37,9 +37,10 @@ jobs:
       - name: Run integration tests
         run: go test -v ./internal/integration/...
 
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
         with:
-          name: coverage
-          path: coverage.out
+          files: coverage.out
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
