@@ -1,3 +1,5 @@
+//go:generate moq -out mocks.go -stub . fileReadWrite
+
 package writer
 
 import (
