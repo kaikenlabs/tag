@@ -232,11 +232,6 @@ func runGenerateFixture(ctx context.Context, f Fixture, templateRoot, outputDir 
 		return fmt.Errorf("generator directory not found: %s", templateDir)
 	}
 
-	gen, err := engine.NewGenerator(false, templateDir, sharedDir, os.Stderr)
-	if err != nil {
-		return fmt.Errorf("create generator: %w", err)
-	}
-
 	// Build raw meta from fixture Meta map.
 	rawMeta := make([]string, 0, len(f.Meta))
 	for k, v := range f.Meta {
@@ -253,7 +248,9 @@ func runGenerateFixture(ctx context.Context, f Fixture, templateRoot, outputDir 
 	}
 
 	// Override the generator output directory to the temp dir.
-	// We do this by changing the working directory for the generation.
+	// We chdir BEFORE creating the generator so the writer's path safety
+	// check uses the output directory as its base (it captures os.Getwd()
+	// at construction time).
 	origDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getwd: %w", err)
@@ -262,6 +259,11 @@ func runGenerateFixture(ctx context.Context, f Fixture, templateRoot, outputDir 
 		return fmt.Errorf("chdir to output dir: %w", chdirErr)
 	}
 	defer func() { _ = os.Chdir(origDir) }()
+
+	gen, err := engine.NewGenerator(false, templateDir, sharedDir, os.Stderr)
+	if err != nil {
+		return fmt.Errorf("create generator: %w", err)
+	}
 
 	_, err = gen.Generate(data)
 	_ = ctx
