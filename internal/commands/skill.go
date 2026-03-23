@@ -10,7 +10,7 @@ import (
 
 // SkillDocs holds embedded skill documentation content.
 type SkillDocs struct {
-	Skill     string
+	Guide     string
 	Reference string
 	Recipes   string
 }
@@ -23,14 +23,14 @@ func SkillCommand(version string, docs SkillDocs) *cli.Command {
 
 Use subcommands to view specific documentation:
   tag skills           Overview and quick start
-  tag skills skill     Full skill guide (decision tree, CLI reference, pitfalls)
+  tag skills guide     Full guide (decision tree, CLI reference, pitfalls)
   tag skills reference Complete syntax, filters, variable system, hooks
   tag skills recipes   Real-world patterns and examples`,
 		Action: func(c *cli.Context) error {
 			return skillOverviewAction(c, os.Stdout, version)
 		},
 		Subcommands: []*cli.Command{
-			skillDocCommand("skill", "Print the skill guide (decision tree, CLI reference, pitfalls)", docs.Skill),
+			skillDocCommand("guide", "Print the guide (decision tree, CLI reference, pitfalls)", docs.Guide),
 			skillDocCommand("reference", "Print the full reference (syntax, filters, variables, hooks)", docs.Reference),
 			skillDocCommand("recipes", "Print recipes (real-world patterns and examples)", docs.Recipes),
 		},
@@ -59,7 +59,7 @@ TAG is a CLI for template-driven code generation and project scaffolding.
 
 | Subcommand          | Description                                              |
 |---------------------|----------------------------------------------------------|
-| tag skills skill    | Decision tree, generator/bundle anatomy, CLI quick ref   |
+| tag skills guide    | Decision tree, generator/bundle anatomy, CLI quick ref   |
 | tag skills reference| Full syntax, filters, variable system, hooks, remotes    |
 | tag skills recipes  | Real-world patterns: CRUD bundles, inject, scaffolds     |
 

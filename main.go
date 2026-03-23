@@ -71,7 +71,7 @@ func main() {
 			commands.TestCommand(),
 			commands.DoctorCommand(Version),
 			commands.SkillCommand(Version, commands.SkillDocs{
-				Skill:     skillDoc,
+				Guide:     skillDoc,
 				Reference: referenceDoc,
 				Recipes:   recipesDoc,
 			}),
