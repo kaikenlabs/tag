@@ -778,7 +778,13 @@ func TestUT_CompletionZsh_PrintsScript(t *testing.T) {
 func TestUT_CompletionFish_PrintsScript(t *testing.T) {
 	t.Parallel()
 
-	cliApp := &cli.App{Name: "tag"}
+	cliApp := &cli.App{
+		Name: "tag",
+		Commands: []*cli.Command{
+			{Name: "generate"},
+			{Name: "scaffold"},
+		},
+	}
 	cmd := CompletionCommand(cliApp)
 
 	var fishCmd *cli.Command
@@ -804,7 +810,7 @@ func TestUT_CompletionFish_PrintsScript(t *testing.T) {
 
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)
-	assert.Contains(t, buf.String(), "tag")
+	assert.Contains(t, buf.String(), "complete")
 }
 
 // ===========================================================================
