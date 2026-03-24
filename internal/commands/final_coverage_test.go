@@ -388,8 +388,7 @@ func TestUT_ParseSetFlags_ValueContainsEquals(t *testing.T) {
 }
 
 func TestUT_PrintUpdateSummary_AllOps(t *testing.T) {
-	t.Parallel()
-
+	// No t.Parallel() — captures os.Stdout via pipe.
 	result := &templateupdate.UpdateResult{
 		Applied: []templateupdate.MergeResult{
 			{Path: "added.go", Op: templateupdate.MergeAdd},
@@ -710,8 +709,7 @@ func TestUT_PrintGenerateSummary_AllFieldsNonZero(t *testing.T) {
 // ===========================================================================
 
 func TestUT_CompletionBash_PrintsScript(t *testing.T) {
-	t.Parallel()
-
+	// No t.Parallel() — captures os.Stdout via pipe.
 	cliApp := &cli.App{Name: "tag"}
 	cmd := CompletionCommand(cliApp)
 
@@ -744,8 +742,7 @@ func TestUT_CompletionBash_PrintsScript(t *testing.T) {
 }
 
 func TestUT_CompletionZsh_PrintsScript(t *testing.T) {
-	t.Parallel()
-
+	// No t.Parallel() — captures os.Stdout via pipe.
 	cliApp := &cli.App{Name: "tag"}
 	cmd := CompletionCommand(cliApp)
 
@@ -776,8 +773,7 @@ func TestUT_CompletionZsh_PrintsScript(t *testing.T) {
 }
 
 func TestUT_CompletionFish_PrintsScript(t *testing.T) {
-	t.Parallel()
-
+	// No t.Parallel() — captures os.Stdout via pipe.
 	cliApp := &cli.App{
 		Name: "tag",
 		Commands: []*cli.Command{
