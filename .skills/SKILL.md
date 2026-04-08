@@ -70,10 +70,12 @@ type {{ name | pascal }}Service struct{}
 | Field | Required | Description |
 |-------|----------|-------------|
 | `to` | Yes | Output path. Supports `{{ name }}`, `{{ vars.x }}`, filters. |
+| `action` | No | `openapi` to structurally merge into an OpenAPI YAML spec file |
 | `inject` | No | `true` to inject into existing file |
 | `before` | No | Marker string — inject BEFORE this line. Requires `inject: true`. |
 | `after` | No | Marker string — inject AFTER this line. Requires `inject: true`. |
 | `append` | No | `true` to append to end of file |
+| `validate` | No | `true` to run OpenAPI validation after merge. Requires `action: openapi`. |
 | `desc` | No | Description for `tag generate list` |
 | `notes` | No | Message displayed after generation |
 
@@ -82,10 +84,11 @@ type {{ name | pascal }}Service struct{}
 ### Actions
 
 - **Create** (default): Write new file. Fails if file already exists (use `--on-existing` to change behavior).
+- **OpenAPI** (`action: openapi`): Structurally merge rendered YAML fragment into an existing OpenAPI spec file. Inserts new paths and schemas, skips identical content (idempotent), errors on conflicts. Preserves comments, anchors, and indentation.
 - **Inject**: Insert at marker (`after:` or `before:` with `inject: true`). Indentation-aware: injected content is automatically aligned to the marker's leading whitespace.
 - **Append**: Add to end of file (`append: true`).
 
-Execution order: Create → Inject → Append (files exist before injection).
+Execution order: Create → OpenAPI → Inject → Append (files exist before injection/merge).
 
 ### Variables
 

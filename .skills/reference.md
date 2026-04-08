@@ -48,6 +48,7 @@ The `past` filter handles irregular verbs, consonant doubling, and preserves cas
 | `hassuffix` | `hassuffix(suffix)` | Returns boolean |
 | `default` | `default(value)` | Fallback if nil/empty |
 | `truncate` | `truncate(len, ellipsis?)` | Truncate with "..." |
+| `indent` | `indent(width, first?)` | Indent lines by N spaces (skip first line by default; `true` to include first) |
 
 #### Dialect Type-Mapping
 
