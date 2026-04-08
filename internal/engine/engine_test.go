@@ -26,10 +26,18 @@ type mockFileWriter struct {
 	writeCalls  []writeCall
 	appendCalls []appendCall
 	injectCalls []injectCall
+	mergeCalls  []mergeCall
 
 	writeErr  error
 	appendErr error
 	injectErr error
+	mergeErr  error
+}
+
+type mergeCall struct {
+	Name     string
+	Fragment []byte
+	Opts     writer.OpenAPIMergeOptions
 }
 
 type writeCall struct {
@@ -64,8 +72,12 @@ func (m *mockFileWriter) InjectIntoFile(name string, data []byte, inject writer.
 	return m.injectErr
 }
 
-func (m *mockFileWriter) MergeOpenAPIFile(_ string, _ []byte, _ writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
-	return writer.OpenAPIMergeResult{}, nil
+func (m *mockFileWriter) MergeOpenAPIFile(name string, fragment []byte, opts writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
+	m.mergeCalls = append(m.mergeCalls, mergeCall{Name: name, Fragment: fragment, Opts: opts})
+	if m.mergeErr != nil {
+		return writer.OpenAPIMergeResult{}, m.mergeErr
+	}
+	return writer.OpenAPIMergeResult{Changed: true, AddedPaths: []string{"/test"}}, nil
 }
 
 var _ writer.FileWriter = (*mockFileWriter)(nil)
@@ -671,4 +683,48 @@ func Test_parseKeyValues(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestUT_Generate_OpenAPIAction(t *testing.T) {
+	fw := &mockFileWriter{}
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:       "spec/openapi.yaml",
+			Action:   template.ActionOpenAPI,
+			Validate: true,
+			Extra:    map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "paths:\n  /widgets:\n    get:\n      summary: List"},
+	}
+	parser := NewParserWithExecutor(mock, map[string]string{"spec.tmpl": "---\nto: spec/openapi.yaml\naction: openapi\n---\npaths:\n"}, nil)
+	core := NewCore(parser, fw, io.Discard)
+
+	result, err := core.Generate(Data{Name: "Widget"})
+
+	require.NoError(t, err)
+	require.Len(t, fw.mergeCalls, 1)
+	assert.Equal(t, "spec/openapi.yaml", fw.mergeCalls[0].Name)
+	assert.True(t, fw.mergeCalls[0].Opts.ValidateResult)
+	assert.Equal(t, 1, result.Modified)
+	assert.Empty(t, fw.writeCalls)
+	assert.Empty(t, fw.appendCalls)
+	assert.Empty(t, fw.injectCalls)
+}
+
+func TestUT_Generate_OpenAPIAction_Error(t *testing.T) {
+	fw := &mockFileWriter{mergeErr: errors.New("conflict on key /widgets")}
+	mock := &mockExecutor{
+		renderMetadataResult: &template.Metadata{
+			To:     "spec/openapi.yaml",
+			Action: template.ActionOpenAPI,
+			Extra:  map[string]string{},
+		},
+		parseStringTemplate: &mockTemplate{result: "paths: {}"},
+	}
+	parser := NewParserWithExecutor(mock, map[string]string{"spec.tmpl": "---\nto: spec/openapi.yaml\naction: openapi\n---\npaths: {}\n"}, nil)
+	core := NewCore(parser, fw, io.Discard)
+
+	_, err := core.Generate(Data{Name: "Widget"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conflict")
 }

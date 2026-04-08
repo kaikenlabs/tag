@@ -40,8 +40,19 @@ func (s *stubFileWriter) InjectIntoFile(name string, data []byte, _ writer.Injec
 	return os.WriteFile(name, append(existing, data...), 0o644)
 }
 
-func (s *stubFileWriter) MergeOpenAPIFile(_ string, _ []byte, _ writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
-	return writer.OpenAPIMergeResult{}, nil
+func (s *stubFileWriter) MergeOpenAPIFile(name string, _ []byte, _ writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
+	// Simulate a merge that changes the file
+	existing, err := os.ReadFile(name)
+	if err != nil {
+		return writer.OpenAPIMergeResult{}, err
+	}
+	merged := make([]byte, 0, len(existing)+len("\n# merged"))
+	merged = append(merged, existing...)
+	merged = append(merged, "\n# merged"...)
+	if err := os.WriteFile(name, merged, 0o644); err != nil {
+		return writer.OpenAPIMergeResult{}, err
+	}
+	return writer.OpenAPIMergeResult{Changed: true, AddedPaths: []string{"/test"}}, nil
 }
 
 func TestUT_Recorder_RecordCreate_NilHashBefore(t *testing.T) {
@@ -183,4 +194,36 @@ func TestUT_RecordingWriter_FirstTouchSemantics_SameFileTwice(t *testing.T) {
 	currentHash, err := HashFile(target)
 	require.NoError(t, err)
 	assert.Equal(t, currentHash, entry.HashAfter)
+}
+
+func TestUT_RecordingWriter_MergeOpenAPIFile_ExistingTarget(t *testing.T) {
+	dir := t.TempDir()
+	tagDir := filepath.Join(dir, ".tag")
+
+	target := filepath.Join(dir, "openapi.yaml")
+	require.NoError(t, os.WriteFile(target, []byte("openapi: 3.0.3"), 0o644))
+
+	rec := NewRecorder(tagDir)
+	rw := NewRecordingFileWriter(&stubFileWriter{}, rec)
+	result, err := rw.MergeOpenAPIFile(target, []byte("fragment"), writer.OpenAPIMergeOptions{})
+	require.NoError(t, err)
+	assert.True(t, result.Changed)
+
+	gen := rec.Build("spec", "generate")
+	require.Len(t, gen.Files, 1)
+	assert.Equal(t, ActionOpenAPIMerge, gen.Files[0].Action)
+	assert.NotNil(t, gen.Files[0].HashBefore)
+}
+
+func TestUT_RecordingWriter_MergeOpenAPIFile_NewTarget(t *testing.T) {
+	dir := t.TempDir()
+	tagDir := filepath.Join(dir, ".tag")
+
+	target := filepath.Join(dir, "new-spec.yaml")
+	// File doesn't exist yet — stub will fail on ReadFile
+	rec := NewRecorder(tagDir)
+	rw := NewRecordingFileWriter(&stubFileWriter{}, rec)
+	_, err := rw.MergeOpenAPIFile(target, []byte("fragment"), writer.OpenAPIMergeOptions{})
+	// Should error because the target file doesn't exist
+	assert.Error(t, err)
 }
