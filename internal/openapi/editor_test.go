@@ -315,6 +315,208 @@ func TestUT_InvalidFragment(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse fragment")
 }
 
+// TestUT_PathWithAllMethods validates inserting a path with all HTTP methods.
+func TestUT_PathWithAllMethods(t *testing.T) {
+	spec := `openapi: "3.0.3"
+paths: {}
+`
+	fragment := `paths:
+  /widgets:
+    get:
+      summary: List
+    post:
+      summary: Create
+    put:
+      summary: Update
+    delete:
+      summary: Delete
+`
+	editor := NewEditor()
+	out, result, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+	assert.True(t, result.Changed)
+
+	outStr := string(out)
+	assert.Contains(t, outStr, "get:")
+	assert.Contains(t, outStr, "post:")
+	assert.Contains(t, outStr, "put:")
+	assert.Contains(t, outStr, "delete:")
+}
+
+// TestUT_PathWithRefs validates that $ref references in paths are preserved.
+func TestUT_PathWithRefs(t *testing.T) {
+	spec := `openapi: "3.0.3"
+paths: {}
+`
+	fragment := `paths:
+  /widgets:
+    get:
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Widget'
+`
+	editor := NewEditor()
+	out, _, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "$ref: '#/components/schemas/Widget'")
+}
+
+// TestUT_PathWithParameters validates path/query parameters are preserved.
+func TestUT_PathWithParameters(t *testing.T) {
+	spec := `openapi: "3.0.3"
+paths: {}
+`
+	fragment := `paths:
+  /widgets/{id}:
+    get:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+`
+	editor := NewEditor()
+	out, _, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+
+	outStr := string(out)
+	assert.Contains(t, outStr, "name: id")
+	assert.Contains(t, outStr, "in: path")
+	assert.Contains(t, outStr, "required: true")
+}
+
+// TestUT_CommentsOnExistingPaths validates comments on existing paths are preserved.
+func TestUT_CommentsOnExistingPaths(t *testing.T) {
+	spec := `openapi: "3.0.3"
+paths:
+  # Admin endpoints
+  /admin:
+    get:
+      summary: Admin dashboard
+`
+	fragment := `paths:
+  /widgets:
+    get:
+      summary: List widgets
+`
+	editor := NewEditor()
+	out, _, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "# Admin endpoints")
+}
+
+// TestUT_SchemaWithResponses validates adding schemas when components.responses exists but schemas doesn't.
+func TestUT_SchemaWithResponsesSibling(t *testing.T) {
+	spec := `openapi: "3.0.3"
+components:
+  responses:
+    NotFound:
+      description: Not found
+`
+	fragment := `components:
+  schemas:
+    Widget:
+      type: object
+`
+	editor := NewEditor()
+	out, result, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+	assert.True(t, result.Changed)
+	assert.Equal(t, []string{"Widget"}, result.AddedSchemas)
+
+	outStr := string(out)
+	assert.Contains(t, outStr, "Widget")
+	assert.Contains(t, outStr, "NotFound")
+}
+
+// TestUT_SchemaWithNestedObjects validates nested schema objects maintain indentation.
+func TestUT_SchemaWithNestedObjects(t *testing.T) {
+	spec := `openapi: "3.0.3"
+components:
+  schemas: {}
+`
+	fragment := `components:
+  schemas:
+    Widget:
+      type: object
+      properties:
+        name:
+          type: string
+        metadata:
+          type: object
+          properties:
+            created:
+              type: string
+              format: date-time
+`
+	editor := NewEditor()
+	out, _, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+
+	outStr := string(out)
+	assert.Contains(t, outStr, "metadata:")
+	assert.Contains(t, outStr, "created:")
+	assert.Contains(t, outStr, "format: date-time")
+}
+
+// TestUT_SchemaWithRef validates $ref within schema definitions are preserved.
+func TestUT_SchemaWithRef(t *testing.T) {
+	spec := `openapi: "3.0.3"
+components:
+  schemas: {}
+`
+	fragment := `components:
+  schemas:
+    WidgetList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Widget'
+`
+	editor := NewEditor()
+	out, _, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "$ref: '#/components/schemas/Widget'")
+}
+
+// TestUT_OutputIsValidYAML validates that merge output can be re-parsed.
+func TestUT_OutputIsValidYAML(t *testing.T) {
+	spec := `openapi: "3.0.3"
+paths:
+  /existing:
+    get:
+      summary: Existing
+components:
+  schemas:
+    Existing:
+      type: object
+`
+	fragment := `paths:
+  /new:
+    post:
+      summary: New
+components:
+  schemas:
+    New:
+      type: object
+`
+	editor := NewEditor()
+	out, _, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+
+	// Verify output can be re-parsed
+	spec2, err := ParseSpec(out)
+	require.NoError(t, err)
+	assert.NotNil(t, spec2.Paths())
+	assert.NotNil(t, spec2.Schemas())
+}
+
 // TestUT_MethodLevelMerge validates adding a new HTTP method to an existing path.
 func TestUT_MethodLevelMerge(t *testing.T) {
 	// NOTE: In v1, method-level merge is NOT supported. If the path exists,
