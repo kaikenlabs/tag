@@ -517,6 +517,84 @@ components:
 	assert.NotNil(t, spec2.Schemas())
 }
 
+// TestUT_MixedNewAndExisting validates inserting some new paths while skipping identical existing ones.
+func TestUT_MixedNewAndExisting(t *testing.T) {
+	spec := `openapi: "3.0.3"
+paths:
+  /existing:
+    get:
+      summary: Existing
+`
+	fragment := `paths:
+  /existing:
+    get:
+      summary: Existing
+  /new:
+    post:
+      summary: New
+`
+	editor := NewEditor()
+	_, result, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{})
+	require.NoError(t, err)
+	assert.True(t, result.Changed)
+	assert.Equal(t, []string{"/new"}, result.AddedPaths)
+	assert.Equal(t, []string{"/existing"}, result.SkippedPaths)
+}
+
+// TestUT_SchemaConflictError validates schema conflict detection.
+func TestUT_SchemaConflictError(t *testing.T) {
+	spec := `openapi: "3.0.3"
+components:
+  schemas:
+    Widget:
+      type: object
+      properties:
+        name:
+          type: string
+`
+	fragment := `components:
+  schemas:
+    Widget:
+      type: object
+      properties:
+        title:
+          type: string
+`
+	editor := NewEditor()
+	_, _, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{ConflictPolicy: ConflictError})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conflict on key")
+	assert.Contains(t, err.Error(), "Widget")
+}
+
+// TestUT_AtomicOnConflict validates that on conflict, no output is returned.
+func TestUT_AtomicOnConflict(t *testing.T) {
+	spec := `openapi: "3.0.3"
+paths:
+  /widgets:
+    get:
+      summary: Old
+components:
+  schemas:
+    Existing:
+      type: object
+`
+	// New schema is fine, but path conflicts
+	fragment := `paths:
+  /widgets:
+    get:
+      summary: New
+components:
+  schemas:
+    NewSchema:
+      type: object
+`
+	editor := NewEditor()
+	out, _, err := editor.Merge([]byte(spec), []byte(fragment), MergeOptions{ConflictPolicy: ConflictError})
+	require.Error(t, err)
+	assert.Nil(t, out, "on conflict, output should be nil")
+}
+
 // TestUT_MethodLevelMerge validates adding a new HTTP method to an existing path.
 func TestUT_MethodLevelMerge(t *testing.T) {
 	// NOTE: In v1, method-level merge is NOT supported. If the path exists,
