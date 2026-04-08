@@ -162,18 +162,21 @@ func TestUT_Backup_CleanOldBackups(t *testing.T) {
 	dir := t.TempDir()
 	backupsDir := filepath.Join(dir, ".tag", "backup")
 
-	// Create old and recent backup directories.
-	require.NoError(t, os.MkdirAll(filepath.Join(backupsDir, "20240101-100000"), 0o755)) // Old
-	require.NoError(t, os.MkdirAll(filepath.Join(backupsDir, "20260301-100000"), 0o755)) // Recent
+	// Use a timestamp relative to now so this test doesn't become time-dependent.
+	oldTimestamp := time.Now().Add(-90 * 24 * time.Hour).Format("20060102-150405")
+	recentTimestamp := time.Now().Add(-1 * 24 * time.Hour).Format("20060102-150405")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(backupsDir, oldTimestamp), 0o755))    // Old (90 days ago)
+	require.NoError(t, os.MkdirAll(filepath.Join(backupsDir, recentTimestamp), 0o755)) // Recent (1 day ago)
 
 	require.NoError(t, CleanOldBackups(dir, 30*24*time.Hour))
 
 	// Old backup removed.
-	_, err := os.Stat(filepath.Join(backupsDir, "20240101-100000"))
+	_, err := os.Stat(filepath.Join(backupsDir, oldTimestamp))
 	assert.True(t, os.IsNotExist(err))
 
 	// Recent backup kept.
-	_, err = os.Stat(filepath.Join(backupsDir, "20260301-100000"))
+	_, err = os.Stat(filepath.Join(backupsDir, recentTimestamp))
 	assert.NoError(t, err)
 }
 
