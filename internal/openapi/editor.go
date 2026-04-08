@@ -121,7 +121,24 @@ func (e *Editor) mergePaths(specRoot *ast.MappingNode, fragPathsKV *ast.MappingV
 
 	specPaths, ok := specPathsKV.Value.(*ast.MappingNode)
 	if !ok {
-		return errors.New("spec paths is not a mapping")
+		// Value might be empty flow-style {} which is not a MappingNode
+		// Replace the entire value with the fragment paths
+		specPathsKV.Value = fragPaths
+		for _, pKV := range fragPaths.Values {
+			result.AddedPaths = append(result.AddedPaths, pKV.Key.String())
+		}
+		result.Changed = true
+		return nil
+	}
+
+	// If spec paths is flow-style and empty, replace it (only if fragment has values)
+	if specPaths.IsFlowStyle && len(specPaths.Values) == 0 && len(fragPaths.Values) > 0 {
+		specPathsKV.Value = fragPaths
+		for _, pKV := range fragPaths.Values {
+			result.AddedPaths = append(result.AddedPaths, pKV.Key.String())
+		}
+		result.Changed = true
+		return nil
 	}
 
 	return e.mergeMapping(specPaths, fragPaths, opts, &result.AddedPaths, &result.SkippedPaths, &result.Conflicts, &result.Changed)
@@ -175,8 +192,14 @@ func (e *Editor) mergeComponents(specRoot *ast.MappingNode, fragComponentsKV *as
 		}
 
 		specSchemas, ok := specSchemasKV.Value.(*ast.MappingNode)
-		if !ok {
-			return errors.New("spec components.schemas is not a mapping")
+		if !ok || (specSchemas.IsFlowStyle && len(specSchemas.Values) == 0 && len(fragSchemas.Values) > 0) {
+			// Not a mapping or empty flow-style {} with fragment values — replace
+			specSchemasKV.Value = fragSchemas
+			for _, sKV := range fragSchemas.Values {
+				result.AddedSchemas = append(result.AddedSchemas, sKV.Key.String())
+			}
+			result.Changed = true
+			return nil
 		}
 
 		if err := e.mergeMapping(specSchemas, fragSchemas, opts, &result.AddedSchemas, &result.SkippedSchemas, &result.Conflicts, &result.Changed); err != nil {
