@@ -65,6 +65,14 @@ The `past` filter handles irregular verbs, consonant doubling, and preserves cas
 {{ field.type | to("go") | upper }} → chaining works
 ```
 
+**OpenAPI dialect (`to("openapi")`)** — special built-in that maps Go types to multi-line OpenAPI YAML fragments. Unlike other dialects, this returns structured YAML (type + format + nullable) rather than a single string. Supports Go primitives, pointers (`*T` → nullable), slices (`[]T` → array), `time.Time`, `uuid.UUID`, and `[]byte`.
+
+```jinja
+{{ "int" | to("openapi") }}       → type: integer\nformat: int64
+{{ "*string" | to("openapi") }}   → type: string\nnullable: true
+{{ "[]uuid.UUID" | to("openapi") }} → type: array\nitems:\n  type: string\n  format: uuid
+```
+
 Override built-in mappings by placing YAML files in `_dialects/` within a template. Three-tier loading: built-in → user-global (`~/.local/share/tag/dialects/`) → template-local.
 
 CLI: `tag dialect list`, `tag dialect show <name>`
