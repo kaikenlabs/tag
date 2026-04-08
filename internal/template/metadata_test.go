@@ -565,3 +565,62 @@ func TestUT_RenderAndParseMetadata_InvalidSyntax(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "render")
 }
+
+func TestUT_ParseMetadata_ActionOpenAPI(t *testing.T) {
+	input := "to: spec/openapi.yaml\naction: openapi"
+	got, err := ParseMetadata(input)
+	require.NoError(t, err)
+	assert.Equal(t, ActionOpenAPI, got.Action)
+	assert.Equal(t, "spec/openapi.yaml", got.To)
+	assert.True(t, got.IsOpenAPI())
+}
+
+func TestUT_ParseMetadata_ActionOpenAPICaseInsensitive(t *testing.T) {
+	input := "to: spec/openapi.yaml\naction: OpenAPI"
+	got, err := ParseMetadata(input)
+	require.NoError(t, err)
+	assert.Equal(t, ActionOpenAPI, got.Action)
+}
+
+func TestUT_ParseMetadata_ActionOpenAPIWithValidate(t *testing.T) {
+	input := "to: spec/openapi.yaml\naction: openapi\nvalidate: true"
+	got, err := ParseMetadata(input)
+	require.NoError(t, err)
+	assert.Equal(t, ActionOpenAPI, got.Action)
+	assert.True(t, got.Validate)
+}
+
+func TestUT_ParseMetadata_ValidateDefaultsFalse(t *testing.T) {
+	input := "to: spec/openapi.yaml\naction: openapi"
+	got, err := ParseMetadata(input)
+	require.NoError(t, err)
+	assert.False(t, got.Validate)
+}
+
+func TestUT_ParseMetadata_OpenAPIConflictsWithInject(t *testing.T) {
+	input := "to: spec/openapi.yaml\naction: openapi\ninject: true\nafter: marker"
+	_, err := ParseMetadata(input)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrConflictingOpenAPIAction)
+}
+
+func TestUT_ParseMetadata_OpenAPIConflictsWithAppend(t *testing.T) {
+	input := "to: spec/openapi.yaml\naction: openapi\nappend: true"
+	_, err := ParseMetadata(input)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrConflictingOpenAPIAction)
+}
+
+func TestUT_ParseMetadata_IsOpenAPIFalseForCreate(t *testing.T) {
+	input := "to: output/file.go"
+	got, err := ParseMetadata(input)
+	require.NoError(t, err)
+	assert.False(t, got.IsOpenAPI())
+}
+
+func TestUT_ParseMetadata_ValidateInvalidBool(t *testing.T) {
+	input := "to: spec/openapi.yaml\naction: openapi\nvalidate: maybe"
+	_, err := ParseMetadata(input)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidBoolValue)
+}

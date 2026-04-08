@@ -204,6 +204,35 @@ func (w *RecordingFileWriter) InjectIntoFile(name string, data []byte, inject wr
 	return nil
 }
 
+// MergeOpenAPIFile records an "openapi-merge" operation.
+func (w *RecordingFileWriter) MergeOpenAPIFile(name string, fragment []byte, opts writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
+	hashBefore, existed, err := w.snapshotBefore(name)
+	if err != nil {
+		return writer.OpenAPIMergeResult{}, err
+	}
+
+	result, mergeErr := w.inner.MergeOpenAPIFile(name, fragment, opts)
+	if mergeErr != nil {
+		return result, mergeErr
+	}
+
+	if !result.Changed {
+		return result, nil
+	}
+
+	hashAfter, err := HashFile(name)
+	if err != nil {
+		return result, fmt.Errorf("hash after openapi merge %s: %w", name, err)
+	}
+
+	if !existed {
+		w.rec.RecordCreate(name, hashAfter)
+	} else {
+		w.rec.RecordModify(name, ActionOpenAPIMerge, hashBefore, hashAfter)
+	}
+	return result, nil
+}
+
 // snapshotBefore captures the hash of name (if it exists) and creates a backup.
 // Returns (hash, existed, error). Uses first-touch semantics: if the file has
 // already been snapshotted in this generation, the backup is not recreated.

@@ -121,11 +121,10 @@ func (e *Engine) createEnvironment() (*exec.Environment, error) {
 		return nil, fmt.Errorf("failed to create environment: %w", err)
 	}
 
-	// Register dialect to() filter if a registry was provided
-	if e.dialectRegistry != nil {
-		if err := RegisterDialectFilter(env.Filters, e.dialectRegistry); err != nil {
-			return nil, fmt.Errorf("failed to register dialect filter: %w", err)
-		}
+	// Register unified to() filter: handles "openapi" natively,
+	// delegates other dialects to the registry (if provided).
+	if err := RegisterToFilter(env.Filters, e.dialectRegistry); err != nil {
+		return nil, fmt.Errorf("failed to register to() filter: %w", err)
 	}
 
 	return env, nil

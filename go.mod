@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/huh v0.8.0
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/gobuffalo/flect v1.0.3
+	github.com/goccy/go-yaml v1.19.2
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/mattn/go-isatty v0.0.20
 	github.com/nikolalohinski/gonja/v2 v2.5.2

@@ -30,7 +30,7 @@ func TestUT_FilterTo_BasicResolution(t *testing.T) {
 		{`{{ "uuid" | to("postgres") }}`, "UUID"},
 		{`{{ "datetime" | to("go") }}`, "time.Time"},
 		{`{{ "bool" | to("typescript") }}`, "boolean"},
-		{`{{ "int" | to("openapi") }}`, "integer"},
+		{`{{ "int" | to("openapi") }}`, "type: integer\nformat: int64"},
 		{`{{ "datetime" | to("protobuf") }}`, "google.protobuf.Timestamp"},
 		{`{{ "string" | to("mysql") }}`, "VARCHAR(255)"},
 	}

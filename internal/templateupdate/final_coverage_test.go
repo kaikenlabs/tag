@@ -111,8 +111,9 @@ func TestUT_CleanOldBackups_SkipsNonTimestampDirs(t *testing.T) {
 
 	dir := t.TempDir()
 	backupsDir := filepath.Join(dir, ".tag", "backup")
+	recentTimestamp := time.Now().Add(-1 * 24 * time.Hour).Format("20060102-150405")
 	require.NoError(t, os.MkdirAll(filepath.Join(backupsDir, "not-a-timestamp"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(backupsDir, "20260301-100000"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(backupsDir, recentTimestamp), 0o755))
 
 	err := CleanOldBackups(dir, 30*24*time.Hour)
 	require.NoError(t, err)
@@ -122,7 +123,7 @@ func TestUT_CleanOldBackups_SkipsNonTimestampDirs(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Recent backup should still exist
-	_, err = os.Stat(filepath.Join(backupsDir, "20260301-100000"))
+	_, err = os.Stat(filepath.Join(backupsDir, recentTimestamp))
 	assert.NoError(t, err)
 }
 

@@ -1,0 +1,128 @@
+---
+to: spec/{{ vars.domain }}/openapi.yaml
+action: openapi
+---
+paths:
+  /{{ vars.domain }}/{{ name | plural | kebab }}:
+    get:
+      summary: List {{ name | plural | title }}
+      operationId: list{{ name | plural | pascal }}
+      tags:
+        - {{ name | plural | pascal }}
+      responses:
+        '200':
+          description: A list of {{ name | plural }}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/{{ name | pascal }}List'
+    post:
+      summary: Create a {{ name | title }}
+      operationId: create{{ name | pascal }}
+      tags:
+        - {{ name | plural | pascal }}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Create{{ name | pascal }}Request'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/{{ name | pascal }}'
+  /{{ vars.domain }}/{{ name | plural | kebab }}/{id}:
+    get:
+      summary: Get a {{ name | title }} by ID
+      operationId: get{{ name | pascal }}
+      tags:
+        - {{ name | plural | pascal }}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The {{ name }}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/{{ name | pascal }}'
+    put:
+      summary: Update a {{ name | title }}
+      operationId: update{{ name | pascal }}
+      tags:
+        - {{ name | plural | pascal }}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Update{{ name | pascal }}Request'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/{{ name | pascal }}'
+    delete:
+      summary: Delete a {{ name | title }}
+      operationId: delete{{ name | pascal }}
+      tags:
+        - {{ name | plural | pascal }}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+components:
+  schemas:
+    {{ name | pascal }}:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+{% for field_def in vars.fields | split(";") %}{% set parts = field_def | split(":") %}        {{ parts.0 | camel }}:
+          {{ parts.1 | to("openapi") | indent(10) }}
+{% endfor %}
+    Create{{ name | pascal }}Request:
+      type: object
+      properties:
+{% for field_def in vars.fields | split(";") %}{% set parts = field_def | split(":") %}        {{ parts.0 | camel }}:
+          {{ parts.1 | to("openapi") | indent(10) }}
+{% endfor %}
+    Update{{ name | pascal }}Request:
+      type: object
+      properties:
+{% for field_def in vars.fields | split(";") %}{% set parts = field_def | split(":") %}        {{ parts.0 | camel }}:
+          {{ parts.1 | to("openapi") | indent(10) }}
+{% endfor %}
+    {{ name | pascal }}List:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/{{ name | pascal }}'
+        total:
+          type: integer

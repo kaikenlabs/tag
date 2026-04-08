@@ -48,6 +48,7 @@ func RegisterFilters(filters *exec.FilterSet) error {
 		{"trim", filterTrim},
 		{"default", filterDefault},
 		{"truncate", filterTruncate},
+		{"indent", filterIndent},
 		// Aliases for common variations
 		{"snake_case", filterSnake},
 		{"pascal_case", filterPascal},
@@ -229,6 +230,42 @@ func filterDefault(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exe
 		return p[0]
 	}
 	return in
+}
+
+// filterIndent indents each line of the input by the given number of spaces.
+// Usage: {{ value | indent(4) }} — indents all lines except the first.
+// With two args: {{ value | indent(4, true) }} — indents all lines including the first.
+func filterIndent(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+	if in.IsError() {
+		return in
+	}
+	p := params.Args
+	if len(p) < 1 || len(p) > 2 {
+		return exec.AsValue(fmt.Errorf("indent: expected 1-2 arguments (width, [indent_first]), got %d", len(p)))
+	}
+
+	width := p[0].Integer()
+	indentFirst := false
+	if len(p) == 2 {
+		indentFirst = p[1].Bool()
+	}
+
+	pad := strings.Repeat(" ", width)
+	lines := strings.Split(in.String(), "\n")
+
+	var result []string
+	for i, line := range lines {
+		switch {
+		case i == 0 && !indentFirst:
+			result = append(result, line)
+		case line == "":
+			result = append(result, line)
+		default:
+			result = append(result, pad+line)
+		}
+	}
+
+	return exec.AsValue(strings.Join(result, "\n"))
 }
 
 func filterTruncate(_ *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {

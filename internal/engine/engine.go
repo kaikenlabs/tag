@@ -159,6 +159,26 @@ func (c *Core) Generate(data Data) (GenerateResult, error) {
 	// Phase 2: write files, applying policy for create actions.
 	for _, item := range parsedOutput {
 		switch item.Action {
+		case template.ActionOpenAPI:
+			mergeResult, err := c.fwr.MergeOpenAPIFile(item.To, item.Output, writer.OpenAPIMergeOptions{
+				ValidateResult: item.Validate,
+			})
+			if err != nil {
+				slog.Error("cannot merge openapi spec", "file", item.To, "error", err)
+				return result, err
+			}
+			if mergeResult.Changed {
+				slog.Info(chalk.Yellow("merged"), "file", item.To,
+					"paths", len(mergeResult.AddedPaths),
+					"schemas", len(mergeResult.AddedSchemas))
+				result.Modified++
+				result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "merged"})
+			} else {
+				slog.Info(chalk.Yellow("unchanged"), "file", item.To)
+				result.Skipped++
+				result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "skipped"})
+			}
+
 		case template.ActionAppend:
 			if err := c.fwr.AppendFile(item.To, item.Output); err != nil {
 				slog.Error("cannot append to file", "file", item.To, "error", err)
@@ -195,7 +215,7 @@ func (c *Core) Generate(data Data) (GenerateResult, error) {
 func (c *Core) checkConflicts(items []TemplateData) error {
 	var conflicts []string
 	for _, item := range items {
-		if item.Action == template.ActionAppend || item.Action == template.ActionInject {
+		if item.Action == template.ActionAppend || item.Action == template.ActionInject || item.Action == template.ActionOpenAPI {
 			continue
 		}
 		if _, statErr := os.Stat(item.To); statErr == nil {
