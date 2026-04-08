@@ -122,6 +122,10 @@ func (f *failingFileWriter) InjectIntoFile(_ string, _ []byte, _ writer.Inject) 
 	return assert.AnError
 }
 
+func (f *failingFileWriter) MergeOpenAPIFile(_ string, _ []byte, _ writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
+	return writer.OpenAPIMergeResult{}, nil
+}
+
 func TestUT_RecordingWriter_WriteFile_InnerError(t *testing.T) {
 	dir := t.TempDir()
 	tagDir := filepath.Join(dir, ".tag")

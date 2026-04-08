@@ -22,11 +22,12 @@ type TemplateData struct {
 
 // ParseData holds the parsing configuration and user input.
 type ParseData struct {
-	Action        template.Action    // File operation: Create, Append, or Inject
+	Action        template.Action    // File operation: Create, Append, Inject, or OpenAPI
 	InjectClause  types.InjectClause // Before or After (for inject action)
 	InjectMatcher string
 	Meta          map[string]string // User-provided metadata from --meta flags
 	Notes         string
+	Validate      bool // Run OpenAPI validation after merge (openapi action only)
 }
 
 // InputData represents the input provided by the engine for template parsing.

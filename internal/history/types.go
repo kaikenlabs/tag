@@ -27,8 +27,9 @@ type FileEntry struct {
 
 // Action constants for FileEntry.
 const (
-	ActionCreate    = "create"
-	ActionInject    = "inject"
-	ActionAppend    = "append"
-	ActionOverwrite = "overwrite"
+	ActionCreate       = "create"
+	ActionInject       = "inject"
+	ActionAppend       = "append"
+	ActionOverwrite    = "overwrite"
+	ActionOpenAPIMerge = "openapi-merge"
 )

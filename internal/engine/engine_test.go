@@ -64,6 +64,10 @@ func (m *mockFileWriter) InjectIntoFile(name string, data []byte, inject writer.
 	return m.injectErr
 }
 
+func (m *mockFileWriter) MergeOpenAPIFile(_ string, _ []byte, _ writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
+	return writer.OpenAPIMergeResult{}, nil
+}
+
 var _ writer.FileWriter = (*mockFileWriter)(nil)
 
 // --- Core.Generate() unit tests ---

@@ -40,6 +40,10 @@ func (s *stubFileWriter) InjectIntoFile(name string, data []byte, _ writer.Injec
 	return os.WriteFile(name, append(existing, data...), 0o644)
 }
 
+func (s *stubFileWriter) MergeOpenAPIFile(_ string, _ []byte, _ writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
+	return writer.OpenAPIMergeResult{}, nil
+}
+
 func TestUT_Recorder_RecordCreate_NilHashBefore(t *testing.T) {
 	rec := NewRecorder(t.TempDir())
 	rec.RecordCreate("handler.go", "sha256:abc")

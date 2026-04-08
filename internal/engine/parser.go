@@ -96,6 +96,7 @@ func (te *TemplateParser) parseTemplate(tmplName, tmplContent string, input Inpu
 			InjectClause:  metadata.InjectClause,
 			InjectMatcher: metadata.InjectMatcher,
 			Notes:         metadata.Notes,
+			Validate:      metadata.Validate,
 			Meta:          mergeParserMetadata(input.Meta, metadata.Extra),
 		},
 	}, nil
@@ -196,12 +197,13 @@ func LoadTemplateFiles(dirPath string) (map[string]string, error) {
 	return rootTemplates, nil
 }
 
-// orderTemplateData sorts templates by action: Create first, then Inject, then Append.
+// orderTemplateData sorts templates by action: Create → OpenAPI → Inject → Append.
 func orderTemplateData(data []TemplateData) []TemplateData {
 	priority := map[template.Action]int{
-		template.ActionCreate: 0,
-		template.ActionInject: 1,
-		template.ActionAppend: 2,
+		template.ActionCreate:  0,
+		template.ActionOpenAPI: 1,
+		template.ActionInject:  2,
+		template.ActionAppend:  3,
 	}
 	slices.SortStableFunc(data, func(a, b TemplateData) int {
 		return cmp.Compare(priority[a.Action], priority[b.Action])

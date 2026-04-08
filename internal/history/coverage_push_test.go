@@ -45,6 +45,10 @@ func (s *stubInjectNewFile) InjectIntoFile(name string, data []byte, _ writer.In
 	return os.WriteFile(name, append(existing, data...), 0o644)
 }
 
+func (s *stubInjectNewFile) MergeOpenAPIFile(_ string, _ []byte, _ writer.OpenAPIMergeOptions) (writer.OpenAPIMergeResult, error) {
+	return writer.OpenAPIMergeResult{}, nil
+}
+
 func TestUT_RecordingWriter_InjectIntoFile_NonExistent_RecordsCreate(t *testing.T) {
 	dir := t.TempDir()
 	tagDir := filepath.Join(dir, ".tag")
