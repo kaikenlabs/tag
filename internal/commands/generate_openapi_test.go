@@ -301,6 +301,22 @@ func TestUT_LoadOpenAPIVars_OpenAPIWithoutSelector(t *testing.T) {
 	assert.Contains(t, msg, "--operation-tag")
 }
 
+func TestUT_LoadOpenAPIVars_MultiOpSuccess(t *testing.T) {
+	specPath := filepath.Join(t.TempDir(), "api.yaml")
+	require.NoError(t, os.WriteFile(specPath, []byte(openapiTestSpec), 0o644))
+
+	c := newMultiOpFlagContext(t, openapiFlags{openapi: specPath, operations: true})
+	vars, err := loadOpenAPIVars(c)
+	require.NoError(t, err)
+
+	ops, ok := vars["operations"].([]any)
+	require.True(t, ok, "expected vars.operations list, got %T", vars["operations"])
+	require.Len(t, ops, 1)
+	assert.Equal(t, "getPetById", ops[0].(map[string]any)["operationId"])
+	// Multi-op omits the top-level security namespace.
+	assert.NotContains(t, vars, "security")
+}
+
 func TestUT_LoadOpenAPIVars_BlankTag(t *testing.T) {
 	c := newMultiOpFlagContext(t, openapiFlags{openapi: "api.yaml", operationTag: "  ", tagSet: true})
 	_, err := loadOpenAPIVars(c)

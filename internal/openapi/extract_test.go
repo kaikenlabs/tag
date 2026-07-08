@@ -576,3 +576,27 @@ func TestUT_ReservedKeys_IncludesOperations(t *testing.T) {
 	assert.Contains(t, ReservedKeys, "operations")
 	assert.Contains(t, ReservedKeys, "operation")
 }
+
+func TestUT_ExtractOperations_ParseError(t *testing.T) {
+	_, err := ExtractOperations([]byte("just a string"), "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot parse OpenAPI spec")
+}
+
+func TestUT_ExtractOperations_BuildError(t *testing.T) {
+	// A Swagger 2.0 document parses as YAML but fails the v3 model build.
+	spec := []byte("swagger: \"2.0\"\ninfo: {title: t, version: v}\npaths: {}\n")
+	_, err := ExtractOperations(spec, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot build OpenAPI 3.x model")
+}
+
+func TestUT_ExtractOperations_NoOperations(t *testing.T) {
+	// Valid 3.x spec with zero operations: the empty-result error reports no tag
+	// suffix (tag == "") and "(none)" available tags.
+	spec := []byte("openapi: 3.0.3\ninfo: {title: t, version: v}\npaths: {}\n")
+	_, err := ExtractOperations(spec, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no operations selected")
+	assert.Contains(t, err.Error(), "(none)")
+}
