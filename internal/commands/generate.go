@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -79,8 +80,10 @@ ARGUMENTS
 
 FLAGS
   --meta, -m key=value        Override template variables (repeatable)
-  --openapi <path>            OpenAPI 3.x spec to expose as vars.operation.* (needs --operation)
-  --operation <selector>      Operation to extract: operationId or "METHOD /path"
+  --openapi <path>            OpenAPI 3.x spec to expose to templates (needs a selector below)
+  --operation <selector>      Single operation → vars.operation.*: operationId or "METHOD /path"
+  --operations                All operations → vars.operations[] (excludes --operation)
+  --operation-tag <name>      Operations with this tag → vars.operations[] (excludes --operation)
   --no-hooks                  Skip pre/post hooks defined in .tagconfig.json
   --on-existing=fail|skip|overwrite
                               Control behaviour when a file already exists (default: fail)
@@ -98,6 +101,8 @@ EXAMPLES
   tag generate --on-existing=overwrite --verbose crud Product
   tag generate --openapi api.yaml --operation getUserById handler user
   tag generate --openapi api.yaml --operation "GET /users/{id}" handler user
+  tag generate --openapi api.yaml --operations routes all
+  tag generate --openapi api.yaml --operation-tag users handlers users
   tag generate list                    # List available generators and bundles
   tag generate info model              # Show JSON metadata for a generator or bundle
   tag generate agent-file claude       # Generate AI agent reference file`,
@@ -155,6 +160,14 @@ EXAMPLES
 				Name:  flags.OperationFlag,
 				Usage: "Operation to extract from the OpenAPI spec: an operationId or \"METHOD /path\" (requires --openapi)",
 			},
+			&cli.BoolFlag{
+				Name:  flags.OperationsFlag,
+				Usage: "Expose every OpenAPI operation as vars.operations (requires --openapi; excludes --operation; narrow with --operation-tag)",
+			},
+			&cli.StringFlag{
+				Name:  flags.OperationTagFlag,
+				Usage: "Expose only operations carrying this OpenAPI tag as vars.operations (requires --openapi; excludes --operation)",
+			},
 		},
 	}
 }
@@ -204,32 +217,46 @@ func generateAction(c *cli.Context, cfg *config.Config, fac generatorFactories) 
 	return generateTemplate(c, cfg, fac, generatorOrBundleName, targetName, target.GenDir, target.SharedDir, onExisting, openapiVars)
 }
 
-// loadOpenAPIVars reads the --openapi/--operation flags and, when both are set,
-// extracts the selected operation into the reserved vars namespaces
-// (operation/schemas/info/servers/security). The flags are both-or-neither.
-// Returns an empty (non-nil) map when neither flag is set.
+// loadOpenAPIVars reads the OpenAPI selector flags and extracts the matching
+// operation(s) into the reserved vars namespaces. Singular --operation yields
+// vars.operation.* (plus schemas/info/servers/security); the multi-op selectors
+// --operations (all) and --operation-tag <name> (filtered) yield vars.operations
+// (an ordered list, each carrying its own security) plus the deduped schema union.
+// --operation is mutually exclusive with the multi-op selectors, and any selector
+// requires --openapi. Returns an empty (non-nil) map when no OpenAPI input is set.
 func loadOpenAPIVars(c *cli.Context) (map[string]any, error) {
 	specPath := c.String(flags.OpenAPIFlag)
 	selector := c.String(flags.OperationFlag)
+	allOps := c.Bool(flags.OperationsFlag)
+	tag := strings.TrimSpace(c.String(flags.OperationTagFlag))
+	tagSet := c.IsSet(flags.OperationTagFlag)
+
+	if tagSet && tag == "" {
+		return nil, app.UsageErrorf("--operation-tag requires a non-empty tag name")
+	}
+
+	singleMode := selector != ""
+	multiMode := allOps || tagSet
 
 	switch {
-	case specPath == "" && selector == "":
+	case singleMode && multiMode:
+		return nil, app.UsageErrorf("--operation is mutually exclusive with --operations and --operation-tag")
+	case specPath == "" && !singleMode && !multiMode:
 		return map[string]any{}, nil // no OpenAPI input; nothing to merge
 	case specPath == "":
-		return nil, app.UsageErrorf("--operation requires --openapi")
-	case selector == "":
-		return nil, app.UsageErrorf("--openapi requires --operation")
+		return nil, app.UsageErrorf("--operation, --operations, and --operation-tag all require --openapi")
+	case !singleMode && !multiMode:
+		return nil, app.UsageErrorf("--openapi requires one of --operation, --operations, or --operation-tag")
 	}
 
 	data, err := os.ReadFile(specPath)
 	if err != nil {
 		return nil, app.Errorf("cannot read OpenAPI spec %q: %w", specPath, err)
 	}
-	vars, err := openapi.ExtractOperation(data, selector)
-	if err != nil {
-		return nil, err
+	if singleMode {
+		return openapi.ExtractOperation(data, selector)
 	}
-	return vars, nil
+	return openapi.ExtractOperations(data, tag) // tag == "" selects all operations
 }
 
 // mergeOpenAPIVars overlays the OpenAPI reserved namespaces onto base. These

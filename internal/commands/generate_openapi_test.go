@@ -61,6 +61,8 @@ func newOpenAPITestApp(cfg *config.Config) *cli.App {
 					&cli.BoolFlag{Name: flags.VerboseFlag},
 					&cli.StringFlag{Name: flags.OpenAPIFlag},
 					&cli.StringFlag{Name: flags.OperationFlag},
+					&cli.BoolFlag{Name: flags.OperationsFlag},
+					&cli.StringFlag{Name: flags.OperationTagFlag},
 				},
 				Action: func(c *cli.Context) error {
 					return generateAction(c, cfg, defaultGeneratorFactories())
@@ -154,8 +156,8 @@ func TestUT_LoadOpenAPIVars_BothOrNeither(t *testing.T) {
 		wantNil   bool
 	}{
 		{name: "neither set", wantNil: true},
-		{name: "only openapi", openapi: "api.yaml", wantErr: "--openapi requires --operation"},
-		{name: "only operation", operation: "getX", wantErr: "--operation requires --openapi"},
+		{name: "only openapi", openapi: "api.yaml", wantErr: "--openapi requires one of --operation"},
+		{name: "only operation", operation: "getX", wantErr: "all require --openapi"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -212,5 +214,112 @@ func newFlagContext(t *testing.T, openapiVal, operationVal string) *cli.Context 
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	set.String(flags.OpenAPIFlag, openapiVal, "")
 	set.String(flags.OperationFlag, operationVal, "")
+	set.Bool(flags.OperationsFlag, false, "")
+	set.String(flags.OperationTagFlag, "", "")
 	return cli.NewContext(nil, set, nil)
+}
+
+// openapiFlags names the four OpenAPI selector flags a caller may set.
+type openapiFlags struct {
+	openapi      string
+	operation    string
+	operations   bool
+	operationTag string
+	tagSet       bool // whether --operation-tag was explicitly provided
+}
+
+// newMultiOpFlagContext builds a cli.Context with all four OpenAPI flags, honoring
+// c.IsSet for --operation-tag so blank-vs-unset can be distinguished.
+func newMultiOpFlagContext(t *testing.T, f openapiFlags) *cli.Context {
+	t.Helper()
+	set := flag.NewFlagSet("test", flag.ContinueOnError)
+	set.String(flags.OpenAPIFlag, "", "")
+	set.String(flags.OperationFlag, "", "")
+	set.Bool(flags.OperationsFlag, false, "")
+	set.String(flags.OperationTagFlag, "", "")
+	var args []string
+	if f.openapi != "" {
+		args = append(args, "--"+flags.OpenAPIFlag, f.openapi)
+	}
+	if f.operation != "" {
+		args = append(args, "--"+flags.OperationFlag, f.operation)
+	}
+	if f.operations {
+		args = append(args, "--"+flags.OperationsFlag)
+	}
+	if f.tagSet {
+		args = append(args, "--"+flags.OperationTagFlag, f.operationTag)
+	}
+	require.NoError(t, set.Parse(args))
+	return cli.NewContext(nil, set, nil)
+}
+
+func TestUT_LoadOpenAPIVars_MultiOpMutualExclusion(t *testing.T) {
+	tests := []struct {
+		name string
+		f    openapiFlags
+	}{
+		{"operation + operations", openapiFlags{openapi: "api.yaml", operation: "getX", operations: true}},
+		{"operation + tag", openapiFlags{openapi: "api.yaml", operation: "getX", operationTag: "pets", tagSet: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newMultiOpFlagContext(t, tt.f)
+			_, err := loadOpenAPIVars(c)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "mutually exclusive")
+		})
+	}
+}
+
+func TestUT_LoadOpenAPIVars_MultiOpRequiresOpenAPI(t *testing.T) {
+	tests := []struct {
+		name string
+		f    openapiFlags
+	}{
+		{"operations without openapi", openapiFlags{operations: true}},
+		{"tag without openapi", openapiFlags{operationTag: "pets", tagSet: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newMultiOpFlagContext(t, tt.f)
+			_, err := loadOpenAPIVars(c)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "--openapi")
+		})
+	}
+}
+
+func TestUT_LoadOpenAPIVars_OpenAPIWithoutSelector(t *testing.T) {
+	c := newMultiOpFlagContext(t, openapiFlags{openapi: "api.yaml"})
+	_, err := loadOpenAPIVars(c)
+	require.Error(t, err)
+	// Error names all three selector flags so the user knows the options.
+	msg := err.Error()
+	assert.Contains(t, msg, "--operation")
+	assert.Contains(t, msg, "--operations")
+	assert.Contains(t, msg, "--operation-tag")
+}
+
+func TestUT_LoadOpenAPIVars_MultiOpSuccess(t *testing.T) {
+	specPath := filepath.Join(t.TempDir(), "api.yaml")
+	require.NoError(t, os.WriteFile(specPath, []byte(openapiTestSpec), 0o644))
+
+	c := newMultiOpFlagContext(t, openapiFlags{openapi: specPath, operations: true})
+	vars, err := loadOpenAPIVars(c)
+	require.NoError(t, err)
+
+	ops, ok := vars["operations"].([]any)
+	require.True(t, ok, "expected vars.operations list, got %T", vars["operations"])
+	require.Len(t, ops, 1)
+	assert.Equal(t, "getPetById", ops[0].(map[string]any)["operationId"])
+	// Multi-op omits the top-level security namespace.
+	assert.NotContains(t, vars, "security")
+}
+
+func TestUT_LoadOpenAPIVars_BlankTag(t *testing.T) {
+	c := newMultiOpFlagContext(t, openapiFlags{openapi: "api.yaml", operationTag: "  ", tagSet: true})
+	_, err := loadOpenAPIVars(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--operation-tag")
 }

@@ -55,6 +55,9 @@ paths:
     get:
       operationId: getPetById
       summary: Get a pet by id
+      tags: [pets]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
