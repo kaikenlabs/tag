@@ -17,6 +17,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/hooks"
+	"github.com/kaikenlabs/tag/internal/openapi"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -78,6 +79,8 @@ ARGUMENTS
 
 FLAGS
   --meta, -m key=value        Override template variables (repeatable)
+  --openapi <path>            OpenAPI 3.x spec to expose as vars.operation.* (needs --operation)
+  --operation <selector>      Operation to extract: operationId or "METHOD /path"
   --no-hooks                  Skip pre/post hooks defined in .tagconfig.json
   --on-existing=fail|skip|overwrite
                               Control behaviour when a file already exists (default: fail)
@@ -93,6 +96,8 @@ EXAMPLES
   tag generate --dry-run crud Product
   tag generate --on-existing=skip crud Product
   tag generate --on-existing=overwrite --verbose crud Product
+  tag generate --openapi api.yaml --operation getUserById handler user
+  tag generate --openapi api.yaml --operation "GET /users/{id}" handler user
   tag generate list                    # List available generators and bundles
   tag generate info model              # Show JSON metadata for a generator or bundle
   tag generate agent-file claude       # Generate AI agent reference file`,
@@ -142,6 +147,14 @@ EXAMPLES
 				Name:  flags.IgnoreLockFlag,
 				Usage: "Skip lockfile verification for this run (a warning will be printed)",
 			},
+			&cli.StringFlag{
+				Name:  flags.OpenAPIFlag,
+				Usage: "Path to an OpenAPI 3.x spec; exposes the selected operation as vars.operation.* (requires --operation)",
+			},
+			&cli.StringFlag{
+				Name:  flags.OperationFlag,
+				Usage: "Operation to extract from the OpenAPI spec: an operationId or \"METHOD /path\" (requires --openapi)",
+			},
 		},
 	}
 }
@@ -175,15 +188,72 @@ func generateAction(c *cli.Context, cfg *config.Config, fac generatorFactories) 
 		return app.UsageErrorf("invalid --on-existing value %q: must be one of fail, skip, overwrite", c.String(flags.OnExistingFlag))
 	}
 
+	openapiVars, err := loadOpenAPIVars(c)
+	if err != nil {
+		return err
+	}
+
 	target, err := resolveGenerateTarget(cfg, generatorOrBundleName, c.Path(flags.BundlePathFlag))
 	if err != nil {
 		return err
 	}
 
 	if target.IsBundle {
-		return generateBundle(c, cfg, fac, generatorOrBundleName, targetName, target.BundlePath, onExisting)
+		return generateBundle(c, cfg, fac, generatorOrBundleName, targetName, target.BundlePath, onExisting, openapiVars)
 	}
-	return generateTemplate(c, cfg, fac, generatorOrBundleName, targetName, target.GenDir, target.SharedDir, onExisting)
+	return generateTemplate(c, cfg, fac, generatorOrBundleName, targetName, target.GenDir, target.SharedDir, onExisting, openapiVars)
+}
+
+// loadOpenAPIVars reads the --openapi/--operation flags and, when both are set,
+// extracts the selected operation into the reserved vars namespaces
+// (operation/schemas/info/servers/security). The flags are both-or-neither.
+// Returns an empty (non-nil) map when neither flag is set.
+func loadOpenAPIVars(c *cli.Context) (map[string]any, error) {
+	specPath := c.String(flags.OpenAPIFlag)
+	selector := c.String(flags.OperationFlag)
+
+	switch {
+	case specPath == "" && selector == "":
+		return map[string]any{}, nil // no OpenAPI input; nothing to merge
+	case specPath == "":
+		return nil, app.UsageErrorf("--operation requires --openapi")
+	case selector == "":
+		return nil, app.UsageErrorf("--openapi requires --operation")
+	}
+
+	data, err := os.ReadFile(specPath)
+	if err != nil {
+		return nil, app.Errorf("cannot read OpenAPI spec %q: %w", specPath, err)
+	}
+	vars, err := openapi.ExtractOperation(data, selector)
+	if err != nil {
+		return nil, err
+	}
+	return vars, nil
+}
+
+// mergeOpenAPIVars overlays the OpenAPI reserved namespaces onto base. These
+// keys win over base (template/config vars) on collision — a warning is logged
+// so a template author notices their variable was shadowed. An explicit --meta
+// flag still overrides them later in the engine. base is not mutated.
+func mergeOpenAPIVars(base, openapiVars map[string]any) map[string]any {
+	if len(openapiVars) == 0 {
+		return base
+	}
+	merged := make(map[string]any, len(base)+len(openapiVars))
+	maps.Copy(merged, base)
+	for _, key := range openapi.ReservedKeys {
+		v, ok := openapiVars[key]
+		if !ok {
+			continue
+		}
+		if _, collision := merged[key]; collision {
+			slog.Warn("OpenAPI reserved namespace overrides an existing variable",
+				"key", key)
+		}
+		merged[key] = v
+	}
+	return merged
 }
 
 // generateFunc is the core generation work executed between pre/post hooks.
@@ -244,7 +314,7 @@ func mergeVars(base, overlay map[string]any) map[string]any {
 	return merged
 }
 
-func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, generatorName, targetName, bundlePath string, onExisting engine.OnExistingPolicy) error {
+func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, generatorName, targetName, bundlePath string, onExisting engine.OnExistingPolicy, openapiVars map[string]any) error {
 	data, err := os.ReadFile(bundlePath)
 	if err != nil {
 		return app.Errorf("cannot open bundle file: %w", err)
@@ -264,9 +334,11 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 		return reqErr
 	}
 
-	// Merge variable layers: ScaffoldVars (base) <- BundleVars (override).
+	// Merge variable layers: ScaffoldVars (base) <- BundleVars (override) <-
+	// OpenAPI reserved namespaces (win on collision).
 	// CLI --meta flags are handled later by the engine (highest precedence).
 	mergedVars := mergeVars(cfg.Variables, bundle.Vars)
+	mergedVars = mergeOpenAPIVars(mergedVars, openapiVars)
 
 	// Load dialects (built-in + user-global only) for bundle's shared engine.
 	reg, dialectErr := loadDialectRegistryGlobal()
@@ -335,7 +407,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 	})
 }
 
-func generateTemplate(c *cli.Context, cfg *config.Config, fac generatorFactories, generatorName, targetName, dirPath, sharedPath string, onExisting engine.OnExistingPolicy) error {
+func generateTemplate(c *cli.Context, cfg *config.Config, fac generatorFactories, generatorName, targetName, dirPath, sharedPath string, onExisting engine.OnExistingPolicy, openapiVars map[string]any) error {
 	// Check generator prerequisites from tag.template.json if present.
 	vars := make(map[string]any)
 	if cfg.Variables != nil {
@@ -357,12 +429,10 @@ func generateTemplate(c *cli.Context, cfg *config.Config, fac generatorFactories
 			return engine.GenerateResult{}, app.Errorf("error creating engine: %w", err)
 		}
 		data := engine.Data{
-			Name:       targetName,
-			RawMeta:    c.StringSlice(flags.MetaFlag),
-			OnExisting: onExisting,
-		}
-		if cfg.Variables != nil {
-			data.ScaffoldVars = cfg.Variables
+			Name:         targetName,
+			RawMeta:      c.StringSlice(flags.MetaFlag),
+			OnExisting:   onExisting,
+			ScaffoldVars: mergeOpenAPIVars(cfg.Variables, openapiVars),
 		}
 		return runGenerate(gen, data)
 	})

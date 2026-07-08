@@ -1,0 +1,13 @@
+---
+to: {{ name | snake }}_handler.go
+---
+package handlers
+
+// {{ vars.operation.operationId }} handles {{ vars.operation.method }} {{ vars.operation.path }}
+// Parameters: {{ vars.operation.parameters | length }}
+{% for p in vars.operation.parameters -%}
+// - {{ p.name }} ({{ p['in'] }}): {{ p.schema.type }}
+{% endfor -%}
+// Response 200 schema ref: {{ vars.operation.responses['200'].content['application/json'].ref }}
+// Pet.name type: {{ vars.schemas.Pet.properties.name.type }}
+// API: {{ vars.info.title }} v{{ vars.info.version }}
