@@ -319,6 +319,81 @@ CLAUDE.md
 
 Templates can include generators in `_generators/` — copied to scaffolded project's `.tag/`.
 
+## OpenAPI input
+
+Drive `tag generate` from an OpenAPI 3.x contract. Two flags on `tag generate`:
+
+```
+tag generate <gen> <name> --openapi ./api.yaml --operation getUserById
+tag generate <gen> <name> --openapi ./api.yaml --operation "GET /users/{id}"
+```
+
+- `--openapi <path>` and `--operation <selector>` are **both-or-neither** (setting one without
+  the other is an error).
+- **Selector** — primary key is `operationId`; fallback is `"METHOD /path"` (case-insensitive
+  method). Not-found or ambiguous selectors hard-error listing the available operations.
+- Parses 3.0 **and** 3.1 (via `libopenapi`); `$ref` is resolved. Malformed/non-3.x specs surface
+  the parser error.
+
+### `vars` shape
+
+The selected operation lands in five reserved namespaces:
+
+```
+vars.operation
+  ├── operationId, method (upper-case), path, summary, description
+  ├── tags          []string
+  ├── parameters    [] { name, in, required, description, schema }   # path-level + operation-level, operation wins
+  ├── requestBody   { required, description, content{ mediaType -> Schema } }
+  └── responses     { "200"|"default"|… -> { description, content{ mediaType -> Schema } } }
+vars.schemas   map[name]Schema   # component schemas referenced by the operation, deref'd, deduped
+vars.info      { title, version, description }
+vars.servers   [] { url, description }
+vars.security  []                # operation-level if present (even []=no auth), else spec-level
+
+Schema (recursive, raw OpenAPI):
+  { type, format, nullable, required[], enum[], default, description,
+    ref, items, properties{name->Schema}, composition{allOf|oneOf|anyOf: []} }
+```
+
+- A `$ref` **inlines its body once**; a `$ref` nested inside that body is a **leaf** — it carries
+  only `ref: "<Name>"`, and the full body lives once under `vars.schemas.<Name>`. Walk
+  `vars.schemas` to resolve nested types.
+- OpenAPI 3.1 `type: [T, "null"]` normalizes to `type: T` + `nullable: true`. A non-null union
+  (`type: [string, integer]`) collapses to the first type.
+- `allOf`/`oneOf`/`anyOf` are exposed raw under `composition` (not flattened/merged).
+- **Precedence:** the five keys are reserved — they win over `.tagconfig.json` / template vars on
+  collision (a warning is logged). An explicit `--meta` still overrides them (scalar only; `--meta`
+  cannot reach nested OpenAPI data).
+
+### Gotcha: the `in` field
+
+`in` is a Gonja keyword, so `param.in` fails to parse. Access it with subscript:
+
+```jinja
+{% for p in vars.operation.parameters %}
+// {{ p.name }} ({{ p['in'] }}): {{ p.schema.type }}
+{% endfor %}
+```
+
+### Worked example
+
+```jinja
+---
+to: {{ name | snake }}_handler.go
+---
+package handlers
+
+// {{ vars.operation.operationId }} — {{ vars.operation.method }} {{ vars.operation.path }}
+func {{ vars.operation.operationId | pascal }}(
+{%- for p in vars.operation.parameters %}
+    {{ p.name }} {{ p.schema.type | to('go') }},  // {{ p['in'] }}
+{%- endfor %}
+) {}
+```
+
+Scope is one operation per invocation; multi-operation/whole-spec generation is a follow-up.
+
 ## Hooks
 
 ### Phases

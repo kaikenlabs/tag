@@ -1,0 +1,37 @@
+openapi: 3.1.0
+info:
+  title: Pet Store 3.1
+  version: 2.0.0
+  description: A 3.1 pet store API
+paths:
+  /pets/{id}:
+    get:
+      operationId: getPet
+      summary: Get a pet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Pet id
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A pet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        nickname:
+          type: [string, "null"]
+        age:
+          type: [integer, "null"]
+          format: int32

@@ -19,4 +19,6 @@ const (
 	AsFlag            = "as"
 	InteractiveFlag   = "interactive"
 	AddToLibFlag      = "add-to-lib"
+	OpenAPIFlag       = "openapi"
+	OperationFlag     = "operation"
 )

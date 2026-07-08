@@ -1,0 +1,120 @@
+openapi: 3.0.3
+info:
+  title: Pet Store
+  version: 1.0.0
+  description: A sample pet store API
+servers:
+  - url: https://api.example.com/v1
+    description: Production
+security:
+  - apiKey: []
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List pets
+      description: Returns all pets
+      tags: [pets]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Max items to return
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: A list of pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pet'
+    post:
+      operationId: createPet
+      summary: Create a pet
+      requestBody:
+        required: true
+        description: Pet to add
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pet'
+      responses:
+        '201':
+          description: Created
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pets/{id}:
+    get:
+      operationId: getPetById
+      summary: Get a pet by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Pet id
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: A pet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tag:
+          type: string
+        status:
+          type: string
+          enum: [available, pending, sold]
+        photoUrls:
+          type: array
+          items:
+            type: string
+        owner:
+          $ref: '#/components/schemas/Owner'
+    Owner:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+    Address:
+      type: object
+      properties:
+        city:
+          type: string
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
