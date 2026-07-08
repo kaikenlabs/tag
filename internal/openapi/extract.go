@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -23,7 +24,7 @@ const maxSchemaDepth = 20
 // with template- or config-declared vars these win (they are reserved for
 // OpenAPI input); an explicit --meta flag still overrides them, as --meta is
 // applied later at the highest precedence by the engine.
-var ReservedKeys = []string{"operation", "schemas", "info", "servers", "security"}
+var ReservedKeys = []string{"operation", "operations", "schemas", "info", "servers", "security"}
 
 // ExtractOperation parses an OpenAPI 3.x spec and extracts a single operation
 // (selected by operationId or "METHOD /path") into a map[string]any suitable
@@ -56,6 +57,94 @@ func ExtractOperation(spec []byte, selector string) (map[string]any, error) {
 	}
 	result["schemas"] = ex.collectComponentSchemas(&model.Model)
 	return result, nil
+}
+
+// ExtractOperations parses an OpenAPI 3.x spec and extracts many operations into
+// a map[string]any for the template `vars` namespace. An empty tag selects every
+// operation; otherwise only operations carrying that OpenAPI tag. Operations are
+// ordered by path then method for deterministic output, and each entry carries
+// its own effective security (op-level, else spec-level) — there is no top-level
+// `security` key in multi-op mode, since it differs per operation. vars.schemas
+// is the deduped union of components referenced by all selected operations.
+// See #327.
+func ExtractOperations(spec []byte, tag string) (map[string]any, error) {
+	doc, err := libopenapi.NewDocument(spec)
+	if err != nil {
+		return nil, app.Errorf("cannot parse OpenAPI spec: %w", err)
+	}
+	model, buildErr := doc.BuildV3Model()
+	if buildErr != nil {
+		return nil, app.Errorf("cannot build OpenAPI 3.x model: %w", buildErr)
+	}
+
+	var selected []opMatch
+	forEachOperation(&model.Model, func(method, path string, item *v3.PathItem, op *v3.Operation) {
+		if tag != "" && !slices.Contains(op.Tags, tag) {
+			return
+		}
+		selected = append(selected, opMatch{method, path, item, op})
+	})
+
+	if len(selected) == 0 {
+		return nil, app.Errorf(
+			"no operations selected%s; available operations:\n%s\navailable tags:\n%s",
+			tagSuffix(tag), listCandidates(&model.Model), listTags(&model.Model))
+	}
+
+	// Stable, deterministic order: path then method. Beats document order because
+	// this output drives generated code — a re-serialized spec must not churn diffs.
+	sort.Slice(selected, func(i, j int) bool {
+		if selected[i].path != selected[j].path {
+			return selected[i].path < selected[j].path
+		}
+		return selected[i].method < selected[j].method
+	})
+
+	// One shared extractor so e.collected accumulates across every operation:
+	// collectComponentSchemas then yields the deduped union in a single pass.
+	ex := &extractor{collected: map[string]bool{}}
+	operations := make([]any, 0, len(selected))
+	for _, m := range selected {
+		opMap := ex.operationToMap(m.method, m.path, m.item, m.op)
+		opMap["security"] = securityToList(m.op, &model.Model)
+		operations = append(operations, opMap)
+	}
+
+	result := map[string]any{
+		"operations": operations,
+		"info":       infoToMap(model.Model.Info),
+		"servers":    serversToList(model.Model.Servers),
+	}
+	result["schemas"] = ex.collectComponentSchemas(&model.Model)
+	return result, nil
+}
+
+// listTags renders the distinct OpenAPI tags in the spec, sorted, for error
+// messages. Operations with no tags contribute nothing.
+func listTags(model *v3.Document) string {
+	seen := map[string]bool{}
+	forEachOperation(model, func(_, _ string, _ *v3.PathItem, op *v3.Operation) {
+		for _, t := range op.Tags {
+			seen[t] = true
+		}
+	})
+	if len(seen) == 0 {
+		return "  (none)"
+	}
+	tags := make([]string, 0, len(seen))
+	for t := range seen {
+		tags = append(tags, "  "+t)
+	}
+	sort.Strings(tags)
+	return strings.Join(tags, "\n")
+}
+
+// tagSuffix annotates the no-match error with the filter that produced it.
+func tagSuffix(tag string) string {
+	if tag == "" {
+		return ""
+	}
+	return fmt.Sprintf(" for tag %q", tag)
 }
 
 // extractor carries walk state: `collected` is the transitive set of referenced

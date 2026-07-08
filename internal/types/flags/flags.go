@@ -21,4 +21,6 @@ const (
 	AddToLibFlag      = "add-to-lib"
 	OpenAPIFlag       = "openapi"
 	OperationFlag     = "operation"
+	OperationsFlag    = "operations"
+	OperationTagFlag  = "operation-tag"
 )

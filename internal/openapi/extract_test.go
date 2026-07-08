@@ -485,3 +485,94 @@ func TestUT_NormalizeType(t *testing.T) {
 		})
 	}
 }
+
+// --- multi-operation extraction (#327) ---
+
+// opIDs pulls the operationId from each entry of a vars.operations list.
+func opIDs(t *testing.T, ops []any) []string {
+	t.Helper()
+	ids := make([]string, 0, len(ops))
+	for _, o := range ops {
+		ids = append(ids, asMap(t, o)["operationId"].(string))
+	}
+	return ids
+}
+
+func TestUT_ExtractOperations_All(t *testing.T) {
+	spec := loadFixture(t, "petstore_30.yaml")
+
+	res, err := ExtractOperations(spec, "")
+	require.NoError(t, err)
+
+	ops := asList(t, res["operations"])
+	// Sorted by path then method: /pets GET, /pets POST, /pets/{id} GET.
+	assert.Equal(t, []string{"listPets", "createPet", "getPetById"}, opIDs(t, ops))
+
+	// Multi-op drops the top-level security key (it lives per-op instead).
+	assert.NotContains(t, res, "security")
+	// info/servers remain top-level.
+	assert.Contains(t, res, "info")
+	assert.Contains(t, res, "servers")
+}
+
+func TestUT_ExtractOperations_ByTag(t *testing.T) {
+	spec := loadFixture(t, "petstore_30.yaml")
+
+	res, err := ExtractOperations(spec, "pets")
+	require.NoError(t, err)
+
+	ops := asList(t, res["operations"])
+	// Only listPets and getPetById carry tag "pets"; createPet is excluded.
+	assert.Equal(t, []string{"listPets", "getPetById"}, opIDs(t, ops))
+}
+
+func TestUT_ExtractOperations_SchemaUnion(t *testing.T) {
+	spec := loadFixture(t, "petstore_30.yaml")
+
+	res, err := ExtractOperations(spec, "")
+	require.NoError(t, err)
+
+	// Union of components referenced by all operations, deduped: Pet (+Owner
+	// +Address transitively) and Error (from default responses).
+	schemas := asMap(t, res["schemas"])
+	assert.Contains(t, schemas, "Pet")
+	assert.Contains(t, schemas, "Owner")
+	assert.Contains(t, schemas, "Address")
+	assert.Contains(t, schemas, "Error")
+}
+
+func TestUT_ExtractOperations_PerOpSecurity(t *testing.T) {
+	spec := loadFixture(t, "petstore_30.yaml")
+
+	res, err := ExtractOperations(spec, "pets")
+	require.NoError(t, err)
+	ops := asList(t, res["operations"])
+	require.Len(t, ops, 2)
+
+	// listPets has no op-level security -> spec-level apiKey applies.
+	listPets := asMap(t, ops[0])
+	sec := asList(t, listPets["security"])
+	require.Len(t, sec, 1)
+	assert.Contains(t, asMap(t, sec[0]), "apiKey")
+
+	// getPetById overrides with op-level bearerAuth.
+	getByID := asMap(t, ops[1])
+	sec = asList(t, getByID["security"])
+	require.Len(t, sec, 1)
+	assert.Contains(t, asMap(t, sec[0]), "bearerAuth")
+}
+
+func TestUT_ExtractOperations_NoMatch(t *testing.T) {
+	spec := loadFixture(t, "petstore_30.yaml")
+
+	_, err := ExtractOperations(spec, "nonexistent")
+	require.Error(t, err)
+	// Error lists available operations and tags so the user can pick.
+	assert.Contains(t, err.Error(), "getPetById")
+	assert.Contains(t, err.Error(), "pets")
+}
+
+func TestUT_ReservedKeys_IncludesOperations(t *testing.T) {
+	assert.Contains(t, ReservedKeys, "operations")
+	assert.Contains(t, ReservedKeys, "operation")
+}

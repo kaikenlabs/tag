@@ -1,0 +1,10 @@
+---
+to: {{ name | snake }}_routes.go
+---
+package routes
+
+// {{ vars.info.title }} v{{ vars.info.version }}
+// operations: {{ vars.operations | length }}
+{% for op in vars.operations -%}
+// {{ op.operationId }}: {{ op.method }} {{ op.path }}
+{% endfor -%}

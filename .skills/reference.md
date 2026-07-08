@@ -321,17 +321,30 @@ Templates can include generators in `_generators/` — copied to scaffolded proj
 
 ## OpenAPI input
 
-Drive `tag generate` from an OpenAPI 3.x contract. Two flags on `tag generate`:
+Drive `tag generate` from an OpenAPI 3.x contract. Two modes: a **single operation** →
+`vars.operation`, or **many operations** → `vars.operations` (an ordered list).
 
 ```
+# single operation
 tag generate <gen> <name> --openapi ./api.yaml --operation getUserById
 tag generate <gen> <name> --openapi ./api.yaml --operation "GET /users/{id}"
+
+# many operations
+tag generate <gen> <name> --openapi ./api.yaml --operations              # every operation
+tag generate <gen> <name> --openapi ./api.yaml --operation-tag users     # operations tagged "users"
 ```
 
-- `--openapi <path>` and `--operation <selector>` are **both-or-neither** (setting one without
-  the other is an error).
-- **Selector** — primary key is `operationId`; fallback is `"METHOD /path"` (case-insensitive
-  method). Not-found or ambiguous selectors hard-error listing the available operations.
+- `--openapi <path>` is required for any OpenAPI input, together with **exactly one selection
+  mode**: `--operation` (single), `--operations` (all), or `--operation-tag <name>` (tag filter).
+- `--operation` is **mutually exclusive** with the multi-op selectors (error if combined).
+- `--operations` and `--operation-tag` are **not** exclusive: `--operations` turns on whole-spec
+  mode and `--operation-tag` narrows it to a tag, so `--operations --operation-tag users` is
+  equivalent to `--operation-tag users` alone. (`--operation-tag` already implies multi-op mode.)
+- **Single-op selector** — primary key is `operationId`; fallback is `"METHOD /path"`
+  (case-insensitive method). Not-found or ambiguous selectors hard-error listing the available
+  operations.
+- **Tag filter** — matches the OpenAPI `tags` on each operation, **case-sensitive**. A tag that
+  matches nothing (or an empty spec) hard-errors listing the available operations **and** tags.
 - Parses 3.0 **and** 3.1 (via `libopenapi`); `$ref` is resolved. Malformed/non-3.x specs surface
   the parser error.
 
@@ -392,7 +405,38 @@ func {{ vars.operation.operationId | pascal }}(
 ) {}
 ```
 
-Scope is one operation per invocation; multi-operation/whole-spec generation is a follow-up.
+### Multi-operation (`vars.operations`)
+
+`--operations` / `--operation-tag` expose an **ordered list** instead of a single operation. The
+current engine renders one template body to one `to:` path, so the template **loops** and emits a
+single file (one `routes.go`, one client, etc.) — there is no file-per-operation emission yet.
+
+```
+vars.operations   [] {                 # sorted by path, then HTTP method (deterministic)
+  operationId, method, path, summary, description, tags[],
+  parameters[], requestBody, responses,   # same shape as vars.operation above
+  security                                # effective auth for THIS op (op-level, else spec-level)
+}
+vars.schemas   map[name]Schema   # deduped UNION of components referenced by all selected operations
+vars.info      { title, version, description }
+vars.servers   [] { url, description }
+```
+
+- There is **no top-level `vars.security`** in multi-op mode — auth differs per operation, so it
+  travels inside each `vars.operations[]` entry instead.
+- `operations` is a reserved namespace (it wins over template/config vars on collision; a warning
+  is logged). An explicit `--meta` still overrides it.
+
+```jinja
+---
+to: {{ name | snake }}_routes.go
+---
+package routes
+{% for op in vars.operations %}
+// {{ op.operationId | pascal }} — {{ op.method }} {{ op.path }}
+func {{ op.operationId | pascal }}() {}
+{% endfor %}
+```
 
 ## Hooks
 

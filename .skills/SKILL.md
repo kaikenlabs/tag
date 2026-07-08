@@ -94,7 +94,7 @@ Execution order: Create → OpenAPI → Inject → Append (files exist before in
 
 - `{{ name }}` — the CLI argument from `tag generate <gen> <name>`
 - `{{ vars.x }}` — meta values from `--meta`/`-m` flags or `.tagconfig.json`
-- `{{ vars.operation.* }}` — an OpenAPI operation via `--openapi`/`--operation` (see reference.md → "OpenAPI input")
+- `{{ vars.operation.* }}` — one OpenAPI operation via `--openapi`/`--operation`; or `{{ vars.operations }}` (a list) via `--operations`/`--operation-tag` (see reference.md → "OpenAPI input")
 - `{{ now("20060102150405") }}` — current timestamp (Go format layout). No args = RFC3339.
 - **Never bare names**: `{{ project_name }}` does NOT work. Always `{{ vars.project_name }}`.
 
@@ -281,8 +281,10 @@ my-project/
 | Flag | Commands | Description |
 |------|----------|-------------|
 | `-m key=value` | scaffold, generate | Set variable values |
-| `--openapi <path>` | generate | OpenAPI 3.x spec to expose as `vars.operation.*` (needs `--operation`) |
-| `--operation <selector>` | generate | Operation to extract: an `operationId` or `"METHOD /path"` |
+| `--openapi <path>` | generate | OpenAPI 3.x spec to expose to templates (needs a selector below) |
+| `--operation <selector>` | generate | Single operation → `vars.operation.*`: an `operationId` or `"METHOD /path"` |
+| `--operations` | generate | All operations → `vars.operations[]` (excludes `--operation`) |
+| `--operation-tag <name>` | generate | Operations with this tag → `vars.operations[]` (excludes `--operation`) |
 | `--values <file>` | scaffold | Load variables from JSON |
 | `--no-input` | scaffold | Skip prompts |
 | `--replay` | scaffold | Reuse saved inputs |
