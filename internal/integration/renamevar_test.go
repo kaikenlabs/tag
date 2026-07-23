@@ -178,6 +178,47 @@ func TestIT_TemplateRenameVar_LeavesRawBlocksAndCommentsLiteral(t *testing.T) {
 	assert.Empty(t, report.Root.Undeclared)
 }
 
+// TestIT_TemplateRenameVar_RewritesSubscriptAccess is the regression for issue
+// #339: before the fix, rename-var renamed the declaration but left a live
+// {{ vars["old"] }} subscript reference pointing at a variable that no longer
+// existed — a successful apply that silently corrupted the template. Renaming a
+// declaration reached only through subscript access (single and double quotes)
+// must rewrite those references too, so the template still lints clean after.
+func TestIT_TemplateRenameVar_RewritesSubscriptAccess(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFixture(t, root, map[string]string{
+		"tag.template.json": `{"name": "sub", "vars": {"declared": {"type": "string", "default": "d"}}}`,
+		"body.txt":          `{{ vars["declared"] }} and {{ vars['declared'] }}`,
+	})
+
+	// The fixture must start clean, otherwise the post-rename assertion is vacuous.
+	before, err := vars.Analyze(root)
+	require.NoError(t, err)
+	require.False(t, before.HasIssues(), "fixture should start with no variable issues")
+
+	plan, err := vars.PlanRename(root, "declared", "renamed")
+	require.NoError(t, err)
+	require.NoError(t, plan.Apply())
+
+	body := readFile(t, root, "body.txt")
+	assert.Equal(t, `{{ vars["renamed"] }} and {{ vars['renamed'] }}`, body,
+		"both single- and double-quoted subscript keys must be rewritten")
+
+	// The declaration and every reference moved together: nothing dangling.
+	after, err := vars.Analyze(root)
+	require.NoError(t, err)
+	assert.False(t, after.HasIssues(),
+		"rename must not leave a live subscript reference behind")
+
+	linter, err := lint.NewLinter(root)
+	require.NoError(t, err)
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ErrorCount(), "issues: %+v", result.Issues)
+}
+
 func TestIT_TemplateRenameVar_DryRunIsAPreview(t *testing.T) {
 	t.Parallel()
 

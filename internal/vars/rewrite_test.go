@@ -341,3 +341,81 @@ func countNewlines(s string) int {
 	}
 	return n
 }
+
+// TestUT_RenameInExpressions_SubscriptAccess covers issue #339: rename-var
+// rewrites the key of a vars["old"] / vars['old'] subscript reference,
+// preserving quote style and whitespace, and leaves lookalikes alone.
+func TestUT_RenameInExpressions_SubscriptAccess(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		src   string
+		want  string
+		count int
+	}{
+		{
+			name:  "double-quoted subscript",
+			src:   `{{ vars["old"] }}`,
+			want:  `{{ vars["new"] }}`,
+			count: 1,
+		},
+		{
+			name:  "single-quoted subscript",
+			src:   `{{ vars['old'] }}`,
+			want:  `{{ vars['new'] }}`,
+			count: 1,
+		},
+		{
+			name:  "whitespace around brackets is preserved",
+			src:   `{{ vars [ "old" ] }}`,
+			want:  `{{ vars [ "new" ] }}`,
+			count: 1,
+		},
+		{
+			name:  "subscript and dot access in one block",
+			src:   `{{ vars["old"] ~ vars.old }}`,
+			want:  `{{ vars["new"] ~ vars.new }}`,
+			count: 2,
+		},
+		{
+			name:  "subscript in a statement block",
+			src:   `{% if vars["old"] %}x{% endif %}`,
+			want:  `{% if vars["new"] %}x{% endif %}`,
+			count: 1,
+		},
+		{
+			name:  "attribute path is left alone",
+			src:   `{{ cfg.vars["old"] }}`,
+			want:  `{{ cfg.vars["old"] }}`,
+			count: 0,
+		},
+		{
+			name:  "longer identifier is left alone",
+			src:   `{{ myvars["old"] }}`,
+			want:  `{{ myvars["old"] }}`,
+			count: 0,
+		},
+		{
+			name:  "a different subscript key is left alone",
+			src:   `{{ vars["other"] }}`,
+			want:  `{{ vars["other"] }}`,
+			count: 0,
+		},
+		{
+			name:  "non-literal subscript is left alone",
+			src:   `{{ vars[old] }}`,
+			want:  `{{ vars[old] }}`,
+			count: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, n := renameInExpressions(tt.src, "old", "new")
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.count, n)
+		})
+	}
+}

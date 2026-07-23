@@ -27,16 +27,22 @@ Defect 2 (greedy regex): {{ vars.alpha ~ vars.beta }}
 Defect 3 (attribute path): {{ cfg.vars.attrname }}
 Defect 4 (multi-line block): {{ vars.spans
     ~ vars.lines }}
+Subscript (issue #339): {{ vars["subbed"] }} and {{ vars['single'] }}
+Subscript lookalike: {{ myvars["notref"] }}
 `
 
 // varScanFixtureCandidates is every name mentioned in varScanFixtureBody,
 // real reference or lookalike.
-var varScanFixtureCandidates = []string{"ghost", "alpha", "beta", "attrname", "spans", "lines"}
+var varScanFixtureCandidates = []string{
+	"ghost", "alpha", "beta", "attrname", "spans", "lines",
+	"subbed", "single", "notref",
+}
 
 // varScanFixtureRealRefs is the subset of varScanFixtureCandidates that are
-// true vars.* references. "ghost" and "attrname" are deliberately excluded:
-// they are lookalikes, not references.
-var varScanFixtureRealRefs = []string{"alpha", "beta", "lines", "spans"}
+// true vars.* references. "ghost", "attrname" and "notref" are deliberately
+// excluded: they are lookalikes, not references. "subbed" and "single" are
+// subscript references, real since issue #339.
+var varScanFixtureRealRefs = []string{"alpha", "beta", "lines", "single", "spans", "subbed"}
 
 // TestIT_TemplateVarScan_ThreeCommandsAgree proves lint, the variables report
 // and rename-var agree on exactly the real references in one fixture built

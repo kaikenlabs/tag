@@ -13,6 +13,15 @@ import (
 // as well as the "both sides should" one.
 var candidateNamePattern = regexp.MustCompile(`vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
 
+// subscriptNamePattern is the subscript-access counterpart of
+// candidateNamePattern, added for issue #339: it enumerates the names reachable
+// through vars["name"] / vars['name'] so the differential check below actually
+// exercises the subscript form. Like candidateNamePattern it is a deliberately
+// naive superset (it ignores context and mismatched quotes); over-matching is
+// safe because ScanRefs and renameInExpressions share matchSubscript and so
+// agree on any name — a spurious candidate simply yields 0 == 0.
+var subscriptNamePattern = regexp.MustCompile(`vars\s*\[\s*["']([a-zA-Z_][a-zA-Z0-9_.]*)["']\s*\]`)
+
 // FuzzScanRefsAgreesWithRenameWalker is the structural guard behind issue #337:
 // `tag template lint`, `tag template variables` (via ScanRefs) and
 // `tag template rename-var` (via renameInExpressions) must agree on what counts
@@ -41,6 +50,16 @@ func FuzzScanRefsAgreesWithRenameWalker(f *testing.F) {
 		"vars.plaintext",
 		"{{ vars. }}",
 		"{{ vars.a.b[0] }}",
+		`{{ vars["sub"] }}`,
+		`{{ vars['single'] }}`,
+		`{{ vars [ "spaced" ] }}`,
+		`{{ vars["dotted.name"] }}`,
+		`{{ vars["mix"] ~ vars.mix }}`,
+		`{{ cfg.vars["attr"] }}`,
+		`{{ myvars["look"] }}`,
+		`{{ vars[dynamic] }}`,
+		`{{ vars["0bad"] }}`,
+		`{{ replace("vars[\"ghost\"]") }}`,
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -60,8 +79,12 @@ func FuzzScanRefsAgreesWithRenameWalker(f *testing.F) {
 			}
 		}
 
+		var candidates [][]string
+		candidates = append(candidates, candidateNamePattern.FindAllStringSubmatch(src, -1)...)
+		candidates = append(candidates, subscriptNamePattern.FindAllStringSubmatch(src, -1)...)
+
 		seen := make(map[string]struct{})
-		for _, m := range candidateNamePattern.FindAllStringSubmatch(src, -1) {
+		for _, m := range candidates {
 			name := m[1]
 			if _, ok := seen[name]; ok {
 				continue

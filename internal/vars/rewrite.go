@@ -15,6 +15,7 @@ const (
 	rawTag     = "raw"
 	endRawTag  = "endraw"
 	varsPrefix = "vars."
+	varsToken  = "vars"
 )
 
 // renameInExpressions rewrites `vars.<oldName>` to `vars.<newName>` inside Gonja
@@ -191,6 +192,82 @@ func skipQuoted(src string, i int) int {
 	return len(src)
 }
 
+// subscriptRef describes a `vars["name"]` subscript reference located inside a
+// block. name is the key's bytes; keyOpen and keyClose index the opening and
+// closing quote of the key; end is the index just past the closing `]`.
+type subscriptRef struct {
+	name     string
+	keyOpen  int
+	keyClose int
+	end      int
+}
+
+// matchSubscript reports whether block[i:] begins a `vars["name"]` subscript
+// reference and, if so, describes it. i must point at the candidate `vars`
+// token. It accepts single or double quotes and tolerates whitespace around the
+// token, the brackets and the key, matching Gonja's subscript grammar so
+// `vars [ "x" ]` is recognised. The key bytes are taken literally, so the name
+// is not restricted to a bare identifier beyond its first byte — subscript
+// access exists precisely to reach names like "param.in".
+//
+// Two forms are deliberately not matched: a non-literal subscript (`vars[expr]`,
+// whose key is not statically known) and a key whose first byte is not a letter
+// or underscore (`vars["0bad"]`, index access — the same letter/underscore-start
+// rule dot access applies). Both keep the scanner and the rename walker
+// enumerating the same names.
+//
+// The left-context guard (isWholeReference) is the caller's job, so
+// `cfg.vars["x"]` and `myvars["x"]` are rejected exactly as their dot-access
+// equivalents are.
+func matchSubscript(block string, i int) (subscriptRef, bool) {
+	if !strings.HasPrefix(block[i:], varsToken) {
+		return subscriptRef{}, false
+	}
+	j := skipSpace(block, i+len(varsToken))
+	if j >= len(block) || block[j] != '[' {
+		return subscriptRef{}, false
+	}
+	j = skipSpace(block, j+1)
+	if j >= len(block) || (block[j] != '\'' && block[j] != '"') {
+		return subscriptRef{}, false
+	}
+	keyOpen := j
+	if keyOpen+1 >= len(block) || !isIdentStartByte(block[keyOpen+1]) {
+		return subscriptRef{}, false
+	}
+	keyEnd := skipQuoted(block, keyOpen) // index just past the closing quote
+	// skipQuoted consumes the rest of the block on an unterminated literal; a
+	// real subscript must have a matching closing quote.
+	if keyEnd <= keyOpen+1 || block[keyEnd-1] != block[keyOpen] {
+		return subscriptRef{}, false
+	}
+	j = skipSpace(block, keyEnd)
+	if j >= len(block) || block[j] != ']' {
+		return subscriptRef{}, false
+	}
+	return subscriptRef{
+		name:     block[keyOpen+1 : keyEnd-1],
+		keyOpen:  keyOpen,
+		keyClose: keyEnd - 1,
+		end:      j + 1,
+	}, true
+}
+
+// skipSpace returns the index of the first non-whitespace byte at or after i,
+// skipping the spaces, tabs, carriage returns and newlines Gonja tolerates
+// inside an expression.
+func skipSpace(block string, i int) int {
+	for i < len(block) {
+		switch block[i] {
+		case ' ', '\t', '\r', '\n':
+			i++
+		default:
+			return i
+		}
+	}
+	return i
+}
+
 // rewriteBlock replaces vars.<oldName> with vars.<newName> inside a single
 // block, skipping string literals, and adds the number of replacements to count.
 func rewriteBlock(block, oldName, newName string, count *int) string {
@@ -206,6 +283,22 @@ func rewriteBlock(block, oldName, newName string, count *int) string {
 			end := skipQuoted(block, i)
 			b.WriteString(block[i:end])
 			i = end
+			continue
+		}
+		// Subscript access: vars["oldName"]. The key is a quoted run, so it must
+		// be recognised here before the quote branch above would consume it
+		// verbatim. Rewriting swaps only the key's bytes, preserving quote style
+		// and surrounding whitespace.
+		if m, ok := matchSubscript(block, i); ok && isWholeReference(block, i, len(varsToken)) {
+			if m.name == oldName {
+				b.WriteString(block[i : m.keyOpen+1])
+				b.WriteString(newName)
+				b.WriteString(block[m.keyClose:m.end])
+				*count++
+			} else {
+				b.WriteString(block[i:m.end])
+			}
+			i = m.end
 			continue
 		}
 		if strings.HasPrefix(block[i:], needle) && isWholeReference(block, i, len(needle)) {
