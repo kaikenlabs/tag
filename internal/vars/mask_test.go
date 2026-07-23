@@ -40,6 +40,11 @@ func TestUT_MaskLiterals_BlanksLiteralSpans(t *testing.T) {
 			want: "ab",
 		},
 		{
+			name: "endraw closed with a tab still terminates the block",
+			src:  "a{% raw %}{{ vars.x }}{% endraw\t%}{{ vars.later }}",
+			want: "a{{ vars.later }}",
+		},
+		{
 			name: "raw tag separated by newlines",
 			src:  "a{%\nraw\n%}{{ vars.x }}{%\nendraw\n%}b",
 			want: "a\n\n\n\nb",
@@ -175,5 +180,13 @@ func TestUT_MaskLiterals_PreservesLineCount(t *testing.T) {
 		"{% raw %}literal {{ vars.pod }}\nand more\n{% endraw %}\n" +
 		"{{ vars.tail }}\n"
 
-	assert.Equal(t, countNewlines(src), countNewlines(MaskLiterals(src)))
+	masked := MaskLiterals(src)
+
+	assert.Equal(t, countNewlines(src), countNewlines(masked))
+
+	// Line count alone would hold for a function that masked nothing, so pin that
+	// the spans really were removed while their newlines stayed behind.
+	assert.NotContains(t, masked, "vars.x")
+	assert.NotContains(t, masked, "vars.pod")
+	assert.Contains(t, masked, "{{ vars.tail }}")
 }
