@@ -206,7 +206,7 @@ tag template lint --format json
 - **Path placeholders** — Directory and file names containing `{{ vars.* }}` are checked.
 - **Binary files** — Automatically skipped.
 - **`.tagignore` patterns** — Ignored files are excluded from linting.
-- **Comments and raw blocks** — Template comments (`{# ... #}`) and `{% raw %}...{% endraw %}` blocks are masked out before variable scanning, so `{{ vars.* }}` written inside either is treated as literal text, not a reference.
+- **Comments, raw blocks, and string literals** — Template comments (`{# ... #}`), the body of `{% raw %}...{% endraw %}` blocks, and string literals inside a `{{ }}` / `{% %}` block are never scanned for references, so `{{ replace("{{ vars.ghost }}") }}` does not reference `ghost`. A `{% raw %}` tag's own opening tag is scanned like any other block — only its body is skipped. `tag template lint`, `tag template variables`, and `tag template rename-var` share this exact definition of a reference, including the `vars["name"]` subscript limitation (see `rename-var`'s "What is left alone" list below) and reading `vars.0` as index access, not a variable named `0`.
 
 ---
 
@@ -275,7 +275,7 @@ Summary: 5 declared, 0 undeclared, 0 unused
 - `{% for item in vars.x %}` iteration references
 - Derived variable default expressions (`"default": "{{ vars.other }}"`)
 - Generator-level `tag.template.json` configs
-- Template comments (`{# ... #}`) and `{% raw %}...{% endraw %}` blocks are masked out before scanning — a variable referenced only inside one of them counts as unused, not used
+- Template comments (`{# ... #}`), the body of `{% raw %}...{% endraw %}` blocks, and string literals inside a `{{ }}` / `{% %}` block are never scanned — a variable referenced only inside one of them counts as unused, not used. A `{% raw %}` tag's own opening tag is scanned like any other block — only its body is skipped. `tag template variables` shares this exact definition of a reference with `tag template lint` and `tag template rename-var`, including the `vars["name"]` subscript limitation (see `rename-var`'s "What is left alone" list below) and reading `vars.0` as index access, not a variable named `0`.
 - Binary files and `.tagignore` patterns are honored
 
 ---
@@ -311,7 +311,7 @@ If `[path]` is omitted, the current directory is used. Flags must precede the po
 
 - Plain text that merely mentions the name — only Gonja expressions are rewritten
 - Comments (`{# ... #}`)
-- `{% raw %}` blocks, whose contents are emitted literally
+- The body of a `{% raw %}...{% endraw %}` block, whose contents are emitted literally — the opening `{% raw %}` tag itself is an ordinary block and is rewritten like any other
 - String literals inside an expression, such as `{{ "vars.old_name" }}`
 - Files excluded by `.tagignore`, the `_dialects/` tree, symlinks, and binary files
 
@@ -373,6 +373,7 @@ Changes:
 **Limitations:**
 
 - Only dot access (`vars.old_name`) is rewritten. Subscript access (`vars["old_name"]`) is not recognised — the same limitation `tag template lint` and `tag template variables` have.
+- A name must start with a letter or underscore. `vars.0` is read as index access, not a variable named `0`, and is never renamed.
 
 ---
 

@@ -121,6 +121,106 @@ func TestUT_AnalyzeRawBlockNotCounted(t *testing.T) {
 	assert.Equal(t, 4, refs[0].Line)
 }
 
+func TestUT_AnalyzeStringLiteralNotCounted(t *testing.T) {
+	t.Parallel()
+
+	root := setupTemplate(t,
+		`{"vars": {"project_name": "myapp", "ghost": {"type": "string", "default": "x"}}}`,
+		map[string]string{
+			// defect 1: "ghost" only appears inside a string literal argument.
+			"README.md": `{{ replace("{{ vars.ghost }}") }}` + "\n# {{ vars.project_name }}",
+		},
+	)
+
+	report, err := Analyze(root)
+	require.NoError(t, err)
+
+	for _, dv := range report.Root.Declared {
+		if dv.Name == "ghost" {
+			assert.Equal(t, 0, dv.ReferenceCount, "a mention inside a string literal is not a reference")
+			assert.Equal(t, 0, dv.FileCount)
+		}
+		if dv.Name == "project_name" {
+			assert.Positive(t, dv.ReferenceCount)
+		}
+	}
+}
+
+func TestUT_AnalyzeVarOnlyInStringLiteralIsUnused(t *testing.T) {
+	t.Parallel()
+
+	root := setupTemplate(t,
+		`{"vars": {"ghost": {"type": "string", "default": "x"}}}`,
+		map[string]string{
+			"README.md": `{{ replace("{{ vars.ghost }}") }}`,
+		},
+	)
+
+	report, err := Analyze(root)
+	require.NoError(t, err)
+
+	// A variable mentioned only inside a string literal is never referenced,
+	// so it is reported unused — a deliberate behaviour change from the old
+	// line-oriented regex scanner, which mistook the literal for a use.
+	assert.Equal(t, []string{"ghost"}, report.Root.Unused)
+}
+
+func TestUT_AnalyzeReferenceExpressionIsOriginalLine(t *testing.T) {
+	t.Parallel()
+
+	root := setupTemplate(t,
+		`{"vars": {"real": {"type": "string", "prompt": "Real"}}}`,
+		map[string]string{
+			// The literal delimiter "}}"  inside the string must not truncate
+			// the block, and the reported Expression must be the ORIGINAL
+			// source line, not a masked/blanked copy of it.
+			"README.md": "line one\n" + `{{ f("}}") ~ vars.real }}`,
+		},
+	)
+
+	report, err := Analyze(root)
+	require.NoError(t, err)
+
+	var refs []Reference
+	for _, dv := range report.Root.Declared {
+		if dv.Name == "real" {
+			refs = dv.References
+		}
+	}
+	require.Len(t, refs, 1)
+	assert.Equal(t, 2, refs[0].Line)
+	assert.Equal(t, `{{ f("}}") ~ vars.real }}`, refs[0].Expression)
+}
+
+// TestUT_AnalyzeReferenceExpressionStripsCarriageReturn covers the CRLF path
+// through scanFileContent: ScanRefs documents itself as CRLF-safe, so a
+// reference in a CRLF-terminated file must report the right line AND an
+// Expression with no trailing \r left on it.
+func TestUT_AnalyzeReferenceExpressionStripsCarriageReturn(t *testing.T) {
+	t.Parallel()
+
+	root := setupTemplate(t,
+		`{"vars": {"real": {"type": "string", "prompt": "Real"}}}`,
+		map[string]string{
+			"README.md": "line one\r\n{{ vars.real }}\r\nline three\r\n",
+		},
+	)
+
+	report, err := Analyze(root)
+	require.NoError(t, err)
+
+	var refs []Reference
+	for _, dv := range report.Root.Declared {
+		if dv.Name == "real" {
+			refs = dv.References
+		}
+	}
+	require.Len(t, refs, 1)
+	assert.Equal(t, 2, refs[0].Line)
+	assert.Equal(t, "{{ vars.real }}", refs[0].Expression)
+	assert.NotContains(t, refs[0].Expression, "\r")
+}
+
 func TestUT_AnalyzeDerivedVariable(t *testing.T) {
 	t.Parallel()
 

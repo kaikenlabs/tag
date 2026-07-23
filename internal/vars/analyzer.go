@@ -8,7 +8,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -18,12 +17,6 @@ import (
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/internal/types"
 )
-
-// varExprRegex matches {{ vars.NAME ... }} expressions, capturing the variable name.
-var varExprRegex = regexp.MustCompile(`\{\{[^}]*\bvars\.([a-zA-Z_][a-zA-Z0-9_]*)\b[^}]*\}\}`)
-
-// varStmtRegex matches {% ... vars.NAME ... %} statements (if, for, set, etc.).
-var varStmtRegex = regexp.MustCompile(`\{%[^%]*\bvars\.([a-zA-Z_][a-zA-Z0-9_]*)\b[^%]*%\}`)
 
 // Analyze scans a template directory and returns a Report of declared vs
 // referenced variables, including undeclared and unused findings.
@@ -307,24 +300,23 @@ func scanFileContent(absPath, relPath string) map[string][]Reference {
 		return nil
 	}
 
+	src := string(content)
+	// ScanRefs never looks inside comments or {% raw %} bodies, so no masking
+	// pass is needed before it. Original source lines (not a masked copy) back
+	// each reported Expression.
+	lines := strings.Split(src, "\n")
+
 	refs := make(map[string][]Reference)
-
-	// Mask comments and {% raw %} blocks before scanning: their contents are not
-	// variable references. Masking preserves newlines, so line numbers hold.
-	cleaned := MaskLiterals(string(content))
-
-	scanner := bufio.NewScanner(strings.NewReader(cleaned))
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-		for _, name := range extractVarNames(line) {
-			refs[name] = append(refs[name], Reference{
-				File:       relPath,
-				Line:       lineNum,
-				Expression: strings.TrimSpace(line),
-			})
+	for _, ref := range ScanRefs(src) {
+		expression := ""
+		if idx := ref.Line - 1; idx >= 0 && idx < len(lines) {
+			expression = strings.TrimSpace(strings.TrimSuffix(lines[idx], "\r"))
 		}
+		refs[ref.Name] = append(refs[ref.Name], Reference{
+			File:       relPath,
+			Line:       ref.Line,
+			Expression: expression,
+		})
 	}
 
 	return refs
@@ -332,24 +324,7 @@ func scanFileContent(absPath, relPath string) map[string][]Reference {
 
 // extractVarNames extracts all variable names from vars.NAME references in content.
 func extractVarNames(content string) []string {
-	seen := make(map[string]struct{})
-	var names []string
-
-	for _, re := range []*regexp.Regexp{varExprRegex, varStmtRegex} {
-		matches := re.FindAllStringSubmatch(content, -1)
-		for _, match := range matches {
-			if len(match) < 2 {
-				continue
-			}
-			name := match[1]
-			if _, ok := seen[name]; ok {
-				continue
-			}
-			seen[name] = struct{}{}
-			names = append(names, name)
-		}
-	}
-	return names
+	return ScanNames(content)
 }
 
 // isSkippedEntry returns true if the entry should be skipped during walking.

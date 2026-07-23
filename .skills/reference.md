@@ -528,7 +528,7 @@ Validates:
 - Gonja template syntax (parse-only, no execution)
 - `{{ vars.* }}` references against declared variables
 
-Comments (`{# ... #}`) and `{% raw %}...{% endraw %}` blocks are masked out before variable scanning, so a `{{ vars.* }}` written inside either is treated as literal text, not a reference.
+Comments (`{# ... #}`), `{% raw %}...{% endraw %}` bodies, and string literals inside a `{{ }}` / `{% %}` block are never scanned for references — `{{ replace("{{ vars.ghost }}") }}` does not reference `ghost`. A `{% raw %}` tag's opening tag is scanned normally; only its body is skipped. Same reference rules as `rename-var` below, including the `vars["name"]` subscript limitation and `vars.0` being index access, not a variable named `0`.
 
 Exit codes: `0` = pass, `1` = lint errors, `2` = usage error.
 
@@ -546,7 +546,7 @@ Cross-references declared variables in `tag.template.json` with usage in templat
 - Detects undeclared variables used in templates
 - Detects declared but unused variables
 - Scans generator-level configs inside `_generators/`
-- Comments and `{% raw %}...{% endraw %}` blocks are masked out before scanning — a variable referenced only inside one of them counts as unused, not used
+- Comments, `{% raw %}...{% endraw %}` bodies, and string literals inside a `{{ }}` / `{% %}` block are never scanned — a variable referenced only inside one of them counts as unused, not used. Same reference rules as `lint` above and `rename-var` below.
 
 Exit codes: `0` = no issues (or non-strict), `1` = issues found (`--strict`), `2` = usage error.
 
@@ -562,11 +562,11 @@ Flags must precede the positional arguments.
 
 Rewrites the declaration in `tag.template.json`, derived defaults, hook commands, bundle and generator `requires` entries, all `{{ vars.* }}` / `{% ... vars.* ... %}` expressions, and file/directory name placeholders (renamed on disk).
 
-Left untouched: plain text, comments (`{# ... #}`), `{% raw %}` blocks, string literals inside expressions, `.tagignore`d files, `_dialects/`, symlinks, and binary files. `_generators/` and `.tag/` are included.
+Left untouched: plain text, comments (`{# ... #}`), the body of `{% raw %}` blocks (the opening `{% raw %}` tag itself is an ordinary block and is rewritten normally), string literals inside expressions, `.tagignore`d files, `_dialects/`, symlinks, and binary files. `_generators/` and `.tag/` are included.
 
 Planning is read-only, so `--dry-run` cannot write. A failed apply rolls back every file and path already changed.
 
-Only dot access is rewritten — `vars["old_name"]` is not recognised.
+Only dot access is rewritten — `vars["old_name"]` is not recognised. A name must start with a letter or underscore: `vars.0` is index access, not a variable named `0`, and is never renamed.
 
 Exit codes: `0` = applied or previewed, `1` = rename error (undeclared, name taken, path collision), `2` = usage error.
 

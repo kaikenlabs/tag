@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -23,18 +22,6 @@ import (
 	"github.com/kaikenlabs/tag/internal/validate"
 	"github.com/kaikenlabs/tag/internal/vars"
 )
-
-// varExprRegex matches {{ vars.NAME ... }} expressions, capturing the variable name.
-var varExprRegex = regexp.MustCompile(`\{\{[^}]*\bvars\.([a-zA-Z_][a-zA-Z0-9_]*)\b[^}]*\}\}`)
-
-// varStmtRegex matches {% ... vars.NAME ... %} statements (if, for, set, etc.).
-var varStmtRegex = regexp.MustCompile(`\{%[^%]*\bvars\.([a-zA-Z_][a-zA-Z0-9_]*)\b[^%]*%\}`)
-
-// VarRef holds a variable reference found in template content.
-type VarRef struct {
-	Name string
-	Line int
-}
 
 // lintSchema validates tag.template.json against the JSON Schema and parses it.
 func (l *Linter) lintSchema() {
@@ -98,13 +85,12 @@ func (l *Linter) lintDerivedDefaults() {
 		if !ok {
 			continue
 		}
-		refs := extractVarRefs(defaultStr, 0)
-		for _, ref := range refs {
-			if _, exists := l.vars[ref.Name]; !exists {
+		for _, refName := range vars.ScanNames(defaultStr) {
+			if _, exists := l.vars[refName]; !exists {
 				l.result.Add(Issue{
 					File:     types.TemplateConfigFile,
 					Severity: SeverityError,
-					Message:  fmt.Sprintf("derived variable %q references undefined variable %q", name, ref.Name),
+					Message:  fmt.Sprintf("derived variable %q references undefined variable %q", name, refName),
 					Rule:     "undefined-variable",
 				})
 			}
@@ -173,13 +159,12 @@ func (l *Linter) lintPath(relPath string) {
 	if l.config == nil {
 		return
 	}
-	refs := extractVarRefs(relPath, 0)
-	for _, ref := range refs {
-		if _, exists := l.vars[ref.Name]; !exists {
+	for _, refName := range vars.ScanNames(relPath) {
+		if _, exists := l.vars[refName]; !exists {
 			l.result.Add(Issue{
 				File:     relPath,
 				Severity: SeverityError,
-				Message:  fmt.Sprintf("path contains undefined variable %q", ref.Name),
+				Message:  fmt.Sprintf("path contains undefined variable %q", refName),
 				Rule:     "undefined-variable",
 			})
 		}
@@ -231,51 +216,37 @@ func (l *Linter) lintFileContent(absPath, relPath string) {
 
 // lintVariableRefs scans content for {{ vars.* }} references and checks against declared vars.
 func (l *Linter) lintVariableRefs(content, relPath string) {
-	// Mask comments and {% raw %} blocks before scanning: their contents are
+	// ScanRefs skips comments and {% raw %} bodies itself: their contents are
 	// emitted literally, not evaluated, so they are not variable references.
-	// Masking preserves newlines, so reported line numbers stay accurate.
-	cleaned := vars.MaskLiterals(content)
-
-	scanner := bufio.NewScanner(strings.NewReader(cleaned))
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-		refs := extractVarRefs(line, lineNum)
-		for _, ref := range refs {
-			if _, exists := l.vars[ref.Name]; !exists {
-				l.result.Add(Issue{
-					File:     relPath,
-					Line:     ref.Line,
-					Severity: SeverityError,
-					Message:  fmt.Sprintf("undefined variable %q", ref.Name),
-					Rule:     "undefined-variable",
-				})
-			}
-		}
+	//
+	// It reports every occurrence, which is what `tag template variables` needs
+	// for its reference counts. A linter wants one finding per location, so
+	// collapse repeats of the same name on the same line — otherwise
+	// `{{ vars.x }} and {{ vars.x }}` emits the identical message twice.
+	type nameOnLine struct {
+		name string
+		line int
 	}
-}
+	reported := make(map[nameOnLine]struct{})
 
-// extractVarRefs extracts all vars.NAME references from a string.
-func extractVarRefs(content string, lineNum int) []VarRef {
-	var refs []VarRef
-	seen := make(map[string]struct{})
-
-	for _, re := range []*regexp.Regexp{varExprRegex, varStmtRegex} {
-		matches := re.FindAllStringSubmatch(content, -1)
-		for _, match := range matches {
-			if len(match) < 2 {
-				continue
-			}
-			name := match[1]
-			if _, ok := seen[name]; ok {
-				continue
-			}
-			seen[name] = struct{}{}
-			refs = append(refs, VarRef{Name: name, Line: lineNum})
+	for _, ref := range vars.ScanRefs(content) {
+		if _, exists := l.vars[ref.Name]; exists {
+			continue
 		}
+		key := nameOnLine{name: ref.Name, line: ref.Line}
+		if _, dup := reported[key]; dup {
+			continue
+		}
+		reported[key] = struct{}{}
+
+		l.result.Add(Issue{
+			File:     relPath,
+			Line:     ref.Line,
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("undefined variable %q", ref.Name),
+			Rule:     "undefined-variable",
+		})
 	}
-	return refs
 }
 
 //nolint:nilnil // nil matcher signals "no ignore file" — callers nil-check before use

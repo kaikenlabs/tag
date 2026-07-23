@@ -82,14 +82,22 @@ func renameInExpressions(src, oldName, newName string) (string, int) {
 // returns the index just past it. An unterminated comment consumes the rest of
 // src, matching Gonja's own "everything after {# is comment" behaviour.
 func copyComment(b *strings.Builder, src string, start int) int {
-	idx := strings.Index(src[start+len(cmntOpen):], cmntClose)
-	if idx < 0 {
-		b.WriteString(src[start:])
-		return len(src)
-	}
-	end := start + len(cmntOpen) + idx + len(cmntClose)
+	end := commentEnd(src, start)
 	b.WriteString(src[start:end])
 	return end
+}
+
+// commentEnd returns the index just past the {# ... #} comment starting at
+// start, which must point at "{#". An unterminated comment consumes the
+// remainder of src, matching Gonja's own "everything after {# is comment"
+// behaviour. Shared by the rename walker and the reference scanner so both
+// agree on where a comment ends.
+func commentEnd(src string, start int) int {
+	idx := strings.Index(src[start+len(cmntOpen):], cmntClose)
+	if idx < 0 {
+		return len(src)
+	}
+	return start + len(cmntOpen) + idx + len(cmntClose)
 }
 
 // skipRawBody copies everything from start up to and including the closing
@@ -100,27 +108,37 @@ func copyComment(b *strings.Builder, src string, start int) int {
 // quote-aware scanning here would let an unbalanced quote in the body swallow
 // the real {% endraw %} and everything after it.
 func skipRawBody(b *strings.Builder, src string, start int) int {
+	end := rawBodyEnd(src, start)
+	b.WriteString(src[start:end])
+	return end
+}
+
+// rawBodyEnd scans forward from start for the {% endraw %} tag that closes an
+// open {% raw %} block, returning the index just past it. The scan is literal
+// rather than quote-aware: a raw body is plain text, so an unbalanced quote
+// inside it must not swallow the real {% endraw %} and everything after it.
+// An unterminated raw block consumes the remainder of src, matching Gonja's
+// own "everything after the opener belongs to it" behaviour. Shared by the
+// rename walker and the reference scanner so both agree on where a raw body
+// ends.
+func rawBodyEnd(src string, start int) int {
 	i := start
 	for i < len(src) {
 		if !strings.HasPrefix(src[i:], stmtOpen) {
-			b.WriteByte(src[i])
 			i++
 			continue
 		}
 		idx := strings.Index(src[i+len(stmtOpen):], stmtClose)
 		if idx < 0 {
-			b.WriteString(src[i:])
 			return len(src)
 		}
 		end := i + len(stmtOpen) + idx + len(stmtClose)
-		block := src[i:end]
-		b.WriteString(block)
-		i = end
-		if blockTag(block) == endRawTag {
-			return i
+		if blockTag(src[i:end]) == endRawTag {
+			return end
 		}
+		i = end
 	}
-	return i
+	return len(src)
 }
 
 // blockTag returns the first word of a {% ... %} block, with whitespace-control
@@ -242,4 +260,12 @@ func isIdentByte(c byte) bool {
 		(c >= 'a' && c <= 'z') ||
 		(c >= 'A' && c <= 'Z') ||
 		(c >= '0' && c <= '9')
+}
+
+// isIdentStartByte reports whether c may begin a variable name, matching
+// varNamePattern in rename.go: a letter or underscore, never a digit.
+func isIdentStartByte(c byte) bool {
+	return c == '_' ||
+		(c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z')
 }
