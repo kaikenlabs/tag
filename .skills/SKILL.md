@@ -46,6 +46,10 @@ Rename a template variable everywhere?
   → tag template rename-var --dry-run <old> <new>   (preview first)
   → tag template rename-var <old> <new>
 
+Which generator creates what, and in what order?
+  → tag template graph                              (creates, injects, markers, bundle order)
+  → tag template graph --format dot | dot -Tpng -o graph.png
+
 Test all boolean combinations?
   → tag test [template-dir]
 
@@ -262,6 +266,7 @@ my-project/
 | `tag template lint [path]` | Validate template (schema, syntax, vars) |
 | `tag template variables [path]` | Audit variable declarations vs usage (`--format json`, `--strict`) |
 | `tag template rename-var <old> <new> [path]` | Rename a variable across config and templates (`--dry-run`) |
+| `tag template graph [path]` | Visualize generator dependencies (`--format text\|json\|dot`) |
 | `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template |
 | `tag dialect list` | List available type-mapping dialects |
 | `tag dialect show <name>` | Show type mappings for a dialect |

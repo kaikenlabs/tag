@@ -176,11 +176,11 @@ func ParseMetadata(rendered string) (*Metadata, error) {
 
 		case fieldAfter:
 			meta.InjectClause = types.InjectAfter
-			meta.InjectMatcher = value
+			meta.InjectMatcher = unquote(value)
 
 		case fieldBefore:
 			meta.InjectClause = types.InjectBefore
-			meta.InjectMatcher = value
+			meta.InjectMatcher = unquote(value)
 
 		case fieldNotes:
 			meta.Notes = unquote(value)
