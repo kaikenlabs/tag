@@ -405,6 +405,32 @@ func TestUT_CrossReference_MultilineComment_Ignored(t *testing.T) {
 	}
 }
 
+func TestUT_CrossReference_VarInRawBlock_Ignored(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"test.txt": "{% raw %}legendFormat: {{ vars.pod }}\nspans {{ vars.also_undefined }}\nlines{% endraw %}\n{{ vars.nonexistent }}",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+
+	var found []Issue
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			found = append(found, issue)
+		}
+	}
+
+	// Only the reference outside the raw block is a real reference, and masking
+	// the raw body must not shift the line it is reported on.
+	require.Len(t, found, 1, "issues: %+v", found)
+	assert.Contains(t, found[0].Message, "nonexistent")
+	assert.Equal(t, 4, found[0].Line)
+}
+
 // --- Multiple Errors Tests ---
 
 func TestUT_MultipleErrorsReported(t *testing.T) {

@@ -21,6 +21,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/validate"
+	"github.com/kaikenlabs/tag/internal/vars"
 )
 
 // varExprRegex matches {{ vars.NAME ... }} expressions, capturing the variable name.
@@ -28,9 +29,6 @@ var varExprRegex = regexp.MustCompile(`\{\{[^}]*\bvars\.([a-zA-Z_][a-zA-Z0-9_]*)
 
 // varStmtRegex matches {% ... vars.NAME ... %} statements (if, for, set, etc.).
 var varStmtRegex = regexp.MustCompile(`\{%[^%]*\bvars\.([a-zA-Z_][a-zA-Z0-9_]*)\b[^%]*%\}`)
-
-// commentRegex matches Gonja comments {# ... #}, including multi-line.
-var commentRegex = regexp.MustCompile(`(?s)\{#.*?#\}`)
 
 // VarRef holds a variable reference found in template content.
 type VarRef struct {
@@ -233,10 +231,10 @@ func (l *Linter) lintFileContent(absPath, relPath string) {
 
 // lintVariableRefs scans content for {{ vars.* }} references and checks against declared vars.
 func (l *Linter) lintVariableRefs(content, relPath string) {
-	// Strip comments before scanning, preserving newlines to keep line numbers accurate.
-	cleaned := commentRegex.ReplaceAllStringFunc(content, func(match string) string {
-		return strings.Repeat("\n", strings.Count(match, "\n"))
-	})
+	// Mask comments and {% raw %} blocks before scanning: their contents are
+	// emitted literally, not evaluated, so they are not variable references.
+	// Masking preserves newlines, so reported line numbers stay accurate.
+	cleaned := vars.MaskLiterals(content)
 
 	scanner := bufio.NewScanner(strings.NewReader(cleaned))
 	lineNum := 0
