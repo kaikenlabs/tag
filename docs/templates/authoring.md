@@ -464,6 +464,22 @@ This checks `tag.template.json` against the JSON Schema, parses all template fil
 
 See [tag template lint](../commands/template.md#tag-template-lint) for full details.
 
+## Renaming a Variable
+
+Renaming a variable by hand means touching the declaration, every expression, and any path placeholder — missing one leaves a silently empty value at render time. Let TAG do it:
+
+```bash
+# Preview every change first
+tag template rename-var --dry-run project_name service_name
+
+# Apply
+tag template rename-var project_name service_name
+```
+
+This rewrites the declaration, derived defaults, hook commands, `requires` entries, all expressions, and file or directory name placeholders. Prose, comments and `{% raw %}` blocks are left alone.
+
+See [tag template rename-var](../commands/template.md#tag-template-rename-var) for full details.
+
 ## Testing Your Template
 
 ```bash

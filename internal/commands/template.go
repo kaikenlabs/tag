@@ -13,7 +13,7 @@ import (
 func TemplateCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:  "template",
-		Usage: "Template authoring commands (init, new, info, list, lint, test, variables, graph)",
+		Usage: "Template authoring commands (init, new, info, list, lint, test, variables, rename-var, graph)",
 		Subcommands: []*cli.Command{
 			templateInitCommand(),
 			templateNewCommand(cfg),
@@ -22,6 +22,7 @@ func TemplateCommand(cfg *config.Config) *cli.Command {
 			templateLintCommand(),
 			templateTestCommand(),
 			templateVariablesCommand(),
+			templateRenameVarCommand(),
 			templateGraphCommand(),
 		},
 	}

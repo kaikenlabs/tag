@@ -547,6 +547,26 @@ Cross-references declared variables in `tag.template.json` with usage in templat
 
 Exit codes: `0` = no issues (or non-strict), `1` = issues found (`--strict`), `2` = usage error.
 
+### Variable Renaming
+
+```bash
+tag template rename-var --dry-run old_name new_name   # Preview every change
+tag template rename-var old_name new_name             # Apply in current directory
+tag template rename-var old_name new_name ./template  # Apply to a specific template
+```
+
+Flags must precede the positional arguments.
+
+Rewrites the declaration in `tag.template.json`, derived defaults, hook commands, bundle and generator `requires` entries, all `{{ vars.* }}` / `{% ... vars.* ... %}` expressions, and file/directory name placeholders (renamed on disk).
+
+Left untouched: plain text, comments (`{# ... #}`), `{% raw %}` blocks, string literals inside expressions, `.tagignore`d files, `_dialects/`, symlinks, and binary files. `_generators/` and `.tag/` are included.
+
+Planning is read-only, so `--dry-run` cannot write. A failed apply rolls back every file and path already changed.
+
+Only dot access is rewritten — `vars["old_name"]` is not recognised.
+
+Exit codes: `0` = applied or previewed, `1` = rename error (undeclared, name taken, path collision), `2` = usage error.
+
 ### Cache Management
 
 ```bash
