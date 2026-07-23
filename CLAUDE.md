@@ -48,7 +48,8 @@ main.go                         CLI entry point (urfave/cli/v2)
 ├── internal/scaffold/          Scaffold orchestration (phased via runContext)
 ├── internal/hooks/             Hook execution, env building, interpreter resolution
 ├── internal/tmplconfig/        Shared template config types (TemplateConfig, VariableDef)
-├── internal/lint/              Template linting (schema, syntax, variable cross-reference)
+├── internal/vars/              Variable reference scanning, usage analysis, rename-var (ScanRefs/ScanNames shared by lint)
+├── internal/lint/              Template linting (schema, syntax, variable cross-reference; depends on internal/vars)
 ├── internal/convert/           Cookiecutter conversion (depends on tmplconfig, not scaffold)
 ├── internal/template/          Gonja engine wrapper, custom filters, context building
 ├── internal/remote/            Remote template resolution (git/zip/cache/auth)

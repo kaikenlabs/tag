@@ -186,50 +186,9 @@ func TestUT_LintTemplateFiles_SkipsConfigFiles(t *testing.T) {
 	}
 }
 
-// --- Variable Extraction Tests ---
-
-func TestUT_ExtractVarRefs_SimpleVar(t *testing.T) {
-	refs := extractVarRefs("{{ vars.name }}", 1)
-	require.Len(t, refs, 1)
-	assert.Equal(t, "name", refs[0].Name)
-}
-
-func TestUT_ExtractVarRefs_VarWithFilter(t *testing.T) {
-	refs := extractVarRefs("{{ vars.name | snake }}", 1)
-	require.Len(t, refs, 1)
-	assert.Equal(t, "name", refs[0].Name)
-}
-
-func TestUT_ExtractVarRefs_VarInIfBlock(t *testing.T) {
-	refs := extractVarRefs("{% if vars.use_docker %}", 1)
-	require.Len(t, refs, 1)
-	assert.Equal(t, "use_docker", refs[0].Name)
-}
-
-func TestUT_ExtractVarRefs_VarInForBlock(t *testing.T) {
-	refs := extractVarRefs("{% for item in vars.items %}", 1)
-	require.Len(t, refs, 1)
-	assert.Equal(t, "items", refs[0].Name)
-}
-
-func TestUT_ExtractVarRefs_NoVars(t *testing.T) {
-	refs := extractVarRefs("Hello world, no variables here", 1)
-	assert.Empty(t, refs)
-}
-
-func TestUT_ExtractVarRefs_MultipleVars(t *testing.T) {
-	refs := extractVarRefs("{{ vars.first }} and {{ vars.second }}", 1)
-	require.Len(t, refs, 2)
-	names := []string{refs[0].Name, refs[1].Name}
-	assert.Contains(t, names, "first")
-	assert.Contains(t, names, "second")
-}
-
-func TestUT_ExtractVarRefs_DuplicateVarDeduped(t *testing.T) {
-	refs := extractVarRefs("{{ vars.name }} {{ vars.name }}", 1)
-	require.Len(t, refs, 1)
-	assert.Equal(t, "name", refs[0].Name)
-}
+// Variable extraction itself (block walking, quote-awareness, comment/raw
+// skipping) is exercised exhaustively in internal/vars/scan_test.go, which
+// lintVariableRefs and lintDerivedDefaults/lintPath delegate to directly.
 
 // --- Cross-Reference Tests ---
 
@@ -429,6 +388,109 @@ func TestUT_CrossReference_VarInRawBlock_Ignored(t *testing.T) {
 	require.Len(t, found, 1, "issues: %+v", found)
 	assert.Contains(t, found[0].Message, "nonexistent")
 	assert.Equal(t, 4, found[0].Line)
+}
+
+func TestUT_CrossReference_VarInStringLiteral_Ignored(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		// defect 1: "ghost" only ever appears inside a string literal, so it
+		// must not be reported as an undefined reference.
+		"test.txt": `{{ replace("{{ vars.ghost }}") }}`,
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			t.Errorf("unexpected undefined-variable issue: %s", issue.Message)
+		}
+	}
+}
+
+// TestUT_CrossReference_RepeatedUndefinedVarOnOneLine_ReportedOnce pins that a
+// name repeated on a single line produces ONE issue, not one per occurrence.
+// The scanner deliberately reports every occurrence — `tag template variables`
+// needs them all for its reference counts — so the linter is what collapses
+// them, otherwise a repeated name emits the identical message twice at the same
+// file:line and inflates the error count that drives the exit code.
+func TestUT_CrossReference_RepeatedUndefinedVarOnOneLine_ReportedOnce(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"same_line.txt": `{{ vars.ghost }} and {{ vars.ghost }}`,
+		"two_lines.txt": "{{ vars.spook }}\n{{ vars.spook }}\n",
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+
+	var sameLine, twoLines int
+	for _, issue := range result.Issues {
+		if issue.Rule != "undefined-variable" {
+			continue
+		}
+		switch issue.File {
+		case "same_line.txt":
+			sameLine++
+		case "two_lines.txt":
+			twoLines++
+		}
+	}
+
+	assert.Equal(t, 1, sameLine, "one issue per distinct name per line")
+	// Distinct lines remain distinct findings: each points at a real location.
+	assert.Equal(t, 2, twoLines, "one issue per line the name appears on")
+}
+
+func TestUT_CrossReference_DelimiterInStringLiteral_StillReported(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, map[string]string{
+		"test.txt": "line one\n" + `{{ f("}}") ~ vars.nonexistent }}`,
+	})
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			found = true
+			assert.Contains(t, issue.Message, "nonexistent")
+			assert.Equal(t, 2, issue.Line,
+				"a closing delimiter inside a literal must not truncate the block early")
+		}
+	}
+	assert.True(t, found, "expected undefined-variable issue for vars.nonexistent")
+}
+
+func TestUT_CrossReference_DerivedDefaultStringLiteral_Ignored(t *testing.T) {
+	dir := t.TempDir()
+	config := `{
+  "name": "test",
+  "vars": {
+    "bad_derived": "{{ replace(\"vars.ghost\") }}"
+  }
+}`
+	createTemplate(t, dir, config, nil)
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+
+	result, err := linter.Run()
+	require.NoError(t, err)
+	for _, issue := range result.Issues {
+		if issue.Rule == "undefined-variable" {
+			t.Errorf("unexpected undefined-variable issue: %s", issue.Message)
+		}
+	}
 }
 
 // --- Multiple Errors Tests ---

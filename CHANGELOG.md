@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Potentially breaking**: `tag template lint` and `tag template variables` now share the same quote-aware variable scanner as `tag template rename-var`, so all three commands agree on what counts as a `vars.*` reference. Because this scanner finds real references the old regex missed and stops treating string-literal lookalikes as references, both `tag template lint` and `tag template variables --strict` can change verdict — in either direction — on templates whose source did not otherwise change. Downstream template repos relying on either command in CI should re-run once after upgrading (#337)
+
 ### Fixed
 
 - `tag template lint` and `tag template variables` no longer scan the contents of `{% raw %}...{% endraw %}` blocks as live template expressions: a literal `{{ vars.* }}` inside a raw block is no longer reported as an undefined variable, and a variable referenced only inside a raw block is now correctly reported as unused (#332)
+- Quote-aware variable scanning (#337), fixing defects shared by `tag template lint` and `tag template variables`:
+  - A `vars.*` mention inside a string literal (e.g. `{{ replace("{{ vars.ghost }}") }}`) is no longer treated as a reference — and, symmetrically, a variable referenced only inside a string literal is now correctly reported as unused, matching `rename-var`'s behavior
+  - A `}}` or `%}` delimiter inside a string literal no longer truncates the scan early, so a reference after it (e.g. `{% if a == "%}" and vars.missing %}`) is now found
+  - Multiple references in one block (e.g. `{{ vars.alpha ~ vars.beta }}`) are now all found — previously only the last was seen
+  - An attribute path that merely ends in `vars.NAME` (e.g. `{{ cfg.vars.attrname }}`) is no longer mistaken for a reference
+  - A `{{ }}` / `{% %}` block spanning multiple lines is now scanned at all — previously invisible to the line-by-line scanner
+- Derived-variable defaults and path placeholders now go through the same scanner, so a `vars.*` mention inside a string literal there is no longer reported as an undefined reference (#337)
 
 ## [0.13.0] - 2026-03-03
 
