@@ -273,6 +273,27 @@ func TestIT_GenerateInjectAfter(t *testing.T) {
 	compareDirectories(t, expectedDir, workDir)
 }
 
+// TestIT_GenerateInjectAfterQuotedMarker verifies that a quoted `after:` marker
+// injects at the same place as an unquoted one. The quoted form is what the
+// tutorials, command docs, and shipped examples use, so it must resolve to the
+// bare marker text rather than being matched literally with its quotes.
+func TestIT_GenerateInjectAfterQuotedMarker(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "inject-after-quoted")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "inject-after")
+	expectedDir := filepath.Join(testdataDir, "expected-generate-inject-after")
+
+	workDir := setupWorkDir(t, preExistingDir)
+
+	gen, err := engine.NewGenerator(false, generatorDir, "", io.Discard)
+	require.NoError(t, err)
+
+	_, err = gen.Generate(engine.Data{Name: "users"})
+	require.NoError(t, err)
+
+	compareDirectories(t, expectedDir, workDir)
+}
+
 // TestIT_GenerateInjectBefore tests the inject-before action.
 // It verifies that content is injected before a marker string in a pre-existing file.
 func TestIT_GenerateInjectBefore(t *testing.T) {

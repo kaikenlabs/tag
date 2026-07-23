@@ -567,6 +567,36 @@ Only dot access is rewritten — `vars["old_name"]` is not recognised.
 
 Exit codes: `0` = applied or previewed, `1` = rename error (undeclared, name taken, path collision), `2` = usage error.
 
+### Dependency Graph
+
+```bash
+tag template graph                     # Analyze current directory
+tag template graph ./path/to/template  # Analyze a specific template
+tag template graph --format json       # Machine-readable output
+tag template graph --format dot | dot -Tpng -o graph.png
+```
+
+Flags must precede the positional argument.
+
+Builds the implicit dependency graph between generators by reading each template's frontmatter:
+
+- **Generators** — every generator with its actions (`create`, `inject`, `append`) and target paths. Inject actions also show the marker and clause, e.g. `[inject after "// ROUTES"]`.
+- **Bundles** — each bundle's generator execution order, flagged `valid` or `INVALID ORDER`. Order is invalid when a generator injects into a file that a *later* generator in the same bundle creates.
+- **Injection markers** — the marker strings actually found in the project's source files, with line numbers and the generators that reference them. Skips `.tag/`, `_generators/`, dotfiles, and binary files.
+
+Warnings (`code` in JSON output):
+
+| Code | Meaning |
+|------|---------|
+| `file_conflict` | Two or more generators create the same target file |
+| `missing_target` | A generator injects into a file no generator creates (often fine — the file may come from the scaffold) |
+| `order_violation` | A bundle injects into a file before the generator that creates it |
+| `malformed_metadata` | A template's frontmatter could not be extracted or parsed |
+
+Targets containing `{{ ... }}` are skipped by `missing_target`, since they cannot be resolved statically.
+
+Exit code is `0` even when warnings are present — `graph` reports, it does not gate. Use `2` for usage errors (unknown `--format`, more than one path argument).
+
 ### Cache Management
 
 ```bash

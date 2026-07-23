@@ -443,6 +443,82 @@ func TestUT_ParseMetadata_EmptyInjectMatcher(t *testing.T) {
 	assert.ErrorIs(t, err, ErrEmptyInjectMatcher)
 }
 
+func TestUT_ParseMetadata_QuotedInjectMatcher(t *testing.T) {
+	// Quoted after:/before: values are the form used throughout the docs and
+	// shipped examples; the surrounding quotes must not leak into the matcher,
+	// or injection fails at runtime with "no matching expression".
+	tests := []struct {
+		name     string
+		rendered string
+		clause   types.InjectClause
+		want     string
+	}{
+		{
+			name:     "double-quoted after",
+			rendered: "to: output/file.go\ninject: true\nafter: \"// ROUTES\"",
+			clause:   types.InjectAfter,
+			want:     "// ROUTES",
+		},
+		{
+			name:     "single-quoted after",
+			rendered: "to: output/file.go\ninject: true\nafter: '// ROUTES'",
+			clause:   types.InjectAfter,
+			want:     "// ROUTES",
+		},
+		{
+			name:     "double-quoted before",
+			rendered: "to: output/file.go\ninject: true\nbefore: \"// END routes\"",
+			clause:   types.InjectBefore,
+			want:     "// END routes",
+		},
+		{
+			name:     "quoted matcher containing an unbalanced paren",
+			rendered: "to: output/file.go\ninject: true\nafter: \"import (\"",
+			clause:   types.InjectAfter,
+			want:     "import (",
+		},
+		{
+			name:     "unquoted matcher is untouched",
+			rendered: "to: output/file.go\ninject: true\nafter: // ROUTES",
+			clause:   types.InjectAfter,
+			want:     "// ROUTES",
+		},
+		{
+			name:     "inner quotes are preserved",
+			rendered: "to: output/file.go\ninject: true\nafter: \"// tag:\"routes\"\"",
+			clause:   types.InjectAfter,
+			want:     "// tag:\"routes\"",
+		},
+		{
+			name:     "lone quote character is not stripped",
+			rendered: "to: output/file.go\ninject: true\nafter: \"",
+			clause:   types.InjectAfter,
+			want:     "\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			meta, err := ParseMetadata(tt.rendered)
+
+			require.NoError(t, err)
+			assert.Equal(t, ActionInject, meta.Action)
+			assert.Equal(t, tt.clause, meta.InjectClause)
+			assert.Equal(t, tt.want, meta.InjectMatcher)
+		})
+	}
+}
+
+func TestUT_ParseMetadata_EmptyQuotedInjectMatcher(t *testing.T) {
+	// `after: ""` unquotes to the empty string, which cannot match anything —
+	// reject it the same way a bare `after:` is rejected.
+	rendered := "to: output/file.go\ninject: true\nafter: \"\""
+
+	_, err := ParseMetadata(rendered)
+
+	assert.ErrorIs(t, err, ErrEmptyInjectMatcher)
+}
+
 func TestUT_ParseMetadata_OrphanInjectClause(t *testing.T) {
 	// after: without inject: true should be silently cleared
 	rendered := "to: output/file.go\nafter: // marker"
