@@ -90,6 +90,37 @@ func TestUT_AnalyzeUnusedVariable(t *testing.T) {
 	assert.Equal(t, "unused_var", report.Root.Unused[0])
 }
 
+func TestUT_AnalyzeRawBlockNotCounted(t *testing.T) {
+	t.Parallel()
+
+	root := setupTemplate(t,
+		`{"vars": {"project_name": "myapp", "pod": {"type": "string", "prompt": "Pod"}}}`,
+		map[string]string{
+			"grafana.json": "{% raw %}legendFormat: {{ vars.pod }}{% endraw %}\n" +
+				"{% raw %}{{ vars.undeclared_in_raw }}\nspanning two lines{% endraw %}\n" +
+				"# {{ vars.project_name }}",
+		},
+	)
+
+	report, err := Analyze(root)
+	require.NoError(t, err)
+
+	// A raw-block mention is literal output, not a reference: it neither declares
+	// usage nor introduces an undeclared variable.
+	assert.Equal(t, []string{"pod"}, report.Root.Unused)
+	assert.Empty(t, report.Root.Undeclared)
+
+	// Masking is newline-preserving, so the one real reference keeps its line.
+	var refs []Reference
+	for _, dv := range report.Root.Declared {
+		if dv.Name == "project_name" {
+			refs = dv.References
+		}
+	}
+	require.Len(t, refs, 1)
+	assert.Equal(t, 4, refs[0].Line)
+}
+
 func TestUT_AnalyzeDerivedVariable(t *testing.T) {
 	t.Parallel()
 

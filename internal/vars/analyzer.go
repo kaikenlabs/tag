@@ -25,9 +25,6 @@ var varExprRegex = regexp.MustCompile(`\{\{[^}]*\bvars\.([a-zA-Z_][a-zA-Z0-9_]*)
 // varStmtRegex matches {% ... vars.NAME ... %} statements (if, for, set, etc.).
 var varStmtRegex = regexp.MustCompile(`\{%[^%]*\bvars\.([a-zA-Z_][a-zA-Z0-9_]*)\b[^%]*%\}`)
 
-// commentRegex matches Gonja comments {# ... #}, including multi-line.
-var commentRegex = regexp.MustCompile(`(?s)\{#.*?#\}`)
-
 // Analyze scans a template directory and returns a Report of declared vs
 // referenced variables, including undeclared and unused findings.
 func Analyze(root string) (*Report, error) {
@@ -312,10 +309,9 @@ func scanFileContent(absPath, relPath string) map[string][]Reference {
 
 	refs := make(map[string][]Reference)
 
-	// Strip comments before scanning, preserving newlines for line numbers.
-	cleaned := commentRegex.ReplaceAllStringFunc(string(content), func(match string) string {
-		return strings.Repeat("\n", strings.Count(match, "\n"))
-	})
+	// Mask comments and {% raw %} blocks before scanning: their contents are not
+	// variable references. Masking preserves newlines, so line numbers hold.
+	cleaned := MaskLiterals(string(content))
 
 	scanner := bufio.NewScanner(strings.NewReader(cleaned))
 	lineNum := 0

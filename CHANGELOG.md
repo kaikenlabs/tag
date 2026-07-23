@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `tag template lint` and `tag template variables` no longer scan the contents of `{% raw %}...{% endraw %}` blocks as live template expressions: a literal `{{ vars.* }}` inside a raw block is no longer reported as an undefined variable, and a variable referenced only inside a raw block is now correctly reported as unused (#332)
+
 ## [0.13.0] - 2026-03-03
 
 ### Changed

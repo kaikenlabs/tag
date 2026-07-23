@@ -206,7 +206,7 @@ tag template lint --format json
 - **Path placeholders** — Directory and file names containing `{{ vars.* }}` are checked.
 - **Binary files** — Automatically skipped.
 - **`.tagignore` patterns** — Ignored files are excluded from linting.
-- **Comments** — Template comments (`{# ... #}`) are stripped before variable scanning.
+- **Comments and raw blocks** — Template comments (`{# ... #}`) and `{% raw %}...{% endraw %}` blocks are masked out before variable scanning, so `{{ vars.* }}` written inside either is treated as literal text, not a reference.
 
 ---
 
@@ -275,7 +275,7 @@ Summary: 5 declared, 0 undeclared, 0 unused
 - `{% for item in vars.x %}` iteration references
 - Derived variable default expressions (`"default": "{{ vars.other }}"`)
 - Generator-level `tag.template.json` configs
-- Template comments (`{# ... #}`) are stripped before scanning
+- Template comments (`{# ... #}`) and `{% raw %}...{% endraw %}` blocks are masked out before scanning — a variable referenced only inside one of them counts as unused, not used
 - Binary files and `.tagignore` patterns are honored
 
 ---
@@ -373,7 +373,6 @@ Changes:
 **Limitations:**
 
 - Only dot access (`vars.old_name`) is rewritten. Subscript access (`vars["old_name"]`) is not recognised — the same limitation `tag template lint` and `tag template variables` have.
-- A `{% raw %}` block containing a literal `{{ vars.old_name }}` is correctly left alone, but `tag template lint` does not model raw blocks and will report it as an undefined variable afterwards.
 
 ---
 

@@ -140,11 +140,10 @@ func TestIT_TemplateRenameVar_RewritesEveryLocation(t *testing.T) {
 	assert.Contains(t, main, "// {{ vars.service_name }}")
 }
 
-// Raw blocks and comments live in their own fixture because `tag template lint`
-// does not model either construct: its variable scan treats their contents as
-// real references, so a template that keeps a literal {{ vars.old }} inside
-// {% raw %} lints as an undefined variable after a rename. Leaving the literal
-// alone is still correct — rewriting it would change the generated output.
+// Raw blocks and comments live in their own fixture because the rewriter leaves
+// both verbatim — rewriting them would change the generated output. The linter
+// masks the same two constructs, so a template that deliberately keeps a literal
+// {{ vars.old }} inside {% raw %} still lints clean after a rename.
 func TestIT_TemplateRenameVar_LeavesRawBlocksAndCommentsLiteral(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +164,18 @@ func TestIT_TemplateRenameVar_LeavesRawBlocksAndCommentsLiteral(t *testing.T) {
 	assert.Contains(t, doc, "# {{ vars.service_name }}")
 	assert.Contains(t, doc, "{% raw %}Literal {{ vars.project_name }} stays literal.{% endraw %}")
 	assert.Contains(t, doc, "{# {{ vars.project_name }} in a comment #}")
+
+	// The old name survives only where it is literal output, so neither linter
+	// may report it: not undefined for lint, not a use for the variable report.
+	linter, err := lint.NewLinter(root)
+	require.NoError(t, err)
+	result, err := linter.Run()
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ErrorCount(), "issues: %+v", result.Issues)
+
+	report, err := vars.Analyze(root)
+	require.NoError(t, err)
+	assert.Empty(t, report.Root.Undeclared)
 }
 
 func TestIT_TemplateRenameVar_DryRunIsAPreview(t *testing.T) {

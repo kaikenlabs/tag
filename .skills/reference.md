@@ -528,6 +528,8 @@ Validates:
 - Gonja template syntax (parse-only, no execution)
 - `{{ vars.* }}` references against declared variables
 
+Comments (`{# ... #}`) and `{% raw %}...{% endraw %}` blocks are masked out before variable scanning, so a `{{ vars.* }}` written inside either is treated as literal text, not a reference.
+
 Exit codes: `0` = pass, `1` = lint errors, `2` = usage error.
 
 ### Variable Auditing
@@ -544,6 +546,7 @@ Cross-references declared variables in `tag.template.json` with usage in templat
 - Detects undeclared variables used in templates
 - Detects declared but unused variables
 - Scans generator-level configs inside `_generators/`
+- Comments and `{% raw %}...{% endraw %}` blocks are masked out before scanning — a variable referenced only inside one of them counts as unused, not used
 
 Exit codes: `0` = no issues (or non-strict), `1` = issues found (`--strict`), `2` = usage error.
 
