@@ -3,11 +3,11 @@
 ## Mandatory Rules
 
 1. Before pushing: `make lint` then `make test`
-2. Use **Serena MCP** for code operations:
-   - `get_symbols_overview` / `find_symbol` over full file reads
-   - `replace_symbol_body` / `insert_after_symbol` / `insert_before_symbol` over Edit/Write
+2. Prefer **Serena MCP** for symbol-level code operations:
+   - `get_symbols_overview` / `find_symbol` over full file reads when navigating
+   - `replace_symbol_body` / `insert_after_symbol` / `insert_before_symbol` for symbol edits
    - `find_referencing_symbols` for impact analysis before changes
-   - Reserve Write/Edit for new files or non-code files
+   - Edit/Write are fine for new files, non-code files, and non-symbol edits (imports, comments, formatting)
 3. Use **sequential thinking MCP** for complex reasoning
 4. Use **ref MCP** for library documentation lookups
 5. After code changes, update `.skills/` files if CLI commands, flags, behavior, or workflows changed
