@@ -110,6 +110,17 @@ func scanBlockRefs(refs []ScannedRef, block string, startLine int) []ScannedRef 
 			continue
 		}
 
+		// Subscript access: vars["name"]. Recognised before the dot form and
+		// before the quote branch above would consume the key, using the same
+		// shared matcher as rewriteBlock so the scanner and the rename walker
+		// agree on it by construction.
+		if m, ok := matchSubscript(block, i); ok && isWholeReference(block, i, len(varsToken)) {
+			refs = append(refs, ScannedRef{Name: m.name, Line: line})
+			line += strings.Count(block[i:m.end], "\n")
+			i = m.end
+			continue
+		}
+
 		if strings.HasPrefix(block[i:], varsPrefix) {
 			nameStart := i + len(varsPrefix)
 			// A name must begin with a letter or underscore. Gonja reads the

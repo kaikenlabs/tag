@@ -528,7 +528,7 @@ Validates:
 - Gonja template syntax (parse-only, no execution)
 - `{{ vars.* }}` references against declared variables
 
-Comments (`{# ... #}`), `{% raw %}...{% endraw %}` bodies, and string literals inside a `{{ }}` / `{% %}` block are never scanned for references — `{{ replace("{{ vars.ghost }}") }}` does not reference `ghost`. A `{% raw %}` tag's opening tag is scanned normally; only its body is skipped. Same reference rules as `rename-var` below, including the `vars["name"]` subscript limitation and `vars.0` being index access, not a variable named `0`.
+Comments (`{# ... #}`), `{% raw %}...{% endraw %}` bodies, and string literals inside a `{{ }}` / `{% %}` block are never scanned for references — `{{ replace("{{ vars.ghost }}") }}` does not reference `ghost`. A `{% raw %}` tag's opening tag is scanned normally; only its body is skipped. Same reference rules as `rename-var` below: dot access (`vars.name`) and literal subscript access (`vars["name"]` / `vars['name']`) both count as references, a non-literal subscript (`vars[expr]`) does not, and `vars.0` is index access, not a variable named `0`.
 
 Exit codes: `0` = pass, `1` = lint errors, `2` = usage error.
 
@@ -566,7 +566,7 @@ Left untouched: plain text, comments (`{# ... #}`), the body of `{% raw %}` bloc
 
 Planning is read-only, so `--dry-run` cannot write. A failed apply rolls back every file and path already changed.
 
-Only dot access is rewritten — `vars["old_name"]` is not recognised. A name must start with a letter or underscore: `vars.0` is index access, not a variable named `0`, and is never renamed.
+Dot access (`vars.old_name`) and literal subscript access (`vars["old_name"]` / `vars['old_name']`, whitespace-tolerant) are both rewritten; a non-literal subscript (`vars[expr]`) is left alone since its key is not statically known. A name must start with a letter or underscore: `vars.0` is index access, not a variable named `0`, and is never renamed.
 
 Exit codes: `0` = applied or previewed, `1` = rename error (undeclared, name taken, path collision), `2` = usage error.
 

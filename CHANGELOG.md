@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `tag template lint`, `tag template variables` and `tag template rename-var` now recognise literal **subscript** variable access — `{{ vars["name"] }}` and `{{ vars['name'] }}` (whitespace-tolerant) — in addition to dot access. Subscript is the only way to reach a variable whose name collides with a Gonja keyword (e.g. `param.in`). Non-literal subscripts (`vars[expr]`) remain out of scope, since the key is not statically known (#339)
+
 ### Changed
+
+- **Potentially breaking**: because subscript access is now recognised (#339), templates that reference variables only through `vars["name"]` will produce findings they did not before — `tag template lint` can newly report an undeclared variable, and `tag template variables --strict` can flip a variable from unused to used. As with #337 this can change CI verdicts on templates whose source did not otherwise change; re-run once after upgrading. `tag template rename-var` now also rewrites subscript references, fixing a case where it renamed a declaration but left a live `vars["old"]` reference behind, silently corrupting the template (#339)
+
 
 - **Potentially breaking**: `tag template lint` and `tag template variables` now share the same quote-aware variable scanner as `tag template rename-var`, so all three commands agree on what counts as a `vars.*` reference. Because this scanner finds real references the old regex missed and stops treating string-literal lookalikes as references, both `tag template lint` and `tag template variables --strict` can change verdict — in either direction — on templates whose source did not otherwise change. Downstream template repos relying on either command in CI should re-run once after upgrading (#337)
 

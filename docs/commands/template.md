@@ -206,7 +206,7 @@ tag template lint --format json
 - **Path placeholders** — Directory and file names containing `{{ vars.* }}` are checked.
 - **Binary files** — Automatically skipped.
 - **`.tagignore` patterns** — Ignored files are excluded from linting.
-- **Comments, raw blocks, and string literals** — Template comments (`{# ... #}`), the body of `{% raw %}...{% endraw %}` blocks, and string literals inside a `{{ }}` / `{% %}` block are never scanned for references, so `{{ replace("{{ vars.ghost }}") }}` does not reference `ghost`. A `{% raw %}` tag's own opening tag is scanned like any other block — only its body is skipped. `tag template lint`, `tag template variables`, and `tag template rename-var` share this exact definition of a reference, including the `vars["name"]` subscript limitation (see `rename-var`'s "What is left alone" list below) and reading `vars.0` as index access, not a variable named `0`.
+- **Comments, raw blocks, and string literals** — Template comments (`{# ... #}`), the body of `{% raw %}...{% endraw %}` blocks, and string literals inside a `{{ }}` / `{% %}` block are never scanned for references, so `{{ replace("{{ vars.ghost }}") }}` does not reference `ghost`. A `{% raw %}` tag's own opening tag is scanned like any other block — only its body is skipped. `tag template lint`, `tag template variables`, and `tag template rename-var` share this exact definition of a reference. Both dot access (`vars.name`) and literal subscript access (`vars["name"]` / `vars['name']`, whitespace-tolerant) count as references; a non-literal subscript (`vars[expr]`) does not, because the key is not statically known. `vars.0` is read as index access, not a variable named `0`.
 
 ---
 
@@ -275,7 +275,7 @@ Summary: 5 declared, 0 undeclared, 0 unused
 - `{% for item in vars.x %}` iteration references
 - Derived variable default expressions (`"default": "{{ vars.other }}"`)
 - Generator-level `tag.template.json` configs
-- Template comments (`{# ... #}`), the body of `{% raw %}...{% endraw %}` blocks, and string literals inside a `{{ }}` / `{% %}` block are never scanned — a variable referenced only inside one of them counts as unused, not used. A `{% raw %}` tag's own opening tag is scanned like any other block — only its body is skipped. `tag template variables` shares this exact definition of a reference with `tag template lint` and `tag template rename-var`, including the `vars["name"]` subscript limitation (see `rename-var`'s "What is left alone" list below) and reading `vars.0` as index access, not a variable named `0`.
+- Template comments (`{# ... #}`), the body of `{% raw %}...{% endraw %}` blocks, and string literals inside a `{{ }}` / `{% %}` block are never scanned — a variable referenced only inside one of them counts as unused, not used. A `{% raw %}` tag's own opening tag is scanned like any other block — only its body is skipped. `tag template variables` shares this exact definition of a reference with `tag template lint` and `tag template rename-var`: dot access (`vars.name`) and literal subscript access (`vars["name"]` / `vars['name']`) both count, a non-literal subscript (`vars[expr]`) does not, and `vars.0` is read as index access, not a variable named `0`.
 - Binary files and `.tagignore` patterns are honored
 
 ---
@@ -372,7 +372,7 @@ Changes:
 
 **Limitations:**
 
-- Only dot access (`vars.old_name`) is rewritten. Subscript access (`vars["old_name"]`) is not recognised — the same limitation `tag template lint` and `tag template variables` have.
+- Dot access (`vars.old_name`) and literal subscript access (`vars["old_name"]` / `vars['old_name']`, whitespace-tolerant) are both rewritten — the same references `tag template lint` and `tag template variables` recognise. A non-literal subscript (`vars[expr]`) is left alone, because its key is not statically known.
 - A name must start with a letter or underscore. `vars.0` is read as index access, not a variable named `0`, and is never renamed.
 
 ---

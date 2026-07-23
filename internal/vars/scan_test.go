@@ -540,3 +540,90 @@ func TestUT_ScanRefs_DeliberateEdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TestUT_ScanRefs_SubscriptAccess covers issue #339: the scanner recognises
+// vars["name"] / vars['name'] subscript references, with the same left-context
+// guard and letter/underscore-start rule as dot access.
+func TestUT_ScanRefs_SubscriptAccess(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want []ScannedRef
+	}{
+		{
+			name: "double-quoted subscript",
+			src:  `{{ vars["declared"] }}`,
+			want: []ScannedRef{{Name: "declared", Line: 1}},
+		},
+		{
+			name: "single-quoted subscript",
+			src:  `{{ vars['declared'] }}`,
+			want: []ScannedRef{{Name: "declared", Line: 1}},
+		},
+		{
+			name: "subscript and dot access mixed in one block",
+			src:  `{{ vars["a"] ~ vars.b }}`,
+			want: []ScannedRef{{Name: "a", Line: 1}, {Name: "b", Line: 1}},
+		},
+		{
+			name: "whitespace around brackets and key",
+			src:  `{{ vars [ "spaced" ] }}`,
+			want: []ScannedRef{{Name: "spaced", Line: 1}},
+		},
+		{
+			name: "keyword-collision key with a dot",
+			src:  `{{ vars["param.in"] }}`,
+			want: []ScannedRef{{Name: "param.in", Line: 1}},
+		},
+		{
+			name: "subscript inside a statement block",
+			src:  `{% if vars["flag"] %}x{% endif %}`,
+			want: []ScannedRef{{Name: "flag", Line: 1}},
+		},
+		{
+			// Attribute path and longer identifier must be rejected, exactly as
+			// for dot access (cfg.vars.x / myvars.x).
+			name: "attribute path is not a reference",
+			src:  `{{ cfg.vars["x"] }}`,
+			want: nil,
+		},
+		{
+			name: "longer identifier is not a reference",
+			src:  `{{ myvars["y"] }}`,
+			want: nil,
+		},
+		{
+			// A non-literal subscript key is not statically known, so no command
+			// can act on it: deliberately not a reference (documented limitation).
+			name: "non-literal subscript is not a reference",
+			src:  `{{ vars[some_expr] }}`,
+			want: nil,
+		},
+		{
+			// Consistent with dot access: a name must start with a letter or
+			// underscore, so a digit-leading key is index access, not a variable.
+			name: "digit-leading key is not a reference",
+			src:  `{{ vars["0bad"] }}`,
+			want: nil,
+		},
+		{
+			name: "subscript key mentioned in a string literal is not a reference",
+			src:  `{{ replace("vars[\"ghost\"]") }}`,
+			want: nil,
+		},
+		{
+			name: "line number of a subscript inside a multi-line block",
+			src:  "{{ vars.first\n    ~ vars[\"second\"] }}",
+			want: []ScannedRef{{Name: "first", Line: 1}, {Name: "second", Line: 2}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ScanRefs(tt.src))
+		})
+	}
+}
