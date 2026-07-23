@@ -17,7 +17,7 @@ func TestUT_TemplateCommand_SubcommandCount(t *testing.T) {
 
 	require.NotNil(t, cmd)
 	assert.Equal(t, "template", cmd.Name)
-	assert.Len(t, cmd.Subcommands, 8)
+	assert.Len(t, cmd.Subcommands, 9)
 }
 
 func TestUT_TemplateCommand_NewHasSubcommands(t *testing.T) {

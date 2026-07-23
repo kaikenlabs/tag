@@ -22,6 +22,7 @@ The `tag template` command group provides tools for managing templates, generato
 | `tag template info <template>` | Show template metadata and details |
 | `tag template lint [path]` | Validate template syntax, schema, and variable references |
 | `tag template variables [path]` | Audit variable declarations and usage across template files |
+| `tag template rename-var <old> <new> [path]` | Rename a variable across the config and all template files |
 | `tag template list` | List available generators and bundles |
 
 ---
@@ -276,6 +277,103 @@ Summary: 5 declared, 0 undeclared, 0 unused
 - Generator-level `tag.template.json` configs
 - Template comments (`{# ... #}`) are stripped before scanning
 - Binary files and `.tagignore` patterns are honored
+
+---
+
+### `tag template rename-var`
+
+Rename a template variable everywhere the template refers to it — the declaration, every expression, and file or directory name placeholders (which are renamed on disk).
+
+```bash
+tag template rename-var [flags] <old-name> <new-name> [path]
+```
+
+If `[path]` is omitted, the current directory is used. Flags must precede the positional arguments.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dry-run` | `false` | Preview every change without modifying anything |
+
+**What is rewritten:**
+
+| Location | Example |
+|----------|---------|
+| `tag.template.json` declaration | `"old_name": { ... }` → `"new_name": { ... }` |
+| Derived variable defaults | `"default": "{{ vars.old_name \| kebab }}"` |
+| Hook commands | `"post_scaffold": ["echo {{ vars.old_name }}"]` |
+| Bundle and generator `requires` | `"requires": ["old_name"]` |
+| Template bodies | `{{ vars.old_name }}`, `{{ vars.old_name \| f1 \| f2 }}` |
+| Frontmatter `to:` paths | `to: {{ vars.old_name \| snake }}/main.go` |
+| Conditionals and loops | `{% if vars.old_name %}`, `{% for x in vars.old_name %}` |
+| File and directory placeholders | `{{ vars.old_name \| snake }}/main.go` (renamed on disk) |
+
+**What is left alone:**
+
+- Plain text that merely mentions the name — only Gonja expressions are rewritten
+- Comments (`{# ... #}`)
+- `{% raw %}` blocks, whose contents are emitted literally
+- String literals inside an expression, such as `{{ "vars.old_name" }}`
+- Files excluded by `.tagignore`, the `_dialects/` tree, symlinks, and binary files
+
+`_generators/` and `.tag/` **are** included, because generators inherit root-level variables and bundle manifests reference them by name.
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| `0` | Rename applied (or previewed with `--dry-run`) |
+| `1` | Rename failed — the variable is not declared, the new name is taken or invalid, or a renamed path would collide |
+| `2` | Usage error (wrong number of arguments) |
+
+**Examples:**
+
+```bash
+# Preview first — always a good idea
+tag template rename-var --dry-run project_name service_name
+
+# Apply
+tag template rename-var project_name service_name
+
+# Rename in a specific template
+tag template rename-var old_flag new_flag ./my-template
+```
+
+**Example dry-run output:**
+
+```
+Renaming "project_name" → "service_name"
+
+Changes:
+
+  README.md:1
+    - # {{ vars.project_name }}
+    + # {{ vars.service_name }}
+
+  go.mod:1
+    - module {{ vars.project_name | kebab }}
+    + module {{ vars.service_name | kebab }}
+
+  tag.template.json:4
+    -     "project_name": { "type": "string", "prompt": "Project name" },
+    +     "service_name": { "type": "string", "prompt": "Project name" },
+
+  {{ vars.project_name | snake }}/main.go (path placeholder):
+    - {{ vars.project_name | snake }}/main.go
+    + {{ vars.service_name | snake }}/main.go
+
+  4 files, 5 replacements total
+```
+
+**Safety:**
+
+- Planning is read-only, so `--dry-run` cannot modify the template.
+- An apply that fails partway restores every file and path it had already changed, so a half-renamed template never survives the command.
+- Run `tag template lint` afterwards to confirm nothing was missed.
+
+**Limitations:**
+
+- Only dot access (`vars.old_name`) is rewritten. Subscript access (`vars["old_name"]`) is not recognised — the same limitation `tag template lint` and `tag template variables` have.
+- A `{% raw %}` block containing a literal `{{ vars.old_name }}` is correctly left alone, but `tag template lint` does not model raw blocks and will report it as an undefined variable afterwards.
 
 ---
 
