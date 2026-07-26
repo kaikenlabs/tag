@@ -181,7 +181,7 @@ func scanDirEntries(dir string) []generatorInfo {
 			continue
 		}
 		name := entry.Name()
-		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
+		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") || name == types.HistoryDir {
 			continue
 		}
 

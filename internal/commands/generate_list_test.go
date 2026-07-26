@@ -37,6 +37,21 @@ func TestUT_ScanDirEntries_SkipsDotAndUnderscorePrefixed(t *testing.T) {
 	assert.Equal(t, "visible", result[0].Name)
 }
 
+// TestUT_ScanDirEntries_SkipsHistory reproduces B2: TAG's own .tag/history/ backup
+// directory must not surface as a phantom generator in `tag generate list`.
+func TestUT_ScanDirEntries_SkipsHistory(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	for _, name := range []string{"history", "realgen"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o750))
+	}
+
+	result := scanDirEntries(dir)
+	require.Len(t, result, 1)
+	assert.Equal(t, "realgen", result[0].Name)
+}
+
 func TestUT_ScanDirEntries_SkipsFiles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
