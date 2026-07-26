@@ -87,7 +87,9 @@ type {{ name | pascal }}Service struct{}
 | `desc` | No | Description for `tag generate list` |
 | `notes` | No | Message displayed after generation |
 
-**Frontmatter is NOT YAML** — simple `key: value` line parser. No nesting, no arrays.
+**Frontmatter is NOT YAML** — a simple one-line-per-`key: value` parser. No nesting, no
+arrays, and **no block scalars**: `notes: |` followed by an indented line fails with
+`malformed metadata line ... (missing colon)`. Keep every value on its own single line.
 
 ### Actions
 
@@ -108,14 +110,19 @@ Execution order: Create → OpenAPI → Inject → Append (files exist before in
 
 ### Name Shortcuts
 
+The `n.*` namespace carries **case transforms only** — the exact keys below. An
+unknown attribute (`n.humanize`, `n.plural`, `n.snake`) renders **empty and silent**,
+not an error. For inflection (plural, humanize, singular, …) apply a filter to `name`:
+`{{ name | plural }}`.
+
 | Shortcut | Equivalent | Example (`name = "user_service"`) |
 |----------|------------|-----------------------------------|
-| `{{ n.snake }}` | `{{ name \| snake }}` | `user_service` |
-| `{{ n.pascal }}` | `{{ name \| pascal }}` | `UserService` |
-| `{{ n.camel }}` | `{{ name \| camel }}` | `userService` |
-| `{{ n.kebab }}` | `{{ name \| kebab }}` | `user-service` |
-| `{{ n.plural }}` | `{{ name \| plural }}` | `user_services` |
-| `{{ n.singular }}` | `{{ name \| singular }}` | `user_service` |
+| `{{ n.snake_case }}` | `{{ name \| snake }}` | `user_service` |
+| `{{ n.pascal_case }}` | `{{ name \| pascal }}` | `UserService` |
+| `{{ n.camel_case }}` | `{{ name \| camel }}` | `userService` |
+| `{{ n.kebab_case }}` | `{{ name \| kebab }}` | `user-service` |
+| `{{ n.lower_case }}` | `{{ name \| lower }}` | `user_service` |
+| `{{ n.upper_case }}` | `{{ name \| upper }}` | `USER_SERVICE` |
 | `{{ n.past }}` | `{{ name \| past }}` | `user_serviced` |
 
 ## Bundle Anatomy

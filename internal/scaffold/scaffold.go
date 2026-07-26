@@ -219,7 +219,12 @@ func (s *Scaffold) collectVars(ctx *runContext) error {
 		if ctx.opts.Meta == nil {
 			ctx.opts.Meta = make(map[string]string)
 		}
-		ctx.opts.Meta["project_name"] = ctx.opts.ProjectName
+		// The positional [project-name] only *defaults* project_name; an explicit
+		// -m project_name wins (documented precedence). The positional still drives
+		// the output directory — see planOutput.
+		if _, ok := ctx.opts.Meta["project_name"]; !ok {
+			ctx.opts.Meta["project_name"] = ctx.opts.ProjectName
+		}
 	}
 
 	vars, err := s.collector.Collect(ctx.config, ctx.opts, s.isTTY)
@@ -239,7 +244,14 @@ func (s *Scaffold) collectVars(ctx *runContext) error {
 
 // planOutput resolves the output directory and detects project wrappers.
 func (s *Scaffold) planOutput(ctx *runContext) error {
-	outputDir, err := resolveOutputDir(ctx.opts.OutputDir, ctx.vars, ctx.cwd)
+	// Output directory precedence: --output flag, then the positional
+	// [project-name], then the project_name variable. The positional must keep
+	// driving the output dir even when -m project_name overrides the variable.
+	outDirArg := ctx.opts.OutputDir
+	if outDirArg == "" {
+		outDirArg = ctx.opts.ProjectName
+	}
+	outputDir, err := resolveOutputDir(outDirArg, ctx.vars, ctx.cwd)
 	if err != nil {
 		return err
 	}

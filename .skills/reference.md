@@ -258,7 +258,14 @@ From lowest to highest:
 2. Replay values (`--replay`)
 3. Values file (`--values`)
 4. Interactive prompts (if TTY)
-5. `--meta` / `-m` flags (highest priority)
+5. The positional `[project-name]` argument (sets `project_name` only)
+6. `--meta` / `-m` flags (highest priority)
+
+**The positional `[project-name]` has two roles**: it *defaults* the `project_name`
+variable (an explicit `-m project_name=...` overrides it, per the priority above), and it
+*drives the output directory* when `--output` is not given. So
+`tag scaffold ./tmpl out3 -m project_name="Demo App"` scaffolds into `out3/` while
+`project_name` is `Demo App`.
 
 ### Path Placeholders
 
@@ -698,6 +705,10 @@ Generates a reference file for AI coding agents listing available generators and
 | `-v` / `--verbose` | Print per-file operation details (created/skipped/overwritten/modified) after generation |
 | `--dry-run` / `-d` | Preview what would be written without touching the filesystem. Behavior differs by command — see below. |
 | `-m key=value` | Set variable values inline |
+
+**`--dry-run` is a global flag** — it must appear *before* the subcommand:
+`tag --dry-run generate screen Settings`, not `tag generate --dry-run ...` (which fails
+with `flag provided but not defined: -dry-run`). Same for `-d`.
 
 **`--dry-run` behavior by command**:
 

@@ -237,6 +237,44 @@ func TestIT_Scaffold_PathPlaceholders(t *testing.T) {
 	assert.FileExists(t, filepath.Join(outputDir, "my_project", "internal", "users", "user.go"))
 }
 
+// TestIT_Scaffold_MetaProjectNameBeatsPositional reproduces B3: an explicit
+// -m project_name must win over the positional project-name argument (which only
+// dictates the output directory), matching the documented precedence.
+func TestIT_Scaffold_MetaProjectNameBeatsPositional(t *testing.T) {
+	templateDir := createTestTemplate(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	opts := Options{
+		TemplateDir: templateDir,
+		ProjectName: "out3", // positional [project-name] → output directory
+		Meta: map[string]string{
+			"project_name": "demo_app", // explicit -m override
+			"author":       "Jane",
+		},
+		NoInput: true,
+	}
+
+	s, err := NewScaffold(opts)
+	require.NoError(t, err)
+
+	_, err = s.Run(opts)
+	require.NoError(t, err)
+
+	// Output directory comes from the positional argument.
+	outputDir := filepath.Join(cwd, "out3")
+	assert.DirExists(t, outputDir)
+
+	// project_name variable comes from --meta, not the positional.
+	data, err := os.ReadFile(filepath.Join(outputDir, ".tagconfig.json"))
+	require.NoError(t, err)
+	var tagconfig map[string]any
+	require.NoError(t, json.Unmarshal(data, &tagconfig))
+	vars, ok := tagconfig["variables"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "demo_app", vars["project_name"])
+}
+
 func TestIT_Scaffold_GeneratesTagconfig(t *testing.T) {
 	dir := t.TempDir()
 

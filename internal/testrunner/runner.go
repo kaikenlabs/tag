@@ -78,7 +78,7 @@ func buildCasePlans(cfg Config, testCfg *tmplconfig.TestConfig, boolVars []strin
 		// Security: require opt-in for template-defined commands.
 		if !cfg.AcceptHooks {
 			return nil, fmt.Errorf(
-				"template defines %d test case(s); pass --accept-hooks to allow or --run to override",
+				"template defines %d test case(s) with shell commands; pass --accept-hooks to run them, or --run to override with your own commands",
 				len(templateCases),
 			)
 		}

@@ -82,7 +82,7 @@ func scanGenerators(tagDir string) ([]GeneratorNode, []Warning) {
 		}
 		name := entry.Name()
 		// Skip reserved directories.
-		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
+		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") || name == types.HistoryDir {
 			continue
 		}
 

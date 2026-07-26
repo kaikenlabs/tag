@@ -124,6 +124,31 @@ func TestUT_NewGeneratorWithRecorder_WithRecorder(t *testing.T) {
 	assert.Equal(t, 1, result.Created)
 }
 
+// TestUT_NewGeneratorWithRecorder_DryRun reproduces B1: a dry-run generate with a
+// recorder must not try to hash files it deliberately never wrote. Before the fix the
+// RecordingFileWriter wrapped the no-op dry-run writer and failed on "hash after write".
+func TestUT_NewGeneratorWithRecorder_DryRun(t *testing.T) {
+	dirPath := setupGeneratorDir(t)
+	workDir := chdirToTempDir(t)
+
+	eng, err := template.NewEngine()
+	require.NoError(t, err)
+
+	rec := history.NewRecorder(t.TempDir())
+
+	var buf bytes.Buffer
+	gen, err := NewGeneratorWithRecorder(eng, true, dirPath, "", rec, &buf)
+	require.NoError(t, err)
+	require.NotNil(t, gen)
+
+	_, err = gen.Generate(Data{Name: "hello", RawMeta: []string{"name=hello"}})
+	require.NoError(t, err, "dry-run with recorder must not error on hash-after-write")
+
+	// Dry-run must not write files to disk.
+	_, statErr := os.Stat(filepath.Join(workDir, "output", "hello.go"))
+	assert.True(t, os.IsNotExist(statErr), "dry-run should not create files on disk")
+}
+
 func TestUT_DryRunWriterOpts_NotDryRun(t *testing.T) {
 	t.Parallel()
 

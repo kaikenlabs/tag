@@ -41,6 +41,10 @@ const (
 	// HistoryFile is the filename for the generation history manifest.
 	HistoryFile = "history.json"
 
+	// HistoryDir is the TAG-internal subdirectory inside TemplatesDir that holds
+	// generation history and backups. It is not a generator.
+	HistoryDir = "history"
+
 	// HistoryBackupsDir is the subdirectory inside TemplatesDir where backups are stored.
 	HistoryBackupsDir = "history/backups"
 

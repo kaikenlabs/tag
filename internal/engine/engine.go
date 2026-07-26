@@ -101,7 +101,10 @@ func NewGeneratorWithRecorder(tmplEngine *template.Engine, dryRun bool, dirPath,
 	}
 
 	fw := w
-	if rec != nil {
+	// In dry-run mode nothing is written, so recording (which hashes files
+	// after write) would fail and abort the run — skip it. History is only
+	// persisted for real runs anyway (see generate.go).
+	if rec != nil && !dryRun {
 		fw = history.NewRecordingFileWriter(w, rec)
 	}
 
