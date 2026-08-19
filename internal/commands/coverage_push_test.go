@@ -14,6 +14,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/templateupdate"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -190,9 +191,9 @@ func TestUT_PrintGenerateSummary_VerboseMode(t *testing.T) {
 		Created:     2,
 		Overwritten: 1,
 		Details: []engine.FileOpDetail{
-			{Op: "created", Path: "handler.go"},
-			{Op: "created", Path: "model.go"},
-			{Op: "overwritten", Path: "router.go"},
+			{Action: fileaction.ActionCreate, Path: "handler.go"},
+			{Action: fileaction.ActionCreate, Path: "model.go"},
+			{Action: fileaction.ActionOverwrite, Path: "router.go"},
 		},
 	}
 

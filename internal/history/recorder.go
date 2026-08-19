@@ -54,7 +54,7 @@ func (r *Recorder) RecordCreate(path, hashAfter string) {
 // RecordModify records a file that was modified (inject or append).
 // Should be called after the file has been written.
 // hashBefore is the hash before this generation touched the file (first-touch only).
-func (r *Recorder) RecordModify(path, action, hashBefore, hashAfter string) {
+func (r *Recorder) RecordModify(path string, action Action, hashBefore, hashAfter string) {
 	if e, exists := r.entries[path]; exists {
 		// Already recorded in this generation; only update hash_after.
 		e.Action = action

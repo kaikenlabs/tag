@@ -514,7 +514,7 @@ func runGenerate(gen engine.Generator, data engine.Data) (engine.GenerateResult,
 func printGenerateSummary(w io.Writer, result engine.GenerateResult, verbose bool) {
 	if verbose {
 		for _, d := range result.Details {
-			fmt.Fprintf(w, "  %-12s %s\n", d.Op, d.Path)
+			fmt.Fprintf(w, "  %-12s %s\n", d.DisplayOp(), d.Path)
 		}
 	}
 	fmt.Fprintf(w, "Generated: %d created, %d skipped, %d overwritten, %d modified\n",

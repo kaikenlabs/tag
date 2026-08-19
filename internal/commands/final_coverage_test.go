@@ -16,6 +16,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/templatetest"
 	"github.com/kaikenlabs/tag/internal/templateupdate"
@@ -696,8 +697,8 @@ func TestUT_PrintGenerateSummary_AllFieldsNonZero(t *testing.T) {
 		Overwritten: 3,
 		Modified:    4,
 		Details: []engine.FileOpDetail{
-			{Op: "created", Path: "a.go"},
-			{Op: "skipped", Path: "b.go"},
+			{Action: fileaction.ActionCreate, Path: "a.go"},
+			{Action: fileaction.ActionSkip, Path: "b.go"},
 		},
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/template"
 )
@@ -147,6 +148,28 @@ func TestUT_NewGeneratorWithRecorder_DryRun(t *testing.T) {
 	// Dry-run must not write files to disk.
 	_, statErr := os.Stat(filepath.Join(workDir, "output", "hello.go"))
 	assert.True(t, os.IsNotExist(statErr), "dry-run should not create files on disk")
+}
+
+// TestUT_Generate_DryRun_DetailsPopulated verifies GenerateResult.Details is
+// populated through the REAL dry-run writer path (not a hand-rolled mock),
+// with the same actions a real run would produce — discharging the ticket's
+// "Details is always populated for dry-run" acceptance criterion.
+func TestUT_Generate_DryRun_DetailsPopulated(t *testing.T) {
+	dirPath := setupGeneratorDir(t)
+	_ = chdirToTempDir(t)
+
+	var buf bytes.Buffer
+	gen, err := NewGenerator(true, dirPath, "", &buf)
+	require.NoError(t, err)
+	require.NotNil(t, gen)
+
+	result, err := gen.Generate(Data{Name: "hello", RawMeta: []string{"name=hello"}})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Created)
+	require.Len(t, result.Details, 1)
+	assert.Equal(t, filepath.Join("output", "hello.go"), result.Details[0].Path)
+	assert.Equal(t, fileaction.ActionCreate, result.Details[0].Action)
 }
 
 func TestUT_DryRunWriterOpts_NotDryRun(t *testing.T) {

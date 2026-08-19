@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `tag undo` no longer silently no-ops for files recorded as `overwrite` (via `--on-existing overwrite`) or `openapi-merge` (via `action: openapi`): it previously reported the generation as reverted while leaving those files untouched. It now correctly restores them from backup, same as `inject`/`append` (#352)
 - `tag template lint` and `tag template variables` no longer scan the contents of `{% raw %}...{% endraw %}` blocks as live template expressions: a literal `{{ vars.* }}` inside a raw block is no longer reported as an undefined variable, and a variable referenced only inside a raw block is now correctly reported as unused (#332)
 - Quote-aware variable scanning (#337), fixing defects shared by `tag template lint` and `tag template variables`:
   - A `vars.*` mention inside a string literal (e.g. `{{ replace("{{ vars.ghost }}") }}`) is no longer treated as a reference — and, symmetrically, a variable referenced only inside a string literal is now correctly reported as unused, matching `rename-var`'s behavior

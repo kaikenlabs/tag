@@ -10,7 +10,7 @@ tag undo [flags]
 
 ## Description
 
-`tag undo` reads the generation history manifest (`.tag/history.json`) to revert the most recent generation. Created files are deleted; injected or appended content is restored from backups stored in `.tag/history/backups/`.
+`tag undo` reads the generation history manifest (`.tag/history.json`) to revert the most recent generation. Created files are deleted; injected, appended, overwritten, or OpenAPI-merged files are restored from backups stored in `.tag/history/backups/`.
 
 **Conflict detection**: Before reverting, `undo` compares the current hash of each file against the hash recorded at generation time. If a file has been modified after generation, `undo` refuses to overwrite it.
 
@@ -68,6 +68,8 @@ The manifest is stored at `.tag/history.json`. Each entry contains:
 - `create` — file was newly created (undo deletes it)
 - `inject` — content was injected at a marker (undo restores backup)
 - `append` — content was appended to a file (undo restores backup)
+- `overwrite` — an existing file was replaced in full, e.g. via `--on-existing overwrite` (undo restores backup)
+- `openapi-merge` — an OpenAPI fragment was merged into an existing spec file, e.g. via `action: openapi` (undo restores backup)
 
 ## Notes
 
