@@ -248,21 +248,35 @@ func TestUT_LibEditAction_MissingArgument(t *testing.T) {
 // --- libUpdateAction ---
 
 func TestUT_LibUpdateAction_MissingArgument_UsesUpdateAll(t *testing.T) {
-	// The update command with no args calls updateAllTemplates, which
-	// requires a full library (with resolver). This fails because
-	// newLibrary tries to create a real resolver. We just verify it
-	// goes through the right path by checking the error.
-	t.Parallel()
+	// Uses t.Setenv — do NOT use t.Parallel.
+	//
+	// `lib update` with no argument routes to updateAllTemplates, which builds
+	// a library via newLibrary() -> xdg.DataHome(). Without XDG_DATA_HOME
+	// pointed somewhere disposable this test resolves the developer's REAL
+	// library, re-fetches every installed template over the network, and
+	// rewrites their registry — on every `go test ./...`. The original comment
+	// here assumed the call would fail before doing anything; it does not.
+	dataDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataDir)
 
-	cliApp := &cli.App{Writer: io.Discard}
+	// An empty registry keeps UpdateAll offline: there is nothing to re-fetch.
+	libDir := filepath.Join(dataDir, "tag")
+	require.NoError(t, os.MkdirAll(libDir, 0o750))
+	regData, err := json.Marshal(library.Registry{Version: 1, Entries: map[string]*library.Entry{}})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(libDir, "library.json"), regData, 0o600))
+
+	var buf bytes.Buffer
+	cliApp := &cli.App{Writer: &buf}
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	cmd := libUpdateCommand()
-	err := cmd.Action(ctx)
-	// It will fail trying to create the full library (needs resolver)
-	// but should NOT say "template name is required"
-	if err != nil {
-		assert.NotContains(t, err.Error(), "template name is required")
-	}
+	// An empty library is rejected by UpdateAll itself. That specific error is
+	// the proof we want: the single-template path would have complained that a
+	// template name is required, and never reached the library at all.
+	err = libUpdateCommand().Action(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "library is empty")
+	assert.NotContains(t, err.Error(), "template name is required")
+	assert.Empty(t, buf.String())
 }
