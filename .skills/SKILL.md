@@ -233,8 +233,10 @@ types:
 ### CLI
 
 ```bash
-tag dialect list            # Show all available dialects
-tag dialect show postgres   # Show type mappings for a dialect
+tag dialect list                        # Show all available dialects
+tag dialect show postgres               # Show type mappings for a dialect
+tag dialect list --format json          # {"dialects": [{"name","description"}]} — no "source" field
+tag dialect show postgres --format json # Bare {"name","description","types"}
 ```
 
 ## Scaffold Templates
@@ -270,22 +272,23 @@ my-project/
 | `tag template new generator <name>` | Create generator (`--in-bundle`, `--lib`) |
 | `tag template new bundle <name>` | Create bundle (`--self-contained`, `--lib`) |
 | `tag template info <template>` | Show template details |
-| `tag template lint [path]` | Validate template (schema, syntax, vars) |
+| `tag template lint [path]` | Validate template (schema, syntax, vars) (`--format json`) |
 | `tag template variables [path]` | Audit variable declarations vs usage (`--format json`, `--strict`) |
 | `tag template rename-var <old> <new> [path]` | Rename a variable across config and templates (`--dry-run`) |
 | `tag template graph [path]` | Visualize generator dependencies (`--format text\|json\|dot`) |
 | `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template |
-| `tag dialect list` | List available type-mapping dialects |
-| `tag dialect show <name>` | Show type mappings for a dialect |
+| `tag dialect list` | List available type-mapping dialects (`--format json`) |
+| `tag dialect show <name>` | Show type mappings for a dialect (`--format json`) |
 | `tag lib add <ref>` | Install template to library |
-| `tag lib ls` | List installed templates |
+| `tag lib ls` | List installed templates (`--format json`) |
+| `tag lib search [query]` | Search GitHub for templates (`--format json`, `--limit`, `--sort`, `--order`) |
 | `tag lib rm <name>` | Remove template |
 | `tag lib update [name]` | Update from source |
-| `tag test [template-dir]` | Matrix-test all boolean variable combinations |
+| `tag test [template-dir]` | Matrix-test all boolean variable combinations (`--format json`) |
 | `tag undo` | Revert the last generation |
 | `tag undo --list` | Show generation history |
 | `tag undo --id <id>` | Revert a specific generation |
-| `tag check [--quiet] [--ref REF]` | Check if upstream template changed. Exit 0 = up-to-date, 1 = updates available |
+| `tag check [--quiet] [--ref REF]` | Check if upstream template changed (`--format json`). Exit 0 = up-to-date, 1 = updates available |
 | `tag diff [--stat] [--no-color]` | Show what would change if you ran `tag update` (read-only) |
 | `tag update [--set k=v] [--skip-hooks]` | Apply upstream template changes via 3-way merge |
 | `tag update --continue` | Resume after manual conflict resolution |
@@ -317,6 +320,7 @@ my-project/
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |
 | `--force` | scaffold | Overwrite existing output |
+| `--format text\|json` | check, cache ls, lib ls, lib search, dialect list, dialect show, template lint, template variables, template graph (also `dot`), test | Output format (default: `text`). Unknown value = usage error, exit 2 |
 
 ## Pitfalls
 
@@ -327,3 +331,4 @@ my-project/
 - **Derived variable ordering**: If A depends on B, B must appear first in `tag.template.json`.
 - **Empty output**: If template body renders empty, file is still created as empty.
 - **Include resolution**: `{% include %}` resolves by basename — `_shared/header.tmpl` → `"header.tmpl"`.
+- **Dash-prefixed positional args**: An unrecognised `-x`-style token is a usage error, not a swallowed positional. To pass one literally, put it after another argument and a `--` separator, e.g. `tag lib search go -- -language:java`. A leading `--` (`tag lib search -- -x`) does not work — urfave/cli consumes it before TAG sees it.

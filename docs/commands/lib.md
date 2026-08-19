@@ -59,10 +59,14 @@ When adding a Cookiecutter template, TAG auto-detects `cookiecutter.json` and co
 List installed templates.
 
 ```bash
-tag lib ls
+tag lib ls [flags]
 ```
 
 Alias: `tag lib list`
+
+| Flag | Description |
+|------|-------------|
+| `--format <fmt>` | Output format: `text` (default) or `json` |
 
 **Example output:**
 
@@ -73,6 +77,74 @@ go-api               gh:user/go-api-template        v1.2.0     Go REST API templ
 django               gh:user/cookiecutter-django     -          Django web app
 react-app            gl:org/react-starter           v3.0.0     React SPA template
 ```
+
+**Machine-readable output:**
+
+```bash
+tag lib ls --format json
+```
+
+```json
+{
+  "templates": [
+    { "name": "go-api", "source": "gh:user/go-api-template", "version": "v1.2.0", "added_at": "...", "updated_at": "..." }
+  ]
+}
+```
+
+An empty library serializes as `"templates": []`, never `null`.
+
+---
+
+### `tag lib search`
+
+Search GitHub for templates tagged `tag-template`.
+
+```bash
+tag lib search [query] [flags]
+```
+
+The query is variadic — all non-flag words are joined with spaces. Leave it empty to list all `tag-template`-tagged repositories.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--limit <n>` | `10` | Maximum number of results (1-100) |
+| `--sort <field>` | `stars` | Sort by: `stars`, `forks`, or `updated` |
+| `--order <dir>` | `desc` | Order: `asc` or `desc` |
+| `--format <fmt>` | `text` | Output format: `text` (default) or `json` |
+
+Flags may appear before or after the query: `tag lib search kubernetes --limit 5` treats `--limit` as a flag, not as part of the query text.
+
+**Examples:**
+
+```bash
+# Search by keyword
+tag lib search kubernetes
+
+# Limit and sort results
+tag lib search go --limit 5 --sort updated --order asc
+
+# Machine-readable output
+tag lib search go --format json
+```
+
+```json
+{
+  "results": [
+    { "name": "go-api", "full_name": "acme/go-api", "description": "...", "url": "...", "stars": 142, "updated_at": "...", "language": "Go" }
+  ]
+}
+```
+
+No matches serialize as `"results": []`, never `null`.
+
+**Passing a literal dash-prefixed query term:** an unrecognised `-`-prefixed token is rejected as an unknown flag rather than folded into the query. Put it after another argument and a `--` separator:
+
+```bash
+tag lib search go -- -language:java
+```
+
+A leading `--` (`tag lib search -- -x`) does not work — urfave/cli consumes it before TAG sees it.
 
 ---
 

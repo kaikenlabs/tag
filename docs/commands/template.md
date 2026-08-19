@@ -115,10 +115,16 @@ See [tag template new](new.md) for full details.
 Show detailed information about a template, including variables, hooks, and metadata.
 
 ```bash
-tag template info <template>
+tag template info <template> [flags]
 ```
 
 The `<template>` argument can be a local path, remote reference, or library template name.
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--update` | `-u` | Force refresh of cached remote templates |
+
+Flags may appear before or after `<template>`: `tag template info gh:user/awesome-template --update` and `tag template info --update gh:user/awesome-template` are equivalent.
 
 **Example output:**
 
@@ -185,6 +191,9 @@ tag template lint ./path/to/template
 
 # Machine-readable output for CI
 tag template lint --format json
+
+# Flags may come before or after the path
+tag template lint ./path/to/template --format json
 ```
 
 **Example text output:**
@@ -245,6 +254,9 @@ tag template variables ./my-template
 
 # Machine-readable output for CI
 tag template variables --format json
+
+# Flags may come before or after the path
+tag template variables ./my-template --format json
 
 # Fail CI when issues found
 tag template variables --strict
