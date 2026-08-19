@@ -65,13 +65,23 @@ func runCLI(t *testing.T, cmd *cli.Command, argv ...string) cliRun {
 	t.Helper()
 
 	var buf bytes.Buffer
-	app := &cli.App{
-		Writer:    &buf,
-		ErrWriter: io.Discard,
-		Commands:  []*cli.Command{cmd},
-		// Default handler calls os.Exit for any cli.ExitCoder (check returns one).
-		ExitErrHandler: func(*cli.Context, error) {},
-	}
+	err := newTestApp(cmd, &buf).Run(append([]string{"tag"}, argv...))
+	return cliRun{Writer: buf.String(), Err: err}
+}
+
+// runCLICapturingStdout additionally redirects the real os.Stdout, so a command
+// that bypasses c.App.Writer is still observed.
+//
+// It replaces a process-global, so a test using it must NOT call t.Parallel:
+// a sibling parallel test writing to os.Stdout during the capture window hits a
+// closed pipe. That race is invisible locally and shows up under
+// `go test -coverprofile`, whose end-of-run report is itself such a write.
+// Prefer plain runCLI unless the test genuinely needs to see os.Stdout.
+func runCLICapturingStdout(t *testing.T, cmd *cli.Command, argv ...string) cliRun {
+	t.Helper()
+
+	var buf bytes.Buffer
+	app := newTestApp(cmd, &buf)
 
 	var err error
 	stdout := captureStdout(t, func() {
@@ -79,6 +89,16 @@ func runCLI(t *testing.T, cmd *cli.Command, argv ...string) cliRun {
 	})
 
 	return cliRun{Writer: buf.String(), Stdout: stdout, Err: err}
+}
+
+func newTestApp(cmd *cli.Command, out io.Writer) *cli.App {
+	return &cli.App{
+		Writer:    out,
+		ErrWriter: io.Discard,
+		Commands:  []*cli.Command{cmd},
+		// Default handler calls os.Exit for any cli.ExitCoder (check returns one).
+		ExitErrHandler: func(*cli.Context, error) {},
+	}
 }
 
 func assertGolden(t *testing.T, name, got string) {
@@ -246,7 +266,7 @@ func TestUT_TextGolden(t *testing.T) {
 
 	t.Run("cache-ls-empty", func(t *testing.T) {
 		seedHome(t)
-		run := runCLI(t, CacheCommand(), "cache", "ls")
+		run := runCLICapturingStdout(t, CacheCommand(), "cache", "ls")
 		require.NoError(t, run.Err)
 		assertGolden(t, "cache-ls-empty", run.All())
 	})
@@ -258,7 +278,7 @@ func TestUT_TextGolden(t *testing.T) {
 		seedCacheEntry(t, home, "go-api", "v1.2.0", &future)
 		seedCacheEntry(t, home, "py-svc", "", &expired)
 		seedCacheEntry(t, home, "pinned", "v0.1.0", nil)
-		run := runCLI(t, CacheCommand(), "cache", "ls")
+		run := runCLICapturingStdout(t, CacheCommand(), "cache", "ls")
 		require.NoError(t, run.Err)
 		assertGolden(t, "cache-ls-entries", run.All())
 	})
@@ -266,7 +286,7 @@ func TestUT_TextGolden(t *testing.T) {
 	t.Run("lib-ls-empty", func(t *testing.T) {
 		seedHome(t)
 		seedLibrary(t)
-		run := runCLI(t, LibCommand(), "lib", "ls")
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "ls")
 		require.NoError(t, run.Err)
 		assertGolden(t, "lib-ls-empty", run.All())
 	})
@@ -284,14 +304,14 @@ func TestUT_TextGolden(t *testing.T) {
 				AddedAt: goldenTime, UpdatedAt: goldenTime,
 			},
 		)
-		run := runCLI(t, LibCommand(), "lib", "ls")
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "ls")
 		require.NoError(t, run.Err)
 		assertGolden(t, "lib-ls-entries", run.All())
 	})
 
 	t.Run("lib-search-empty", func(t *testing.T) {
 		seedSearchServer(t, nil)
-		run := runCLI(t, LibCommand(), "lib", "search", "nothing")
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "search", "nothing")
 		require.NoError(t, run.Err)
 		assertGolden(t, "lib-search-empty", run.All())
 	})
@@ -301,28 +321,28 @@ func TestUT_TextGolden(t *testing.T) {
 			goldenRepo("go-api", "Production Go HTTP service template", 142),
 			goldenRepo("py-svc", "", 7),
 		})
-		run := runCLI(t, LibCommand(), "lib", "search", "go")
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "search", "go")
 		require.NoError(t, run.Err)
 		assertGolden(t, "lib-search-results", run.All())
 	})
 
 	t.Run("dialect-list", func(t *testing.T) {
 		seedHome(t)
-		run := runCLI(t, DialectCommand(), "dialect", "list")
+		run := runCLICapturingStdout(t, DialectCommand(), "dialect", "list")
 		require.NoError(t, run.Err)
 		assertGolden(t, "dialect-list", run.All())
 	})
 
 	t.Run("dialect-show", func(t *testing.T) {
 		seedHome(t)
-		run := runCLI(t, DialectCommand(), "dialect", "show", "go")
+		run := runCLICapturingStdout(t, DialectCommand(), "dialect", "show", "go")
 		require.NoError(t, run.Err)
 		assertGolden(t, "dialect-show-go", run.All())
 	})
 
 	t.Run("check-up-to-date", func(t *testing.T) {
 		dir := seedProject(t, "abc1234567890", "abc1234567890")
-		run := runCLI(t, CheckCommand(), "check", "--dir", dir)
+		run := runCLICapturingStdout(t, CheckCommand(), "check", "--dir", dir)
 		require.NoError(t, run.Err)
 		assertGolden(t, "check-up-to-date", run.All())
 	})
@@ -330,31 +350,31 @@ func TestUT_TextGolden(t *testing.T) {
 	// The four commands #345 retrofits onto the shared helpers. Their print
 	// paths were not meant to change; these fixtures are what proves it.
 	t.Run("lint-text", func(t *testing.T) {
-		run := runCLI(t, templateLintCommand(), "lint", seedTemplate(t))
+		run := runCLICapturingStdout(t, templateLintCommand(), "lint", seedTemplate(t))
 		assertGolden(t, "lint-text", run.All())
 	})
 
 	t.Run("variables-text", func(t *testing.T) {
-		run := runCLI(t, templateVariablesCommand(), "variables", seedTemplate(t))
+		run := runCLICapturingStdout(t, templateVariablesCommand(), "variables", seedTemplate(t))
 		require.NoError(t, run.Err)
 		assertGolden(t, "variables-text", run.All())
 	})
 
 	t.Run("graph-text", func(t *testing.T) {
-		run := runCLI(t, templateGraphCommand(), "graph", seedTemplate(t))
+		run := runCLICapturingStdout(t, templateGraphCommand(), "graph", seedTemplate(t))
 		require.NoError(t, run.Err)
 		assertGolden(t, "graph-text", run.All())
 	})
 
 	t.Run("graph-dot", func(t *testing.T) {
-		run := runCLI(t, templateGraphCommand(), "graph", seedTemplate(t), "--format", formatDOT)
+		run := runCLICapturingStdout(t, templateGraphCommand(), "graph", seedTemplate(t), "--format", formatDOT)
 		require.NoError(t, run.Err)
 		assertGolden(t, "graph-dot", run.All())
 	})
 
 	t.Run("check-updates-available", func(t *testing.T) {
 		dir := seedProject(t, "abc1234567890", "def0987654321")
-		run := runCLI(t, CheckCommand(), "check", "--dir", dir)
+		run := runCLICapturingStdout(t, CheckCommand(), "check", "--dir", dir)
 		require.Error(t, run.Err)
 		assertGolden(t, "check-updates-available", run.All())
 	})

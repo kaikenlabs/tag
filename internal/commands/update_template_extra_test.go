@@ -22,6 +22,10 @@ func captureStdout(t *testing.T, fn func()) string {
 	require.NoError(t, err)
 	os.Stdout = w
 
+	// Restored via defer so a t.Fatal or panic inside fn cannot leave the
+	// process-global pointing at a pipe nobody is draining.
+	defer func() { os.Stdout = orig }()
+
 	fn()
 
 	require.NoError(t, w.Close())

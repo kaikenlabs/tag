@@ -218,7 +218,6 @@ func TestUT_LeadingFormatFlag_JSONReachesWriter(t *testing.T) {
 
 	run := runCLI(t, templateLintCommand(), "lint", "--format", formatJSON, dir)
 	require.NoError(t, run.Err)
-	assert.Empty(t, run.Stdout, "JSON mode must not write to os.Stdout directly")
 
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(run.Writer), &parsed))

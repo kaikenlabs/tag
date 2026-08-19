@@ -26,7 +26,7 @@ import (
 func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 	t.Run("check", func(t *testing.T) {
 		dir := seedProject(t, "abc1234567890", "abc1234567890")
-		run := runCLI(t, CheckCommand(), "check", "--dir", dir, "--format", "json")
+		run := runCLICapturingStdout(t, CheckCommand(), "check", "--dir", dir, "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Empty(t, run.Stdout)
 
@@ -42,7 +42,7 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 	t.Run("cache ls", func(t *testing.T) {
 		home := seedHome(t)
 		seedCacheEntry(t, home, "go-api", "v1.2.0", nil)
-		run := runCLI(t, CacheCommand(), "cache", "ls", "--format", "json")
+		run := runCLICapturingStdout(t, CacheCommand(), "cache", "ls", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Empty(t, run.Stdout)
 
@@ -69,7 +69,7 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 			Name: "go-api", Source: "gh:acme/go-api", Version: "v1.2.0",
 			AddedAt: goldenTime, UpdatedAt: goldenTime,
 		})
-		run := runCLI(t, LibCommand(), "lib", "ls", "--format", "json")
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "ls", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Empty(t, run.Stdout)
 
@@ -89,7 +89,7 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 
 	t.Run("lib search", func(t *testing.T) {
 		seedSearchServer(t, []map[string]any{goldenRepo("go-api", "desc", 5)})
-		run := runCLI(t, LibCommand(), "lib", "search", "go", "--format", "json")
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "search", "go", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Empty(t, run.Stdout)
 
@@ -110,7 +110,7 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 
 	t.Run("dialect list", func(t *testing.T) {
 		seedHome(t)
-		run := runCLI(t, DialectCommand(), "dialect", "list", "--format", "json")
+		run := runCLICapturingStdout(t, DialectCommand(), "dialect", "list", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Empty(t, run.Stdout)
 
@@ -136,7 +136,7 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 
 	t.Run("dialect show", func(t *testing.T) {
 		seedHome(t)
-		run := runCLI(t, DialectCommand(), "dialect", "show", "go", "--format", "json")
+		run := runCLICapturingStdout(t, DialectCommand(), "dialect", "show", "go", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Empty(t, run.Stdout)
 
@@ -169,7 +169,7 @@ func TestUT_SixCommands_RejectUnknownFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			run := runCLI(t, tt.cmd(), tt.argv...)
+			run := runCLICapturingStdout(t, tt.cmd(), tt.argv...)
 			require.Error(t, run.Err)
 			assert.Contains(t, run.Err.Error(), `unsupported format "xml"`)
 
@@ -186,7 +186,7 @@ func TestUT_SixCommands_RejectUnknownFormat(t *testing.T) {
 func TestUT_EmptyResults_SerializeAsEmptyArray(t *testing.T) {
 	t.Run("cache ls", func(t *testing.T) {
 		seedHome(t)
-		run := runCLI(t, CacheCommand(), "cache", "ls", "--format", "json")
+		run := runCLICapturingStdout(t, CacheCommand(), "cache", "ls", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Contains(t, run.Writer, "\"entries\": []")
 	})
@@ -194,14 +194,14 @@ func TestUT_EmptyResults_SerializeAsEmptyArray(t *testing.T) {
 	t.Run("lib ls", func(t *testing.T) {
 		seedHome(t)
 		seedLibrary(t)
-		run := runCLI(t, LibCommand(), "lib", "ls", "--format", "json")
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "ls", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Contains(t, run.Writer, "\"templates\": []")
 	})
 
 	t.Run("lib search", func(t *testing.T) {
 		seedSearchServer(t, nil)
-		run := runCLI(t, LibCommand(), "lib", "search", "nothing", "--format", "json")
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "search", "nothing", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Contains(t, run.Writer, "\"results\": []")
 	})
@@ -212,7 +212,7 @@ func TestUT_EmptyResults_SerializeAsEmptyArray(t *testing.T) {
 // key the way the text path's hardcoded "built-in" column does.
 func TestUT_DialectList_JSON_OmitsSource(t *testing.T) {
 	seedHome(t)
-	run := runCLI(t, DialectCommand(), "dialect", "list", "--format", "json")
+	run := runCLICapturingStdout(t, DialectCommand(), "dialect", "list", "--format", "json")
 	require.NoError(t, run.Err)
 	assert.NotContains(t, run.Writer, "source")
 }
@@ -221,7 +221,7 @@ func TestUT_DialectList_JSON_OmitsSource(t *testing.T) {
 // the Go field and the YAML users author), not "mappings".
 func TestUT_DialectShow_JSON_UsesTypesKey(t *testing.T) {
 	seedHome(t)
-	run := runCLI(t, DialectCommand(), "dialect", "show", "go", "--format", "json")
+	run := runCLICapturingStdout(t, DialectCommand(), "dialect", "show", "go", "--format", "json")
 	require.NoError(t, run.Err)
 	assert.Contains(t, run.Writer, "\"types\"")
 	assert.NotContains(t, run.Writer, "\"mappings\"")
@@ -232,7 +232,7 @@ func TestUT_DialectShow_JSON_UsesTypesKey(t *testing.T) {
 func TestUT_Check_JSON_ThenExitCode(t *testing.T) {
 	t.Run("updates available", func(t *testing.T) {
 		dir := seedProject(t, "abc1234567890", "def0987654321")
-		run := runCLI(t, CheckCommand(), "check", "--dir", dir, "--format", "json")
+		run := runCLICapturingStdout(t, CheckCommand(), "check", "--dir", dir, "--format", "json")
 		require.Error(t, run.Err)
 
 		var parsed map[string]any
@@ -246,7 +246,7 @@ func TestUT_Check_JSON_ThenExitCode(t *testing.T) {
 
 	t.Run("up to date", func(t *testing.T) {
 		dir := seedProject(t, "abc1234567890", "abc1234567890")
-		run := runCLI(t, CheckCommand(), "check", "--dir", dir, "--format", "json")
+		run := runCLICapturingStdout(t, CheckCommand(), "check", "--dir", dir, "--format", "json")
 		require.NoError(t, run.Err)
 
 		var parsed map[string]any
@@ -260,7 +260,7 @@ func TestUT_Check_JSON_ThenExitCode(t *testing.T) {
 func TestUT_Check_QuietSuppressesJSON(t *testing.T) {
 	t.Run("up to date", func(t *testing.T) {
 		dir := seedProject(t, "abc1234567890", "abc1234567890")
-		run := runCLI(t, CheckCommand(), "check", "--dir", dir, "--quiet", "--format", "json")
+		run := runCLICapturingStdout(t, CheckCommand(), "check", "--dir", dir, "--quiet", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Empty(t, run.Writer)
 		assert.Empty(t, run.Stdout)
@@ -268,7 +268,7 @@ func TestUT_Check_QuietSuppressesJSON(t *testing.T) {
 
 	t.Run("updates available", func(t *testing.T) {
 		dir := seedProject(t, "abc1234567890", "def0987654321")
-		run := runCLI(t, CheckCommand(), "check", "--dir", dir, "--quiet", "--format", "json")
+		run := runCLICapturingStdout(t, CheckCommand(), "check", "--dir", dir, "--quiet", "--format", "json")
 		require.Error(t, run.Err)
 		assert.Empty(t, run.Writer)
 		assert.Empty(t, run.Stdout)
@@ -295,12 +295,12 @@ func TestUT_LibSearch_TrailingFlagNotSwallowed(t *testing.T) {
 	searchBaseURL = srv.URL
 	t.Cleanup(func() { searchBaseURL = original })
 
-	run := runCLI(t, LibCommand(), "lib", "search", "foo", "--limit", "5")
+	run := runCLICapturingStdout(t, LibCommand(), "lib", "search", "foo", "--limit", "5")
 	require.NoError(t, run.Err)
 	assert.Equal(t, "topic:tag-template foo", gotQuery.Get("q"), "trailing --limit must not be folded into the query")
 	assert.Equal(t, "5", gotQuery.Get("per_page"))
 
-	run = runCLI(t, LibCommand(), "lib", "search", "a", "b", "--sort", "updated")
+	run = runCLICapturingStdout(t, LibCommand(), "lib", "search", "a", "b", "--sort", "updated")
 	require.NoError(t, run.Err)
 	assert.Equal(t, "topic:tag-template a b", gotQuery.Get("q"))
 	assert.Equal(t, "updated", gotQuery.Get("sort"))
