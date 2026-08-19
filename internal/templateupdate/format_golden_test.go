@@ -29,10 +29,16 @@ func goldenResults() []MergeResult {
 		{Path: "cmd/main.go", Op: MergeAdd, Content: []byte("package main\n\nfunc main() {}\n")},
 		{Path: "docs/old.md", Op: MergeDelete, BaseContent: []byte("# Old\ngone\n")},
 		{
+			// Duplicated, reordered, blank and trailing-newline lines are all
+			// present deliberately: writeSimpleDiff matches lines as a
+			// multiset (removals in old-file order, then additions in
+			// new-file order), and a refactor that dedupes, reorders or
+			// interleaves them is exactly the drift this fixture exists to
+			// catch.
 			Path:        "internal/svc.go",
 			Op:          MergeUpdate,
-			OursContent: []byte("package svc\n\nconst A = 1\nconst B = 2\n"),
-			Content:     []byte("package svc\n\nconst A = 1\nconst C = 3\nconst D = 4\n"),
+			OursContent: []byte("package svc\n\nconst A = 1\nconst B = 2\ndup\ndup\ndup\ntail\n"),
+			Content:     []byte("tail\npackage svc\n\nconst C = 3\nconst A = 1\ndup\nconst D = 4\n"),
 		},
 		{Path: "config.yaml", Op: MergeConflict, Conflicted: true},
 		{Path: "logo.png", Op: MergeUpdate, IsBinary: true},
