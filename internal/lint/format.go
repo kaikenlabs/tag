@@ -1,10 +1,11 @@
 package lint
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/jsonout"
 )
 
 // WriteText writes lint results in human-readable text format.
@@ -49,7 +50,5 @@ func WriteJSON(w io.Writer, result *Result) error {
 	if out.Issues == nil {
 		out = &Result{Issues: []Issue{}}
 	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(out)
+	return jsonout.Write(w, out)
 }

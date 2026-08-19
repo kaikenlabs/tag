@@ -1,13 +1,15 @@
 package commands
 
 import (
-	"os"
-
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/graph"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
+
+func templateGraphFlags() []cli.Flag {
+	return []cli.Flag{formatFlag(formatText, formatJSON, formatDOT)}
+}
 
 func templateGraphCommand() *cli.Command {
 	return &cli.Command{
@@ -29,22 +31,24 @@ Examples:
   tag template graph ./my-template
   tag template graph --format json
   tag template graph --format dot | dot -Tpng -o graph.png`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "format",
-				Usage: "output format: text, json, or dot",
-				Value: "text",
-			},
-		},
-		//nolint:goconst // "json" used as format string across commands package
+		Flags: templateGraphFlags(),
 		Action: func(c *cli.Context) error {
-			if c.NArg() > 1 {
-				return app.UsageErrorf("expected at most one path argument, got %d", c.NArg())
+			args, err := reparseTrailingFlags(c, templateGraphFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
+			}
+			if len(args) > 1 {
+				return app.UsageErrorf("expected at most one path argument, got %d", len(args))
+			}
+
+			format, err := resolveFormat(c, formatText, formatJSON, formatDOT)
+			if err != nil {
+				return err
 			}
 
 			root := "."
-			if c.NArg() == 1 {
-				root = c.Args().First()
+			if len(args) == 1 {
+				root = args[0]
 			}
 
 			report, err := graph.Analyze(root)
@@ -52,19 +56,17 @@ Examples:
 				return app.Errorf("graph analysis failed: %w", err)
 			}
 
-			out := os.Stdout
+			out := cmdOut(c)
 
-			switch format := c.String("format"); format {
-			case "text":
-				graph.WriteText(out, report)
-			case "json":
+			switch format {
+			case formatJSON:
 				if jsonErr := graph.WriteJSON(out, report); jsonErr != nil {
 					return app.Errorf("write json: %w", jsonErr)
 				}
-			case "dot":
+			case formatDOT:
 				graph.WriteDOT(out, report)
 			default:
-				return app.UsageErrorf("unsupported format %q (use text, json, or dot)", format)
+				graph.WriteText(out, report)
 			}
 
 			return nil

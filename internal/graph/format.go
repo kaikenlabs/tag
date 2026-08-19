@@ -1,10 +1,11 @@
 package graph
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/jsonout"
 )
 
 // WriteText writes the graph report in human-readable text format.
@@ -81,9 +82,7 @@ func writeActionText(w io.Writer, action ActionInfo) {
 func WriteJSON(w io.Writer, report *GraphReport) error {
 	ensureNonNilSlices(report)
 
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(report)
+	return jsonout.Write(w, report)
 }
 
 func ensureNonNilSlices(report *GraphReport) {

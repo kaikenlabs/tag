@@ -2,29 +2,102 @@ package commands
 
 import (
 	"fmt"
+	"io"
+	"os"
+	"slices"
 	"strings"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types/flags"
+	"github.com/kaikenlabs/tag/pkg/app"
 )
+
+// Output format vocabulary shared by every command that accepts --format.
+const (
+	formatText = "text"
+	formatJSON = "json"
+	formatDOT  = "dot"
+)
+
+// formatFlag builds the --format flag. The usage string is derived from the
+// allowed values so a command cannot advertise a vocabulary it does not accept.
+func formatFlag(allowed ...string) *cli.StringFlag {
+	return &cli.StringFlag{
+		Name:  "format",
+		Usage: "Output format: " + humanList(allowed),
+		Value: formatText,
+	}
+}
+
+// resolveFormat validates the --format value against the command's allowed set.
+//
+// It must be called AFTER reparseTrailingFlags: urfave/cli stops parsing at the
+// first positional, so a trailing --format is not yet visible on the context.
+func resolveFormat(c *cli.Context, allowed ...string) (string, error) {
+	format := c.String("format")
+	if format == "" {
+		// Contexts built by hand in tests do not register the flag at all.
+		return formatText, nil
+	}
+
+	if slices.Contains(allowed, format) {
+		return format, nil
+	}
+
+	return "", app.UsageErrorf("unsupported format %q (use %s)", format, humanList(allowed))
+}
+
+// humanList renders {"a"} as "a", {"a","b"} as "a or b", and longer lists as
+// "a, b, or c".
+func humanList(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	case 2:
+		return items[0] + " or " + items[1]
+	default:
+		return strings.Join(items[:len(items)-1], ", ") + ", or " + items[len(items)-1]
+	}
+}
+
+// cmdOut returns the sink a command should print to. It falls back to os.Stdout
+// for contexts built without an App writer, which is what hand-rolled test
+// contexts in this package produce.
+func cmdOut(c *cli.Context) io.Writer {
+	if c != nil && c.App != nil && c.App.Writer != nil {
+		return c.App.Writer
+	}
+	return os.Stdout
+}
 
 // reparseTrailingFlags rescans c.Args() for flag-like tokens that Go's flag
 // parser silently dropped (it stops at the first non-flag argument).
 // Recognised flags are applied via c.Set(); the remaining positional arguments
 // are returned.
+//
+// An unrecognised dash-prefixed token is an error, not a positional: a typo'd
+// flag must not be silently accepted as an argument. See unknownFlagError for
+// how to pass a literal dash-prefixed value.
 func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error) {
 	args := c.Args().Slice()
 
 	// Build lookup tables:
-	// - boolFlags: names/aliases that are boolean (set to "true", no value consumed)
+	// - valueless: names/aliases that consume no value (set to "true")
 	// - canonical: maps every name/alias → primary (first) name
 	//
 	// We always c.Set the canonical name because urfave/cli v2 registers
 	// separate flag.Value instances per name when Destination is nil,
 	// so setting an alias doesn't update the canonical name's value.
-	boolFlags := make(map[string]bool)
+	//
+	// Whether a flag takes a value comes from urfave/cli's own TakesValue(),
+	// not from a *cli.BoolFlag type assertion: any other valueless flag type
+	// would otherwise be misread as taking a value and would swallow the next
+	// token.
+	valueless := make(map[string]bool)
 	canonical := make(map[string]string)
 
 	for _, f := range cliFlags {
@@ -36,9 +109,9 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 		for _, n := range names {
 			canonical[n] = primary
 		}
-		if _, ok := f.(*cli.BoolFlag); ok {
+		if df, ok := f.(cli.DocGenerationFlag); ok && !df.TakesValue() {
 			for _, n := range names {
-				boolFlags[n] = true
+				valueless[n] = true
 			}
 		}
 	}
@@ -64,9 +137,9 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 
 		// Handle --flag=value / -flag=value.
 		if name, val, ok := strings.Cut(flagName, "="); ok {
-			setName := canonical[name]
-			if setName == "" {
-				setName = name
+			setName, known := canonical[name]
+			if !known {
+				return nil, unknownFlagError(name)
 			}
 			if err := c.Set(setName, val); err != nil {
 				return nil, fmt.Errorf("setting flag %s: %w", name, err)
@@ -75,13 +148,13 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 		}
 
 		// Resolve to canonical name for c.Set.
-		setName := canonical[flagName]
-		if setName == "" {
-			setName = flagName
+		setName, known := canonical[flagName]
+		if !known {
+			return nil, unknownFlagError(flagName)
 		}
 
-		// Boolean flag → set to "true".
-		if boolFlags[flagName] {
+		// Valueless (boolean-like) flag → set to "true".
+		if valueless[flagName] {
 			if err := c.Set(setName, "true"); err != nil {
 				return nil, fmt.Errorf("setting flag %s: %w", flagName, err)
 			}
@@ -98,6 +171,19 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 		}
 	}
 	return positional, nil
+}
+
+// unknownFlagError reports a dash-prefixed token that matches no flag on the
+// command. Without this the token would fall through to the value-flag branch
+// and be reported as "requires a value", which sends the reader looking for a
+// missing argument rather than a misspelled flag.
+//
+// The "--" hint only works when the token follows a positional argument: given
+// `cmd -- -x`, urfave/cli consumes the "--" itself and never hands it to us,
+// whereas in `cmd query -- -x` parsing has already stopped and the "--"
+// survives into c.Args().
+func unknownFlagError(name string) error {
+	return fmt.Errorf("unknown flag -%s (put it before the arguments, or use \"--\" to pass it through as an argument)", name)
 }
 
 // commonScaffoldFlags returns flags shared between the scaffold and run commands.
