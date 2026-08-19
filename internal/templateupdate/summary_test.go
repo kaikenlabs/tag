@@ -286,6 +286,42 @@ func TestUT_Summarize_OmitsFileContents(t *testing.T) {
 // Each result is formatted alone so the +/- lines can be attributed to it, and
 // the unified-diff header lines ("--- a/x", "+++ b/x", "--- /dev/null") are
 // excluded — they are structural framing, not counted diff lines.
+// countDiffLines counts the +/- lines FormatDiff emitted for a single result.
+//
+// The unified-diff headers are removed by EXACT match against the three header
+// forms formatFileAdd/Delete/Update produce, not by a "+++"/"---" prefix test.
+// A prefix test is wrong: a real content line beginning with "++" or "--" is
+// indistinguishable from a header that way, so the count would silently drop a
+// genuine diff line. That would only show up with a fixture containing such a
+// line — see the "content lines look like headers" case below, which fails
+// against a prefix-based implementation.
+func countDiffLines(t *testing.T, r MergeResult) (added, deleted int) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	FormatDiff([]MergeResult{r}, "src", "old", "new", FormatOptions{Writer: &buf})
+
+	headers := map[string]bool{
+		"--- /dev/null":   true,
+		"+++ /dev/null":   true,
+		"--- a/" + r.Path: true,
+		"+++ b/" + r.Path: true,
+	}
+
+	for _, line := range bytesSplitLines(buf.String()) {
+		if headers[line] {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "+"):
+			added++
+		case strings.HasPrefix(line, "-"):
+			deleted++
+		}
+	}
+	return added, deleted
+}
+
 func TestUT_Summarize_CountsMatchTextDiffLinesAllOps(t *testing.T) {
 	t.Parallel()
 
@@ -309,6 +345,18 @@ func TestUT_Summarize_CountsMatchTextDiffLinesAllOps(t *testing.T) {
 			},
 		},
 		{"update nil sides", MergeResult{Path: "h.go", Op: MergeUpdate}},
+		{
+			// Content whose lines begin with "++"/"--": indistinguishable
+			// from unified-diff headers under a prefix test, which is why
+			// countDiffLines matches headers exactly instead.
+			"content lines look like headers",
+			MergeResult{
+				Path:        "k.go",
+				Op:          MergeUpdate,
+				OursContent: []byte("--- a/decoy\nkeep\n"),
+				Content:     []byte("+++ b/decoy\nkeep\n"),
+			},
+		},
 		{"conflict", MergeResult{Path: "i.go", Op: MergeConflict, Conflicted: true}},
 		{"prompt", MergeResult{Path: "j.go", Op: MergePrompt}},
 	}
@@ -317,20 +365,7 @@ func TestUT_Summarize_CountsMatchTextDiffLinesAllOps(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var buf bytes.Buffer
-			FormatDiff([]MergeResult{tc.result}, "src", "old", "new", FormatOptions{Writer: &buf})
-
-			wantAdded, wantDeleted := 0, 0
-			for _, line := range bytesSplitLines(buf.String()) {
-				switch {
-				case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
-					// unified-diff header framing, not a diff line
-				case strings.HasPrefix(line, "+"):
-					wantAdded++
-				case strings.HasPrefix(line, "-"):
-					wantDeleted++
-				}
-			}
+			wantAdded, wantDeleted := countDiffLines(t, tc.result)
 
 			files := Summarize(&DiffResult{Results: []MergeResult{tc.result}}).Files
 			require.Len(t, files, 1)
@@ -372,18 +407,8 @@ func TestUT_Summarize_BinaryDivergesFromTextByDesign(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var buf bytes.Buffer
-			FormatDiff([]MergeResult{tc.result}, "src", "old", "new", FormatOptions{Writer: &buf})
-
-			textLines := 0
-			for _, line := range bytesSplitLines(buf.String()) {
-				switch {
-				case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
-				case strings.HasPrefix(line, "+"), strings.HasPrefix(line, "-"):
-					textLines++
-				}
-			}
-			require.Positive(t, textLines,
+			textAdded, textDeleted := countDiffLines(t, tc.result)
+			require.Positive(t, textAdded+textDeleted,
 				"fixture is not exercising the divergence: the text path emitted no +/- lines for binary content")
 
 			files := Summarize(&DiffResult{Results: []MergeResult{tc.result}}).Files
