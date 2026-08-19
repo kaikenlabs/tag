@@ -481,6 +481,10 @@ EXAMPLES:
 	}
 }
 
+// searchBaseURL overrides the GitHub API base URL. Empty means the real API;
+// tests point it at an httptest server.
+var searchBaseURL string
+
 func runLibSearch(c *cli.Context, query string) error {
 	token := os.Getenv("GITHUB_TOKEN")
 	opts := search.Options{
@@ -490,7 +494,7 @@ func runLibSearch(c *cli.Context, query string) error {
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
-	results, err := search.SearchGitHub(c.Context, client, query, "", token, opts)
+	results, err := search.SearchGitHub(c.Context, client, query, searchBaseURL, token, opts)
 	if err != nil {
 		return app.Errorf("search failed: %w", err)
 	}

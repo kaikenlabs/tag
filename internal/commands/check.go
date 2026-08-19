@@ -84,7 +84,10 @@ func checkAction(c *cli.Context) error {
 }
 
 // newGitResolver creates a GitFetcher suitable for commit resolution.
-func newGitResolver() remote.LatestCommitResolver {
+// Package-level variable so tests can substitute a stub resolver.
+var newGitResolver = defaultGitResolver
+
+func defaultGitResolver() remote.LatestCommitResolver {
 	auth := remote.NewEnvAuthProvider()
 	return remote.NewGitFetcher(auth)
 }
