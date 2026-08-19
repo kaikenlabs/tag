@@ -17,7 +17,7 @@ func completeGeneratorNames(cfg *config.Config) {
 	}
 
 	seen := make(map[string]bool)
-	printUnique := func(infos []generatorInfo) {
+	printUnique := func(infos []GeneratorInfo) {
 		for _, g := range infos {
 			if !seen[g.Name] {
 				fmt.Println(g.Name)

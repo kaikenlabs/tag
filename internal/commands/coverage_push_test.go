@@ -43,7 +43,7 @@ func TestUT_DoctorCheckTemplates_WithLintErrors(t *testing.T) {
 	// Should have at least one result for the template
 	found := false
 	for _, r := range results {
-		if r.status == doctorFail || r.status == doctorWarn || r.status == doctorPass {
+		if r.Status == doctorFail || r.Status == doctorWarn || r.Status == doctorPass {
 			found = true
 		}
 	}
@@ -83,7 +83,7 @@ func TestUT_DoctorCheckSubdir_StatError(t *testing.T) {
 	results := doctorCheckSubdir("/nonexistent/parent", "child", "test-label")
 	require.Len(t, results, 1)
 	// Should be warn (not found) or fail (other error)
-	assert.NotEqual(t, doctorPass, results[0].status)
+	assert.NotEqual(t, doctorPass, results[0].Status)
 }
 
 // ===========================================================================
@@ -94,7 +94,7 @@ func TestUT_DoctorCheckTAGVersion_NonDevBuild_NetworkError(t *testing.T) {
 	// Use a real version string to skip isDevBuild check, but fetch will fail
 	result := doctorCheckTAGVersion(context.Background(), "v0.0.1-test")
 	// Should warn (could not check) or pass (if same version)
-	assert.Contains(t, []doctorStatus{doctorPass, doctorWarn}, result.status)
+	assert.Contains(t, []doctorStatus{doctorPass, doctorWarn}, result.Status)
 }
 
 // ===========================================================================
@@ -104,8 +104,8 @@ func TestUT_DoctorCheckTAGVersion_NonDevBuild_NetworkError(t *testing.T) {
 func TestUT_DoctorCheckTAGVersion_DevBuildSkipsUpdateCheck(t *testing.T) {
 	t.Parallel()
 	result := doctorCheckTAGVersion(context.Background(), "dev")
-	assert.Equal(t, doctorPass, result.status)
-	assert.Contains(t, result.label, "dev build")
+	assert.Equal(t, doctorPass, result.Status)
+	assert.Contains(t, result.Label, "dev build")
 }
 
 // ===========================================================================
@@ -113,6 +113,10 @@ func TestUT_DoctorCheckTAGVersion_DevBuildSkipsUpdateCheck(t *testing.T) {
 // ===========================================================================
 
 func TestUT_DoctorCheckLibraries_TemplateNotAccessible(t *testing.T) {
+	// library.New (called by doctorCheckLibraries) also builds a resolver
+	// that touches $HOME/.tag/cache, so HOME must be isolated too, not just
+	// XDG_DATA_HOME. Not parallel: t.Setenv.
+	t.Setenv("HOME", t.TempDir())
 	xdgBase := t.TempDir()
 	// xdg.DataHome() returns XDG_DATA_HOME/tag
 	tagDataDir := filepath.Join(xdgBase, "tag")
@@ -141,7 +145,7 @@ func TestUT_DoctorCheckLibraries_TemplateNotAccessible(t *testing.T) {
 	// Should have a fail result for the missing template
 	var hasFail bool
 	for _, r := range results {
-		if r.status == doctorFail {
+		if r.Status == doctorFail {
 			hasFail = true
 		}
 	}
@@ -153,6 +157,10 @@ func TestUT_DoctorCheckLibraries_TemplateNotAccessible(t *testing.T) {
 // ===========================================================================
 
 func TestUT_DoctorCheckLibraries_EmptyRegistry(t *testing.T) {
+	// library.New (called by doctorCheckLibraries) also builds a resolver
+	// that touches $HOME/.tag/cache, so HOME must be isolated too, not just
+	// XDG_DATA_HOME. Not parallel: t.Setenv.
+	t.Setenv("HOME", t.TempDir())
 	xdgBase := t.TempDir()
 	tagDataDir := filepath.Join(xdgBase, "tag")
 	require.NoError(t, os.MkdirAll(tagDataDir, 0o750))
@@ -167,8 +175,8 @@ func TestUT_DoctorCheckLibraries_EmptyRegistry(t *testing.T) {
 
 	results := doctorCheckLibraries()
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorPass, results[0].status)
-	assert.Contains(t, results[0].label, "none installed")
+	assert.Equal(t, doctorPass, results[0].Status)
+	assert.Contains(t, results[0].Label, "none installed")
 }
 
 // ===========================================================================
@@ -337,7 +345,7 @@ func TestUT_DoctorCheckTemplates_ReadDirError(t *testing.T) {
 
 	results := doctorCheckTemplates(dir)
 	require.NotEmpty(t, results)
-	assert.Equal(t, doctorFail, results[0].status)
+	assert.Equal(t, doctorFail, results[0].Status)
 }
 
 // ===========================================================================
@@ -349,7 +357,7 @@ func TestUT_DoctorCheckTemplates_ReadDirError(t *testing.T) {
 func TestUT_DoctorCheckGit_ReturnsLabelWithGitInstalled(t *testing.T) {
 	t.Parallel()
 	result := doctorCheckGit()
-	assert.Equal(t, "Git installed", result.label)
+	assert.Equal(t, "Git installed", result.Label)
 }
 
 // ===========================================================================
@@ -357,6 +365,13 @@ func TestUT_DoctorCheckGit_ReturnsLabelWithGitInstalled(t *testing.T) {
 // ===========================================================================
 
 func TestUT_DoctorAction_WarnExitCode_FromProjectCheck(t *testing.T) {
+	// doctorAction -> doctorCheckLibraries reads $HOME/$XDG_DATA_HOME
+	// directly, bypassing the overridable newLocalLibrary var, so without
+	// seedHome this would read the developer's real library and touch their
+	// real ~/.tag/cache. Not parallel: seedHome and t.Setenv below mutate
+	// process env.
+	seedHome(t)
+
 	// In a temp dir with no .tag/ → project check warns
 	dir := t.TempDir()
 	origDir, err := os.Getwd()
@@ -367,7 +382,7 @@ func TestUT_DoctorAction_WarnExitCode_FromProjectCheck(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "test-token")
 
 	var buf bytes.Buffer
-	err = doctorAction(context.Background(), &buf, "dev")
+	err = doctorAction(context.Background(), &buf, "dev", formatText)
 	// Should warn (no .tag/ directory)
 	if err != nil {
 		assert.Contains(t, err.Error(), "warning")

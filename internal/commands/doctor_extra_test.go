@@ -17,8 +17,8 @@ func TestUT_DoctorCheckGit_PassWhenGitInstalled(t *testing.T) {
 
 	result := doctorCheckGit()
 	// Git is installed in the test environment.
-	assert.Equal(t, doctorPass, result.status)
-	assert.Equal(t, "Git installed", result.label)
+	assert.Equal(t, doctorPass, result.Status)
+	assert.Equal(t, "Git installed", result.Label)
 }
 
 func TestUT_DoctorCheckGitHubToken_WarnWhenUnset(t *testing.T) {
@@ -26,15 +26,15 @@ func TestUT_DoctorCheckGitHubToken_WarnWhenUnset(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "")
 
 	result := doctorCheckGitHubToken()
-	assert.Equal(t, doctorWarn, result.status)
-	assert.Contains(t, result.message, "not set")
+	assert.Equal(t, doctorWarn, result.Status)
+	assert.Contains(t, result.Message, "not set")
 }
 
 func TestUT_DoctorCheckGitHubToken_PassWhenSet(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_test123")
 
 	result := doctorCheckGitHubToken()
-	assert.Equal(t, doctorPass, result.status)
+	assert.Equal(t, doctorPass, result.Status)
 }
 
 func TestUT_DoctorCheckSubdir_Exists(t *testing.T) {
@@ -46,7 +46,7 @@ func TestUT_DoctorCheckSubdir_Exists(t *testing.T) {
 
 	results := doctorCheckSubdir(dir, sub, "test-label")
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorPass, results[0].status)
+	assert.Equal(t, doctorPass, results[0].Status)
 }
 
 func TestUT_DoctorCheckSubdir_Missing(t *testing.T) {
@@ -56,8 +56,8 @@ func TestUT_DoctorCheckSubdir_Missing(t *testing.T) {
 
 	results := doctorCheckSubdir(dir, "nope", "test-label")
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorWarn, results[0].status)
-	assert.Contains(t, results[0].message, "not found")
+	assert.Equal(t, doctorWarn, results[0].Status)
+	assert.Contains(t, results[0].Message, "not found")
 }
 
 func TestUT_DoctorCheckProject_TagDirNotADir(t *testing.T) {
@@ -69,8 +69,8 @@ func TestUT_DoctorCheckProject_TagDirNotADir(t *testing.T) {
 
 	results := doctorCheckProject(dir)
 	require.NotEmpty(t, results)
-	assert.Equal(t, doctorFail, results[0].status)
-	assert.Contains(t, results[0].message, "not a directory")
+	assert.Equal(t, doctorFail, results[0].Status)
+	assert.Contains(t, results[0].Message, "not a directory")
 }
 
 func TestUT_DoctorCheckProject_WithAllSubdirs(t *testing.T) {
@@ -83,7 +83,7 @@ func TestUT_DoctorCheckProject_WithAllSubdirs(t *testing.T) {
 
 	results := doctorCheckProject(dir)
 	for _, r := range results {
-		assert.Equal(t, doctorPass, r.status, "expected pass for %s", r.label)
+		assert.Equal(t, doctorPass, r.Status, "expected pass for %s", r.Label)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestUT_PrintDoctorResults_FormatsCorrectly(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	results := []doctorResult{
+	results := []DoctorResult{
 		doctorResultPass("check-ok"),
 		doctorResultWarn("check-warn", "something odd"),
 		doctorResultFail("check-fail", "broken"),
@@ -111,23 +111,23 @@ func TestUT_DoctorCheckTAGVersion_DevBuild(t *testing.T) {
 	t.Parallel()
 
 	result := doctorCheckTAGVersion(t.Context(), "dev")
-	assert.Equal(t, doctorPass, result.status)
-	assert.Contains(t, result.label, "dev")
+	assert.Equal(t, doctorPass, result.Status)
+	assert.Contains(t, result.Label, "dev")
 }
 
 func TestUT_DoctorResultConstructors(t *testing.T) {
 	t.Parallel()
 
 	pass := doctorResultPass("ok")
-	assert.Equal(t, doctorPass, pass.status)
-	assert.Equal(t, "ok", pass.label)
-	assert.Empty(t, pass.message)
+	assert.Equal(t, doctorPass, pass.Status)
+	assert.Equal(t, "ok", pass.Label)
+	assert.Empty(t, pass.Message)
 
 	warn := doctorResultWarn("w", "msg")
-	assert.Equal(t, doctorWarn, warn.status)
-	assert.Equal(t, "msg", warn.message)
+	assert.Equal(t, doctorWarn, warn.Status)
+	assert.Equal(t, "msg", warn.Message)
 
 	fail := doctorResultFail("f", "err")
-	assert.Equal(t, doctorFail, fail.status)
-	assert.Equal(t, "err", fail.message)
+	assert.Equal(t, doctorFail, fail.Status)
+	assert.Equal(t, "err", fail.Message)
 }

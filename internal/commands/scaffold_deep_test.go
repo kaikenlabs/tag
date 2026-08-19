@@ -324,6 +324,13 @@ func TestUT_CompleteGeneratorNames_WithLocalPath(t *testing.T) {
 func setupFakeLibraryMultiple(t *testing.T, names []string) string {
 	t.Helper()
 
+	// Isolate HOME as well as the library dir. A scaffold driven through
+	// scaffoldAction ends in replay.Save, whose getReplayDir resolves
+	// os.UserHomeDir() directly (internal/replay/save.go) — with the real HOME
+	// every such test dropped a file into the developer's ~/.tag/replay, which
+	// is how hundreds accumulated there.
+	t.Setenv("HOME", t.TempDir())
+
 	dataDir := t.TempDir()
 
 	entries := make(map[string]*library.Entry, len(names))

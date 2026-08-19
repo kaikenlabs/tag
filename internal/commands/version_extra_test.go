@@ -21,9 +21,10 @@ func TestUT_VersionCommand_Structure(t *testing.T) {
 	assert.NotEmpty(t, cmd.Description)
 	assert.NotNil(t, cmd.Action)
 
-	// Check the --check flag exists
-	require.Len(t, cmd.Flags, 1)
+	// Check the --check and --format flags exist
+	require.Len(t, cmd.Flags, 2)
 	assert.Equal(t, "check", cmd.Flags[0].Names()[0])
+	assert.Equal(t, "format", cmd.Flags[1].Names()[0])
 }
 
 func TestUT_VersionCheckAction_NetworkError(t *testing.T) {

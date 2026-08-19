@@ -396,9 +396,16 @@ List all available generators and bundles for the current project.
 ```bash
 tag template list
 tag template ls    # alias
+tag template list --all             # include generators/bundles with unmet requirements
+tag template list --format json     # Machine-readable output
 ```
 
-This is equivalent to `tag generate list` — both show the same output.
+This is equivalent to `tag generate list` — both show the same output, in both formats.
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Show all generators/bundles, including those with unmet requirements |
+| `--format <fmt>` | Output format: `text` (default) or `json` |
 
 Output shows generators grouped by source (template library vs local project) and bundles.
 
@@ -420,6 +427,27 @@ Generators for this project (template: gh:acme/nextjs-starter@v1.2.0)
 
 Run: tag generate <name> <target> [args]
 ```
+
+**Machine-readable output:**
+
+```bash
+tag template list --format json
+```
+
+```json
+{
+  "generators": [
+    { "name": "component", "description": "Create a React component", "requirements_met": true }
+  ],
+  "bundles": [
+    { "name": "feature", "description": "Component + page + test (template)", "generators": ["component", "page"], "requirements_met": true }
+  ]
+}
+```
+
+`generators` and `bundles` are always arrays, `[]` when empty, never `null`. A generator or bundle with unmet requirements is omitted unless `--all` is passed, in which case it appears with `requirements_met: false` — the JSON equivalent of the text output's `[requires: x, y]` suffix.
+
+There is deliberately no per-generator `"bundle"` field: the data model records which generators belong to a bundle, not the reverse, so a single owning bundle can't be substantiated. Which bundle owns a generator is derivable from `bundles[].generators`.
 
 ## See Also
 

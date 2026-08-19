@@ -18,10 +18,15 @@ import (
 )
 
 func TestUT_DoctorAction_AllSectionsPresent(t *testing.T) {
+	// doctorAction -> doctorCheckLibraries reads $HOME/$XDG_DATA_HOME directly
+	// (it does not go through the overridable newLocalLibrary var), so without
+	// seedHome this would read the developer's real library and touch their
+	// real ~/.tag/cache. Not parallel: seedHome uses t.Setenv.
+	seedHome(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")
 
 	var buf bytes.Buffer
-	_ = doctorAction(context.Background(), &buf, "dev")
+	_ = doctorAction(context.Background(), &buf, "dev", formatText)
 
 	out := buf.String()
 	assert.Contains(t, out, "ENVIRONMENT")
@@ -31,6 +36,9 @@ func TestUT_DoctorAction_AllSectionsPresent(t *testing.T) {
 }
 
 func TestUT_DoctorAction_FailExitCode(t *testing.T) {
+	// Not parallel: seedHome and os.Chdir below use t.Setenv/mutate process state.
+	seedHome(t)
+
 	// Create a directory where .tag is a file (causing a fail)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, types.TemplatesDir), []byte("x"), 0o644))
@@ -43,7 +51,7 @@ func TestUT_DoctorAction_FailExitCode(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "test-token")
 
 	var buf bytes.Buffer
-	err = doctorAction(context.Background(), &buf, "dev")
+	err = doctorAction(context.Background(), &buf, "dev", formatText)
 	require.Error(t, err)
 
 	var cmdErr *app.CommandError
@@ -80,7 +88,7 @@ func TestUT_DoctorCheckTemplates_ValidTemplate(t *testing.T) {
 	// At least one result should reference the template
 	var found bool
 	for _, r := range results {
-		if r.status == doctorPass || r.status == doctorWarn {
+		if r.Status == doctorPass || r.Status == doctorWarn {
 			found = true
 		}
 	}
@@ -97,8 +105,8 @@ func TestUT_DoctorCheckTemplates_SkipsDirsWithoutConfig(t *testing.T) {
 
 	results := doctorCheckTemplates(dir)
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorPass, results[0].status)
-	assert.Contains(t, results[0].label, "none found")
+	assert.Equal(t, doctorPass, results[0].Status)
+	assert.Contains(t, results[0].Label, "none found")
 }
 
 func TestUT_DoctorCheckTemplates_SkipsUnderscoreDirs(t *testing.T) {
@@ -112,14 +120,25 @@ func TestUT_DoctorCheckTemplates_SkipsUnderscoreDirs(t *testing.T) {
 
 	results := doctorCheckTemplates(dir)
 	require.Len(t, results, 1)
-	assert.Contains(t, results[0].label, "none found")
+	assert.Contains(t, results[0].Label, "none found")
 }
 
 func TestUT_DoctorCheckLibraries_WithInstalledTemplate(t *testing.T) {
-	// Cannot use t.Parallel() — uses setupFakeLibrary via newLocalLibrary override
-	dataDir := t.TempDir()
+	// doctorCheckLibraries does NOT go through the overridable newLocalLibrary
+	// var — it calls xdg.DataHome()+library.New directly, and library.New also
+	// builds a resolver that touches $HOME/.tag/cache. seedHome isolates both.
+	// Not parallel: seedHome uses t.Setenv.
+	//
+	// xdg.DataHome() resolves to $XDG_DATA_HOME/tag, so the registry and
+	// template dir must live under seedHome's home/data/tag, not directly
+	// under home/data — the previous version of this test wrote the registry
+	// one level too shallow, so doctorCheckLibraries never saw it, silently
+	// fell back to the "no libraries installed" pass branch, and the
+	// "expected pass" assertion passed for the wrong reason.
+	home := seedHome(t)
+	libDataDir := filepath.Join(home, "data", "tag")
 
-	tmplDir := filepath.Join(dataDir, "templates", "test-lib")
+	tmplDir := filepath.Join(libDataDir, "templates", "test-lib")
 	require.NoError(t, os.MkdirAll(tmplDir, 0o750))
 
 	reg := library.Registry{
@@ -134,17 +153,14 @@ func TestUT_DoctorCheckLibraries_WithInstalledTemplate(t *testing.T) {
 	}
 	regData, err := json.Marshal(reg)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "library.json"), regData, 0o644))
-
-	// Override XDG data home to use our temp dir
-	t.Setenv("XDG_DATA_HOME", dataDir)
+	require.NoError(t, os.WriteFile(filepath.Join(libDataDir, "library.json"), regData, 0o644))
 
 	results := doctorCheckLibraries()
 	require.NotEmpty(t, results)
 
 	var foundPass bool
 	for _, r := range results {
-		if r.status == doctorPass {
+		if r.Status == doctorPass {
 			foundPass = true
 		}
 	}
@@ -159,7 +175,7 @@ func TestUT_DoctorCheckEnvironment_IncludesAllChecks(t *testing.T) {
 
 	labels := make([]string, len(results))
 	for i, r := range results {
-		labels[i] = r.label
+		labels[i] = r.Label
 	}
 	assert.Contains(t, labels[0], "Git")
 	assert.Contains(t, labels[1], "GITHUB_TOKEN")

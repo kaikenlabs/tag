@@ -674,6 +674,10 @@ generator "service" requires the following variables to be enabled:
 
 `tag generate list` and `tag template list` hide items with unmet requirements by default. Use `--all` to show everything. Items with requirements display them as `[requires: x, y]` in the list output.
 
+`tag generate list --format json` and `tag template list --format json` emit the identical shape: `{"generators":[{"name","description","requirements_met"}],"bundles":[{"name","description","generators":[...],"requirements_met"}]}`. `generators` and `bundles` are always arrays, `[]` when empty, never `null`. A hidden (unmet-requirements) entry is absent from the array exactly as it is from the text listing; `--all` includes it with `requirements_met:false`, mirroring the text output's `[requires: x]` suffix.
+
+There is deliberately no per-generator `"bundle"` field. The data model records bundle → members, never the reverse, so a single owning bundle can't be substantiated — a generator may belong to several bundles or none. Which bundle owns a generator is derivable exactly from `bundles[].generators`, the same reasoning that keeps a `source` field out of `dialect list --format json`.
+
 ### Generator Info
 
 ```bash
@@ -761,6 +765,19 @@ tag undo --partial                     # Revert unmodified files, skip conflicti
 **Manifest location**: `.tag/history.json` — generated automatically, do not edit manually.
 
 **Backup location**: `.tag/history/backups/<generation-id>/` — stores pre-modification copies for inject/append operations.
+
+### Environment Diagnostics
+
+```bash
+tag doctor                             # Human-readable health report
+tag doctor --format json               # Machine-readable output ({"status","sections":[{"name","checks":[{"label","status","message"}]}]})
+```
+
+Runs checks across four sections — ENVIRONMENT, PROJECT, TEMPLATES, LIBRARIES — each check reporting a `pass`, `warn`, or `fail` verdict. `status` always serialises as one of those three strings, never as a number. `message` is omitted from a check's JSON when empty.
+
+The top-level `status` is the worst status across every check, so a CI job can gate on that one field instead of walking `sections`.
+
+Exit codes are unchanged by `--format` and fire after the JSON is written, so a JSON consumer always gets both a parseable body and the correct status: `0` = all checks pass, `1` = one or more warnings, `2` = one or more failures.
 
 ### Template Lifecycle (Check, Diff, Update)
 
@@ -945,3 +962,18 @@ tag version --check                    # Check if update available
 ```
 
 Downloads the platform-appropriate binary from GitHub Releases, verifies its SHA256 checksum, and replaces the current binary in-place.
+
+### Version
+
+```bash
+tag version                            # Print version only, no network call
+tag version --check                    # Check for updates (network access required)
+tag version --format json              # {"version","dev_build"}
+tag version --check --format json      # Adds "latest" and "update_available" once the check runs
+```
+
+Without `--check`, the JSON is just `{"version","dev_build"}` — `latest` and `update_available` are omitted entirely, not `false`, because no check ran to produce a value for them. Plain `tag version --format json` never makes a network call.
+
+A dev build (empty version, `"dev"`, or a `"dev-"` prefix) reports `dev_build:true`. Under `--check`, a dev build answers `update_available:false` without touching the network — there is no real "latest" to compare a dev build against — and `latest` stays omitted.
+
+If `--check` cannot reach the network, the command aborts: a text error on stderr, a non-zero exit, and no JSON at all. It does not downgrade to reporting the failure inline (e.g. a `check_error` field) — deliberately, so a JSON consumer never has to distinguish "checked, nothing found" from "the check itself failed" inside the document.

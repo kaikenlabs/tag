@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -32,6 +33,11 @@ import (
 //     were captured by building `main` in a git worktree and running its binary
 //     against the same fixture template, then asserting the refactored code
 //     reproduces those bytes.
+//   - The ten #347/#348/#349 fixtures were captured in a baseline commit before
+//     those stories touched the source, and then independently re-verified
+//     against a `main` worktree build (binary for version/doctor, a probe test
+//     calling generateList and versionCheckAction for the rest). Every one
+//     matched byte-for-byte.
 //
 // A later commit that changes a fixture is visible as a testdata diff in
 // review — that is the whole point of the "text output stays byte-identical"
@@ -101,10 +107,20 @@ func newTestApp(cmd *cli.Command, out io.Writer) *cli.App {
 	}
 }
 
+// goldenDir is resolved absolutely: some golden tests t.Chdir into a temp
+// directory, which would otherwise send a relative testdata path there.
+func goldenDir() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("cannot resolve golden fixture directory")
+	}
+	return filepath.Join(filepath.Dir(file), "testdata", "golden")
+}
+
 func assertGolden(t *testing.T, name, got string) {
 	t.Helper()
 
-	path := filepath.Join("testdata", "golden", name+".txt")
+	path := filepath.Join(goldenDir(), name+".txt")
 	if *updateGoldenText {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
 		require.NoError(t, os.WriteFile(path, []byte(got), 0o600))

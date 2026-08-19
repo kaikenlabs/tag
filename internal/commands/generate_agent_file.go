@@ -100,7 +100,7 @@ func buildAgentContent(lists generatorLists) string {
 	b.WriteString("| Name | Type | Description |\n")
 	b.WriteString("|------|------|-------------|\n")
 
-	writeRows := func(items []generatorInfo, itemType string) {
+	writeRows := func(items []GeneratorInfo, itemType string) {
 		for _, g := range items {
 			b.WriteString("| ")
 			b.WriteString(g.Name)

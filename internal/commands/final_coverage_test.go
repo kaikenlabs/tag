@@ -496,7 +496,7 @@ func TestUT_UpdateTemplateAction_MutuallyExclusiveFlags_OursTheirs(t *testing.T)
 func TestUT_PrintDoctorResults_AllStatuses(t *testing.T) {
 	t.Parallel()
 
-	results := []doctorResult{
+	results := []DoctorResult{
 		doctorResultPass("check A"),
 		doctorResultWarn("check B", "warning message"),
 		doctorResultFail("check C", "failure message"),
@@ -518,8 +518,8 @@ func TestUT_DoctorCheckProject_NoTagDir_Warn(t *testing.T) {
 
 	results := doctorCheckProject(t.TempDir())
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorWarn, results[0].status)
-	assert.Contains(t, results[0].label, ".tag/ directory")
+	assert.Equal(t, doctorWarn, results[0].Status)
+	assert.Contains(t, results[0].Label, ".tag/ directory")
 }
 
 func TestUT_DoctorCheckProject_TagDirIsFile(t *testing.T) {
@@ -530,8 +530,8 @@ func TestUT_DoctorCheckProject_TagDirIsFile(t *testing.T) {
 
 	results := doctorCheckProject(dir)
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorFail, results[0].status)
-	assert.Contains(t, results[0].message, "not a directory")
+	assert.Equal(t, doctorFail, results[0].Status)
+	assert.Contains(t, results[0].Message, "not a directory")
 }
 
 func TestUT_DoctorCheckProject_WithSharedAndBundles(t *testing.T) {
@@ -546,7 +546,7 @@ func TestUT_DoctorCheckProject_WithSharedAndBundles(t *testing.T) {
 	require.GreaterOrEqual(t, len(results), 3)
 
 	// First should pass (main .tag dir)
-	assert.Equal(t, doctorPass, results[0].status)
+	assert.Equal(t, doctorPass, results[0].Status)
 }
 
 func TestUT_DoctorCheckSubdir_ExistsPass(t *testing.T) {
@@ -557,7 +557,7 @@ func TestUT_DoctorCheckSubdir_ExistsPass(t *testing.T) {
 
 	results := doctorCheckSubdir(dir, "sub", "sub/")
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorPass, results[0].status)
+	assert.Equal(t, doctorPass, results[0].Status)
 }
 
 func TestUT_DoctorCheckSubdir_NotExist(t *testing.T) {
@@ -565,7 +565,7 @@ func TestUT_DoctorCheckSubdir_NotExist(t *testing.T) {
 
 	results := doctorCheckSubdir(t.TempDir(), "missing", "missing/")
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorWarn, results[0].status)
+	assert.Equal(t, doctorWarn, results[0].Status)
 }
 
 func TestUT_DoctorCheckTemplates_NoTagDir_Skipped(t *testing.T) {
@@ -573,16 +573,23 @@ func TestUT_DoctorCheckTemplates_NoTagDir_Skipped(t *testing.T) {
 
 	results := doctorCheckTemplates(t.TempDir())
 	require.Len(t, results, 1)
-	assert.Equal(t, doctorPass, results[0].status)
-	assert.Contains(t, results[0].label, "no .tag/ found")
+	assert.Equal(t, doctorPass, results[0].Status)
+	assert.Contains(t, results[0].Label, "no .tag/ found")
 }
 
 func TestUT_DoctorAction_WarnExitCode(t *testing.T) {
+	// doctorAction -> doctorCheckLibraries reads $HOME/$XDG_DATA_HOME
+	// directly, bypassing the overridable newLocalLibrary var, so without
+	// seedHome this would read the developer's real library and touch their
+	// real ~/.tag/cache. Not parallel: seedHome and t.Setenv below mutate
+	// process env.
+	seedHome(t)
+
 	// Doctor with GITHUB_TOKEN unset should produce a warning
 	t.Setenv("GITHUB_TOKEN", "")
 
 	var buf bytes.Buffer
-	err := doctorAction(context.Background(), &buf, "dev")
+	err := doctorAction(context.Background(), &buf, "dev", formatText)
 	if err != nil {
 		var cmdErr *app.CommandError
 		if errors.As(err, &cmdErr) {
