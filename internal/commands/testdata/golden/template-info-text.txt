@@ -1,0 +1,16 @@
+Name:         go-api
+Version:      1.2.0
+Description:  Go HTTP API scaffold
+
+Variables:
+  license              (choice: [MIT Apache-2.0 GPL-3.0] +1 more)
+  maintainer           (string)
+  project_name         = my-app
+  use_docker           (boolean)
+
+Hooks:
+  pre_scaffold:
+    - echo pre
+  post_scaffold:
+    - go mod tidy
+    - git init
