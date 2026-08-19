@@ -430,4 +430,17 @@ func TestUT_TextGolden(t *testing.T) {
 		require.NoError(t, run.Err)
 		assertGolden(t, "template-info-text", run.All())
 	})
+
+	// diff-up-to-date pins the "no changes" text branch, which #351 edits (it
+	// now writes through cmdOut(c) instead of os.Stdout directly). Provenance
+	// per this file's header comment: captured from `git show
+	// HEAD:internal/commands/diff.go`'s literal string, not from the
+	// modified working tree — that source prints exactly "Already up to
+	// date." followed by a newline, with no other output.
+	t.Run("diff-up-to-date", func(t *testing.T) {
+		dir := seedProject(t, "abc1234567890", "abc1234567890")
+		run := runCLICapturingStdout(t, DiffCommand(), "diff", "--dir", dir)
+		require.NoError(t, run.Err)
+		assertGolden(t, "diff-up-to-date", run.All())
+	})
 }

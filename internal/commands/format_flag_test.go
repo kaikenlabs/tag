@@ -158,6 +158,7 @@ func TestUT_TrailingFormatFlag_IsParsed(t *testing.T) {
 		{"test", TestCommand, []string{"test", dir, "--format", "xml"}},
 		{"dialect show", dialectShowCommand, []string{"show", "go", "--format", "xml"}},
 		{"lib search", libSearchCommand, []string{"search", "foo", "--format", "xml"}},
+		{"template info", templateInfoCommand, []string{"info", dir, "--format", "xml"}},
 	}
 
 	for _, tt := range tests {
@@ -194,6 +195,7 @@ func TestUT_LeadingFormatFlag_StillWorks(t *testing.T) {
 		{"test", TestCommand, []string{"test", "--format", "xml", dir}},
 		{"dialect show", dialectShowCommand, []string{"show", "--format", "xml", "go"}},
 		{"lib search", libSearchCommand, []string{"search", "--format", "xml", "foo"}},
+		{"template info", templateInfoCommand, []string{"info", "--format", "xml", dir}},
 	}
 
 	for _, tt := range tests {

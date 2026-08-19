@@ -258,6 +258,83 @@ func TestUT_FormatDiff_ColorStat(t *testing.T) {
 // ---------------------------------------------------------------------------
 // writeSimpleDiff
 // ---------------------------------------------------------------------------
+// simpleDiffLines — the pure primitive writeSimpleDiff prints from, and that
+// Summarize (ticket #351) counts from, so "the diff is computed once" is an
+// observable property rather than a claim.
+// ---------------------------------------------------------------------------
+
+func TestUT_SimpleDiffLines_BothEmpty(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, simpleDiffLines(nil, nil))
+}
+
+func TestUT_SimpleDiffLines_AddedLines(t *testing.T) {
+	t.Parallel()
+
+	got := simpleDiffLines(nil, []string{"alpha", "beta"})
+	assert.Equal(t, []diffLine{
+		{Sign: '+', Text: "alpha"},
+		{Sign: '+', Text: "beta"},
+	}, got)
+}
+
+func TestUT_SimpleDiffLines_RemovedLines(t *testing.T) {
+	t.Parallel()
+
+	got := simpleDiffLines([]string{"old1", "old2"}, nil)
+	assert.Equal(t, []diffLine{
+		{Sign: '-', Text: "old1"},
+		{Sign: '-', Text: "old2"},
+	}, got)
+}
+
+func TestUT_SimpleDiffLines_MixedChanges(t *testing.T) {
+	t.Parallel()
+
+	got := simpleDiffLines([]string{"keep", "remove"}, []string{"keep", "add"})
+	assert.Equal(t, []diffLine{
+		{Sign: '-', Text: "remove"},
+		{Sign: '+', Text: "add"},
+	}, got)
+}
+
+func TestUT_SimpleDiffLines_DuplicateLines(t *testing.T) {
+	t.Parallel()
+
+	// One "dup" is matched; the other plus "only_old" are removed.
+	got := simpleDiffLines(
+		[]string{"dup", "dup", "only_old"},
+		[]string{"dup", "only_new"},
+	)
+	assert.Equal(t, []diffLine{
+		{Sign: '-', Text: "dup"},
+		{Sign: '-', Text: "only_old"},
+		{Sign: '+', Text: "only_new"},
+	}, got)
+}
+
+// TestUT_SimpleDiffLines_OrderingContract pins the exact ordering contract:
+// removals in old-file order first, then additions in new-file order,
+// duplicates matched by multiset count. This is the highest drift-risk
+// behavior in the whole ticket — a refactor that sorts, dedupes, or
+// interleaves the two passes would still pass every other test here.
+func TestUT_SimpleDiffLines_OrderingContract(t *testing.T) {
+	t.Parallel()
+
+	old := []string{"z-remove", "a-remove", "dup", "dup"}
+	updated := []string{"z-add", "a-add", "dup"}
+
+	got := simpleDiffLines(old, updated)
+	assert.Equal(t, []diffLine{
+		{Sign: '-', Text: "z-remove"},
+		{Sign: '-', Text: "a-remove"},
+		{Sign: '-', Text: "dup"},
+		{Sign: '+', Text: "z-add"},
+		{Sign: '+', Text: "a-add"},
+	}, got)
+}
+
+// ---------------------------------------------------------------------------
 
 func TestUT_WriteSimpleDiff_BothEmpty(t *testing.T) {
 	t.Parallel()
