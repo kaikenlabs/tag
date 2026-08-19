@@ -1,0 +1,4 @@
+NAME                 SOURCE                         VERSION    DESCRIPTION
+----                 ------                         -------    -----------
+go-api               gh:acme/go-api                 v1.2.0     Production Go HTTP service with obser...
+py-svc               gh:acme/py-svc                 -          

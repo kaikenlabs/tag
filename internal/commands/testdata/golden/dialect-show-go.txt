@@ -1,0 +1,20 @@
+Dialect: go (built-in)
+Go language type mappings
+
+CANONICAL   TARGET
+bool        bool
+byte        byte
+bytes       []byte
+date        time.Time
+datetime    time.Time
+decimal     decimal.Decimal
+float       float64
+float32     float32
+float64     float64
+int         int
+int32       int32
+int64       int64
+json        json.RawMessage
+string      string
+text        string
+uuid        string

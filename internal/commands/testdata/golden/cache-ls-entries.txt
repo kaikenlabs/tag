@@ -1,0 +1,5 @@
+KEY                                      VERSION      FETCHED              EXPIRES
+---                                      -------      -------              -------
+go-api                                   v1.2.0       2024-03-15T09:30:00Z 2099-01-01T00:00:00Z
+pinned                                   v0.1.0       2024-03-15T09:30:00Z never
+py-svc                                   -            2024-03-15T09:30:00Z expired
