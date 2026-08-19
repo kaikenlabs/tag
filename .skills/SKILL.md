@@ -265,7 +265,7 @@ my-project/
 |---------|-------------|
 | `tag scaffold [template] [name]` | Create project (no args = picker). Alias: `tag s` |
 | `tag generate <gen-or-bundle> <name>` | Run generator or bundle. Alias: `tag g` |
-| `tag generate list [--all]` | List generators and bundles. Alias: `tag g list` |
+| `tag generate list [--all]` | List generators and bundles (`--format json`). Alias: `tag g list` |
 | `tag generate info <name>` | Show JSON metadata for a generator or bundle |
 | `tag generate agent-file <format>` | Generate AI agent reference file |
 | `tag template init` | Initialize `.tag/` structure |
@@ -288,13 +288,14 @@ my-project/
 | `tag undo` | Revert the last generation |
 | `tag undo --list` | Show generation history |
 | `tag undo --id <id>` | Revert a specific generation |
+| `tag doctor` | Diagnose environment/project/template/library health (`--format json`). Exit 0/1/2 = pass/warn/fail |
 | `tag check [--quiet] [--ref REF]` | Check if upstream template changed (`--format json`). Exit 0 = up-to-date, 1 = updates available |
 | `tag diff [--stat] [--no-color]` | Show what would change if you ran `tag update` (read-only) |
 | `tag update [--set k=v] [--skip-hooks]` | Apply upstream template changes via 3-way merge |
 | `tag update --continue` | Resume after manual conflict resolution |
 | `tag update --abort` | Abort update and restore from backup |
 | `tag upgrade` | Self-upgrade to latest release |
-| `tag version [--check]` | Print version, check for updates |
+| `tag version [--check]` | Print version, check for updates (`--format json`) |
 
 ### Key Flags
 
@@ -320,7 +321,7 @@ my-project/
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |
 | `--force` | scaffold | Overwrite existing output |
-| `--format text\|json` | check, cache ls, lib ls, lib search, dialect list, dialect show, template lint, template variables, template graph (also `dot`), test | Output format (default: `text`). Unknown value = usage error, exit 2 |
+| `--format text\|json` | doctor, version, check, cache ls, lib ls, lib search, dialect list, dialect show, template lint, template variables, template graph (also `dot`), generate list, template list, test | Output format (default: `text`). Unknown value = usage error, exit 2 |
 
 ## Pitfalls
 

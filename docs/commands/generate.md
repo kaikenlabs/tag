@@ -59,6 +59,7 @@ When a project was scaffolded from a template, the scaffold-time variables (e.g.
 | `--no-hooks` | | Skip execution of pre and post hooks |
 | `--dry-run` | `-d` | Preview output without writing files |
 | `--all` | | (`list` subcommand only) Show all generators/bundles, including those with unmet requirements |
+| `--format <fmt>` | | (`list` subcommand only) Output format: `text` (default) or `json` |
 
 ## Global Flags
 
@@ -77,9 +78,10 @@ List all available generators and bundles for the current project.
 tag generate list
 tag generate ls    # alias
 tag generate list --all   # include generators/bundles with unmet requirements
+tag generate list --format json   # Machine-readable output
 ```
 
-This is equivalent to `tag template list` — both show the same output.
+This is equivalent to `tag template list` — both show the same output, in both formats.
 
 By default, generators and bundles whose `requires` prerequisites are not met by the current `.tagconfig.json` variables are hidden. Pass `--all` to show everything.
 
@@ -102,6 +104,27 @@ Generators for this project (template: gh:acme/nextjs-starter@v1.2.0)
 
 Run: tag generate [flags] <name> <target>
 ```
+
+**Machine-readable output:**
+
+```bash
+tag generate list --format json
+```
+
+```json
+{
+  "generators": [
+    { "name": "component", "description": "Create a React component", "requirements_met": true }
+  ],
+  "bundles": [
+    { "name": "feature", "description": "Component + page + test (template)", "generators": ["component", "page"], "requirements_met": true }
+  ]
+}
+```
+
+`generators` and `bundles` are always arrays, `[]` when empty, never `null`. A generator or bundle with unmet requirements is omitted unless `--all` is passed, in which case it appears with `requirements_met: false` — the JSON equivalent of the text output's `[requires: x, y]` suffix.
+
+There is deliberately no per-generator `"bundle"` field. The data model records which generators belong to a bundle, not the reverse, so a single owning bundle can't be substantiated — a generator may belong to several bundles or none. Which bundle owns a generator is derivable from `bundles[].generators`.
 
 ## Examples
 
