@@ -271,6 +271,35 @@ func seedTemplate(t *testing.T) string {
 	return dir
 }
 
+// seedInfoTemplate writes a template carrying every section `template info`
+// prints: metadata, variables of each kind, and both hook phases. It
+// deliberately ships no README/HOWTO — glamour's rendering depends on
+// terminal detection, so a golden containing it would pin this machine rather
+// than this code. The doc path is covered separately by
+// TestUT_TemplateInfo_TextRendersDocsThroughGlamour.
+func seedInfoTemplate(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	cfg := `{
+  "name": "go-api",
+  "version": "1.2.0",
+  "description": "Go HTTP API scaffold",
+  "vars": {
+    "project_name": "my-app",
+    "use_docker": {"type": "boolean", "default": true},
+    "license": {"type": "choice", "options": ["MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause"]},
+    "maintainer": {"type": "string", "prompt": "Maintainer", "required": true}
+  },
+  "hooks": {
+    "pre_scaffold": ["echo pre"],
+    "post_scaffold": ["go mod tidy", "git init"]
+  }
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte(cfg), 0o600))
+	return dir
+}
+
 // --- the golden suite -----------------------------------------------------
 
 // TestUT_TextGolden pins the exact bytes of every text output path this wave
@@ -393,5 +422,25 @@ func TestUT_TextGolden(t *testing.T) {
 		run := runCLICapturingStdout(t, CheckCommand(), "check", "--dir", dir)
 		require.Error(t, run.Err)
 		assertGolden(t, "check-updates-available", run.All())
+	})
+	t.Run("template-info-text", func(t *testing.T) {
+		seedHome(t)
+		seedLibrary(t)
+		run := runCLICapturingStdout(t, templateInfoCommand(), "info", seedInfoTemplate(t))
+		require.NoError(t, run.Err)
+		assertGolden(t, "template-info-text", run.All())
+	})
+
+	// diff-up-to-date pins the "no changes" text branch, which #351 edits (it
+	// now writes through cmdOut(c) instead of os.Stdout directly). Provenance
+	// per this file's header comment: captured from `git show
+	// HEAD:internal/commands/diff.go`'s literal string, not from the
+	// modified working tree — that source prints exactly "Already up to
+	// date." followed by a newline, with no other output.
+	t.Run("diff-up-to-date", func(t *testing.T) {
+		dir := seedProject(t, "abc1234567890", "abc1234567890")
+		run := runCLICapturingStdout(t, DiffCommand(), "diff", "--dir", dir)
+		require.NoError(t, run.Err)
+		assertGolden(t, "diff-up-to-date", run.All())
 	})
 }

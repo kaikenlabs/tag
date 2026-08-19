@@ -176,9 +176,24 @@ func formatDiffstat(w io.Writer, results []MergeResult, color bool) {
 }
 
 // writeSimpleDiff writes a basic line diff (additions and removals).
-func writeSimpleDiff(w io.Writer, old, updated []string, color bool) {
-	// Simple approach: show removed then added lines.
-	// A production diff would use a proper LCS algorithm.
+// diffLine is one line of a simple multiset line diff, tagged with its sign
+// ('+' or '-'). It is the shared primitive between the text path
+// (writeSimpleDiff prints from it) and the --format json path
+// (templateupdate.Summarize counts from it), so their line counts cannot
+// drift apart.
+type diffLine struct {
+	Sign byte // '+' or '-'
+	Text string
+}
+
+// simpleDiffLines computes a basic line diff (additions and removals) between
+// old and updated, matching duplicate lines by multiset count.
+//
+// Ordering is a deliberate contract, not an implementation detail: removals
+// are emitted in old-file order first, then additions in new-file order. A
+// production diff would use a proper LCS algorithm; this exists only to
+// produce the same +/- lines the legacy formatter always has.
+func simpleDiffLines(old, updated []string) []diffLine {
 	oldSet := make(map[string]int)
 	for _, l := range old {
 		oldSet[l]++
@@ -188,28 +203,35 @@ func writeSimpleDiff(w io.Writer, old, updated []string, color bool) {
 		newSet[l]++
 	}
 
+	var lines []diffLine
 	for _, l := range old {
 		if newSet[l] <= 0 {
-			line := "-" + l
-			if color {
-				fmt.Fprintln(w, chalk.Red(line))
-			} else {
-				fmt.Fprintln(w, line)
-			}
+			lines = append(lines, diffLine{Sign: '-', Text: l})
 		} else {
 			newSet[l]--
 		}
 	}
 	for _, l := range updated {
 		if oldSet[l] <= 0 {
-			line := "+" + l
-			if color {
-				fmt.Fprintln(w, chalk.Green(line))
-			} else {
-				fmt.Fprintln(w, line)
-			}
+			lines = append(lines, diffLine{Sign: '+', Text: l})
 		} else {
 			oldSet[l]--
+		}
+	}
+	return lines
+}
+
+// writeSimpleDiff writes a basic line diff (additions and removals).
+func writeSimpleDiff(w io.Writer, old, updated []string, color bool) {
+	for _, dl := range simpleDiffLines(old, updated) {
+		line := string(dl.Sign) + dl.Text
+		switch {
+		case !color:
+			fmt.Fprintln(w, line)
+		case dl.Sign == '-':
+			fmt.Fprintln(w, chalk.Red(line))
+		default:
+			fmt.Fprintln(w, chalk.Green(line))
 		}
 	}
 }

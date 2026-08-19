@@ -1,0 +1,9 @@
+Template: gh:acme/go-api (abc1234 → def0987)
+
+ + cmd/main.go
+ - docs/old.md
+ ~ internal/svc.go
+ ! config.yaml
+ ~ logo.png
+
+1 file(s) added, 2 modified, 1 deleted, 1 conflicted

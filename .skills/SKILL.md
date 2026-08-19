@@ -271,7 +271,7 @@ my-project/
 | `tag template init` | Initialize `.tag/` structure |
 | `tag template new generator <name>` | Create generator (`--in-bundle`, `--lib`) |
 | `tag template new bundle <name>` | Create bundle (`--self-contained`, `--lib`) |
-| `tag template info <template>` | Show template details |
+| `tag template info <template>` | Show template details (`--format json`) |
 | `tag template lint [path]` | Validate template (schema, syntax, vars) (`--format json`) |
 | `tag template variables [path]` | Audit variable declarations vs usage (`--format json`, `--strict`) |
 | `tag template rename-var <old> <new> [path]` | Rename a variable across config and templates (`--dry-run`) |
@@ -290,7 +290,7 @@ my-project/
 | `tag undo --id <id>` | Revert a specific generation |
 | `tag doctor` | Diagnose environment/project/template/library health (`--format json`). Exit 0/1/2 = pass/warn/fail |
 | `tag check [--quiet] [--ref REF]` | Check if upstream template changed (`--format json`). Exit 0 = up-to-date, 1 = updates available |
-| `tag diff [--stat] [--no-color]` | Show what would change if you ran `tag update` (read-only) |
+| `tag diff [--stat] [--no-color]` | Show what would change if you ran `tag update` (read-only) (`--format json`) |
 | `tag update [--set k=v] [--skip-hooks]` | Apply upstream template changes via 3-way merge |
 | `tag update --continue` | Resume after manual conflict resolution |
 | `tag update --abort` | Abort update and restore from backup |
@@ -321,7 +321,7 @@ my-project/
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |
 | `--force` | scaffold | Overwrite existing output |
-| `--format text\|json` | doctor, version, check, cache ls, lib ls, lib search, dialect list, dialect show, template lint, template variables, template graph (also `dot`), generate list, template list, test | Output format (default: `text`). Unknown value = usage error, exit 2 |
+| `--format text\|json` | doctor, version, check, diff, cache ls, lib ls, lib search, dialect list, dialect show, template info, template lint, template variables, template graph (also `dot`), generate list, template list, test | Output format (default: `text`). Unknown value = usage error, exit 2 |
 
 ## Pitfalls
 

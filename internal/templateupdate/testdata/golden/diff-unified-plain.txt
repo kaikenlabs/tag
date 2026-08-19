@@ -1,0 +1,27 @@
+Template: gh:acme/go-api (abc1234 → def0987)
+
+--- /dev/null
++++ b/cmd/main.go
++package main
++
++func main() {}
++
+
+--- a/docs/old.md
++++ /dev/null
+-# Old
+-gone
+-
+
+--- a/internal/svc.go
++++ b/internal/svc.go
+-const B = 2
+-dup
+-dup
++const C = 3
++const D = 4
+
+⚠ config.yaml (conflict)
+--- a/logo.png
++++ b/logo.png
+

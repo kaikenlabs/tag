@@ -1,0 +1,47 @@
+{
+  "old_sha": "abc1234567890",
+  "new_sha": "def0987654321",
+  "source": "gh:acme/go-api",
+  "files": [
+    {
+      "path": "cmd/main.go",
+      "op": "add",
+      "conflicted": false,
+      "is_binary": false,
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/old.md",
+      "op": "delete",
+      "conflicted": false,
+      "is_binary": false,
+      "added": 0,
+      "deleted": 3
+    },
+    {
+      "path": "internal/svc.go",
+      "op": "update",
+      "conflicted": false,
+      "is_binary": false,
+      "added": 2,
+      "deleted": 3
+    },
+    {
+      "path": "config.yaml",
+      "op": "conflict",
+      "conflicted": true,
+      "is_binary": false,
+      "added": 0,
+      "deleted": 0
+    },
+    {
+      "path": "logo.png",
+      "op": "update",
+      "conflicted": false,
+      "is_binary": true,
+      "added": 0,
+      "deleted": 0
+    }
+  ]
+}

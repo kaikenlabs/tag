@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/urfave/cli/v2"
 
+	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -23,6 +24,7 @@ func templateInfoFlags() []cli.Flag {
 			Aliases: []string{"u"},
 			Usage:   "Force refresh of cached remote templates",
 		},
+		formatFlag(formatText, formatJSON),
 	}
 }
 
@@ -65,6 +67,14 @@ func infoAction(c *cli.Context) error {
 	if len(args) < 1 {
 		return app.UsageErrorf("template reference is required\n\nUsage: tag template info <template>")
 	}
+	if len(args) > 1 {
+		return app.UsageErrorf("expected exactly one template argument, got %d", len(args))
+	}
+
+	format, err := resolveFormat(c, formatText, formatJSON)
+	if err != nil {
+		return err
+	}
 
 	ref := args[0]
 
@@ -73,7 +83,23 @@ func infoAction(c *cli.Context) error {
 		return err
 	}
 
-	return displayTemplateInfo(os.Stdout, templateDir)
+	out := cmdOut(c)
+
+	if format == formatJSON {
+		config, loadErr := loadTemplateConfig(templateDir)
+		if loadErr != nil {
+			return loadErr
+		}
+		dto := buildTemplateInfoJSON(config,
+			docFileHasContent(templateDir, types.TemplateReadme),
+			docFileHasContent(templateDir, types.TemplateHowto))
+		if writeErr := jsonout.Write(out, dto); writeErr != nil {
+			return app.Errorf("write json: %w", writeErr)
+		}
+		return nil
+	}
+
+	return displayTemplateInfo(out, templateDir)
 }
 
 // resolveTemplateDir resolves a template reference to a directory path.
@@ -105,18 +131,9 @@ func resolveTemplateDir(c *cli.Context, ref string) (string, error) {
 
 // displayTemplateInfo orchestrates the display of all template information sections.
 func displayTemplateInfo(w io.Writer, templateDir string) error {
-	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
-	data, err := os.ReadFile(configPath)
+	config, err := loadTemplateConfig(templateDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return app.Errorf("not a TAG template: %s not found in %s", types.TemplateConfigFile, templateDir)
-		}
-		return app.Errorf("failed to read %s: %w", types.TemplateConfigFile, err)
-	}
-
-	config, err := scaffold.ParseTemplateConfig(data)
-	if err != nil {
-		return app.Errorf("failed to parse %s: %w", types.TemplateConfigFile, err)
+		return err
 	}
 
 	displayMetadata(w, config)
@@ -126,6 +143,28 @@ func displayTemplateInfo(w io.Writer, templateDir string) error {
 	renderDocFile(w, templateDir, types.TemplateHowto, "HOWTO")
 
 	return nil
+}
+
+// loadTemplateConfig reads and parses templateDir's tag.template.json. It is
+// the single loader shared by the text path (displayTemplateInfo) and the
+// --format json path (infoAction), so the two formats cannot drift on what
+// counts as a missing or invalid template.
+func loadTemplateConfig(templateDir string) (*scaffold.TemplateConfig, error) {
+	configPath := filepath.Join(templateDir, types.TemplateConfigFile)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, app.Errorf("not a TAG template: %s not found in %s", types.TemplateConfigFile, templateDir)
+		}
+		return nil, app.Errorf("failed to read %s: %w", types.TemplateConfigFile, err)
+	}
+
+	config, err := scaffold.ParseTemplateConfig(data)
+	if err != nil {
+		return nil, app.Errorf("failed to parse %s: %w", types.TemplateConfigFile, err)
+	}
+
+	return config, nil
 }
 
 // displayMetadata prints the template header: name, version, description.
@@ -210,7 +249,7 @@ func renderDocFile(w io.Writer, templateDir, filename, label string) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "--- %s ---\n", label)
 
-	rendered, err := glamour.Render(string(content), "auto")
+	rendered, err := renderMarkdown(string(content))
 	if err != nil {
 		// Fallback: print raw markdown
 		fmt.Fprintln(w, string(content))
@@ -219,10 +258,122 @@ func renderDocFile(w io.Writer, templateDir, filename, label string) {
 	fmt.Fprint(w, rendered)
 }
 
+// renderMarkdown renders markdown to the terminal via glamour. It is a
+// package-level variable — same pattern as newGitResolver/newLocalLibrary —
+// so tests can substitute a spy. That is the only way to assert the
+// --format json path never invokes glamour: glamour is near-inert under
+// `go test` (no TTY), so an output-based assertion would pass even when the
+// code path is wrong.
+var renderMarkdown = func(s string) (string, error) {
+	return glamour.Render(s, "auto")
+}
+
+// docFileHasContent reports whether templateDir/filename exists and is
+// non-empty. This mirrors renderDocFile's own "exists and non-empty" check
+// exactly (see TestUT_BuildTemplateInfoJSON_DocFlagsMatchTextRendering), kept
+// as a separate function rather than a refactor of renderDocFile so the text
+// printer, which is golden-fixture pinned, does not change shape.
+func docFileHasContent(templateDir, filename string) bool {
+	content, err := os.ReadFile(filepath.Join(templateDir, filename))
+	return err == nil && len(content) > 0
+}
+
 // joinOptions formats choice options for display.
 func joinOptions(opts []string) string {
 	if len(opts) <= 3 {
 		return fmt.Sprintf("%v", opts)
 	}
 	return fmt.Sprintf("%v +%d more", opts[:3], len(opts)-3)
+}
+
+// templateInfoJSON is the --format json shape for `tag template info`.
+//
+// It is a separate DTO rather than a direct marshal of scaffold.TemplateConfig
+// because TemplateConfig.Vars is tagged `json:"-"` (it is populated only after
+// ParseTemplateConfig resolves each variable's short/long form) while RawVars
+// carries `json:"vars"` — a direct marshal would therefore emit the raw,
+// unresolved vars structure instead of the resolved one. Likewise, template
+// docs are rendered to ANSI escape codes by glamour for the text path, which
+// is never valid JSON output. Do not "simplify" this back to json tags on the
+// domain types; see buildTemplateInfoJSON.
+type templateInfoJSON struct {
+	Name        string                     `json:"name"`
+	Description string                     `json:"description"`
+	Version     string                     `json:"version"`
+	Variables   []templateInfoVariableJSON `json:"variables"`
+	Hooks       templateInfoHooksJSON      `json:"hooks"`
+	HasReadme   bool                       `json:"has_readme"`
+	HasHowto    bool                       `json:"has_howto"`
+}
+
+// templateInfoVariableJSON is one entry of templateInfoJSON.Variables.
+type templateInfoVariableJSON struct {
+	Name     string   `json:"name"`
+	Type     string   `json:"type"`
+	Prompt   string   `json:"prompt,omitempty"`
+	Default  any      `json:"default,omitempty"`
+	Required bool     `json:"required"`
+	Options  []string `json:"options,omitempty"`
+	Secret   bool     `json:"secret"`
+}
+
+// templateInfoHooksJSON always carries both keys, as "[]" rather than "null"
+// when a phase has no hooks — see buildTemplateInfoJSON.
+type templateInfoHooksJSON struct {
+	PreScaffold  []string `json:"pre_scaffold"`
+	PostScaffold []string `json:"post_scaffold"`
+}
+
+// buildTemplateInfoJSON is a pure function: given an already-parsed config and
+// the doc presence flags (computed separately via docFileHasContent so this
+// stays testable without a filesystem), it returns the --format json DTO.
+// Using scaffold.TemplateConfig.Vars (never RawVars) is what guarantees the
+// JSON path reports resolved variable types/defaults, not the raw JSON shapes
+// a template author wrote.
+func buildTemplateInfoJSON(config *scaffold.TemplateConfig, hasReadme, hasHowto bool) templateInfoJSON {
+	names := make([]string, 0, len(config.Vars))
+	for name := range config.Vars {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	variables := make([]templateInfoVariableJSON, 0, len(names))
+	for _, name := range names {
+		v := config.Vars[name]
+		variables = append(variables, templateInfoVariableJSON{
+			Name:     name,
+			Type:     string(v.Type),
+			Prompt:   v.Prompt,
+			Default:  v.Default,
+			Required: v.Required,
+			Options:  slices.Clone(v.Options),
+			Secret:   v.Secret,
+		})
+	}
+
+	hooks := templateInfoHooksJSON{
+		PreScaffold:  []string{},
+		PostScaffold: []string{},
+	}
+	// Cloned, not aliased: the DTO is documented as a pure value, and handing
+	// out slices backed by the caller's config makes that false — a mutation
+	// through the DTO would reach back into the parsed template config.
+	if config.Hooks != nil {
+		if len(config.Hooks.PreScaffold) > 0 {
+			hooks.PreScaffold = slices.Clone(config.Hooks.PreScaffold)
+		}
+		if len(config.Hooks.PostScaffold) > 0 {
+			hooks.PostScaffold = slices.Clone(config.Hooks.PostScaffold)
+		}
+	}
+
+	return templateInfoJSON{
+		Name:        config.Name,
+		Description: config.Description,
+		Version:     config.Version,
+		Variables:   variables,
+		Hooks:       hooks,
+		HasReadme:   hasReadme,
+		HasHowto:    hasHowto,
+	}
 }

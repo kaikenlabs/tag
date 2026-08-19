@@ -118,13 +118,33 @@ Show detailed information about a template, including variables, hooks, and meta
 tag template info <template> [flags]
 ```
 
-The `<template>` argument can be a local path, remote reference, or library template name.
+The `<template>` argument can be a local path, remote reference, or library template name. Exactly one is accepted — a second positional is a usage error, not silently ignored.
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--update` | `-u` | Force refresh of cached remote templates |
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--update` | `-u` | `false` | Force refresh of cached remote templates |
+| `--format` | | `text` | Output format: `text` or `json` |
 
 Flags may appear before or after `<template>`: `tag template info gh:user/awesome-template --update` and `tag template info --update gh:user/awesome-template` are equivalent.
+
+**Examples:**
+
+```bash
+# Info for a local template
+tag template info ./my-template
+
+# Info for an installed library template
+tag template info go-api
+
+# Machine-readable output
+tag template info go-api --format json
+
+# Flags may come before or after the template argument
+tag template info --format json go-api
+
+# Force refresh of a cached remote template
+tag template info gh:user/awesome-template --update
+```
 
 **Example output:**
 
@@ -155,6 +175,29 @@ Generators:
 Bundles:
   crud                 Model + handler + service
 ```
+
+**Example JSON output** (`--format json`):
+
+```json
+{
+  "name": "go-api",
+  "description": "Go REST API template",
+  "version": "v1.2.0",
+  "variables": [
+    { "name": "author", "type": "string", "required": true, "secret": false },
+    { "name": "license", "type": "choice", "required": true, "options": ["MIT", "Apache-2.0", "GPL-3.0"], "secret": false },
+    { "name": "port", "type": "number", "default": 8080, "required": false, "secret": false }
+  ],
+  "hooks": {
+    "pre_scaffold": [],
+    "post_scaffold": ["go mod tidy", "git init"]
+  },
+  "has_readme": true,
+  "has_howto": false
+}
+```
+
+Bare object, no envelope. `variables` is sorted by name and reports the resolved variable definitions — the same values shown in the text output — not the raw declarations from `tag.template.json`. `hooks` always carries both `pre_scaffold` and `post_scaffold`, `[]` when a phase has no hooks. `has_readme` and `has_howto` are booleans only: README/HOWTO content is never included, and the ANSI formatting from the text view's rendered docs never appears in JSON. There is deliberately no `source` field. `--update` works the same way in JSON mode as in text mode.
 
 ---
 
