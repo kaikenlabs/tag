@@ -73,16 +73,25 @@ const (
 	doctorFail
 )
 
+// Wire names for doctorStatus. Named constants rather than inline literals so
+// the JSON vocabulary has one definition that tests can reference too.
+const (
+	doctorStatusPass    = "pass"
+	doctorStatusWarn    = "warn"
+	doctorStatusFail    = "fail"
+	doctorStatusUnknown = "unknown"
+)
+
 func (s doctorStatus) String() string {
 	switch s {
 	case doctorPass:
-		return "pass"
+		return doctorStatusPass
 	case doctorWarn:
-		return "warn"
+		return doctorStatusWarn
 	case doctorFail:
-		return "fail"
+		return doctorStatusFail
 	default:
-		return "unknown"
+		return doctorStatusUnknown
 	}
 }
 

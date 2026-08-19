@@ -139,13 +139,13 @@ func TestUT_FormatJSON_Doctor(t *testing.T) {
 					check["status"], check["label"])
 
 				switch statusStr {
-				case "warn":
+				case doctorStatusWarn:
 					sawWarn = true
-					if worst != "fail" {
-						worst = "warn"
+					if worst != doctorStatusFail {
+						worst = doctorStatusWarn
 					}
-				case "fail":
-					worst = "fail"
+				case doctorStatusFail:
+					worst = doctorStatusFail
 				}
 
 				if sec["name"] == "ENVIRONMENT" && check["label"] == "Git installed" {
@@ -176,7 +176,7 @@ func TestUT_FormatJSON_Doctor(t *testing.T) {
 
 		var parsed map[string]any
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &parsed))
-		assert.Equal(t, "fail", parsed["status"])
+		assert.Equal(t, doctorStatusFail, parsed["status"])
 
 		// A regression that hardcoded a "fail" status elsewhere (or dropped
 		// the LIBRARIES section) must not pass here: the failure must be
@@ -197,7 +197,7 @@ func TestUT_FormatJSON_Doctor(t *testing.T) {
 				check, ok := c.(map[string]any)
 				require.True(t, ok)
 				label, _ := check["label"].(string)
-				if check["status"] == "fail" && strings.Contains(label, "broken-template") {
+				if check["status"] == doctorStatusFail && strings.Contains(label, "broken-template") {
 					foundBrokenLibraryFail = true
 				}
 			}
