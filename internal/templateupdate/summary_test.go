@@ -76,15 +76,54 @@ func TestUT_Summarize_OpIsStringNotInteger(t *testing.T) {
 	assert.NotContains(t, string(data), `"op":3`)
 }
 
+// TestUT_Summarize_AllMergeOpsSerialise enumerates EVERY MergeOp and pins both
+// halves of the policy: whether it appears in files at all, and what label it
+// carries when it does.
+//
+// The enumeration is the point. Summarize filters by exclusion (skip keep and
+// user-added, keep everything else), so a MergeOp added to types.go later would
+// silently join the published JSON schema — labelled "unknown" if its String()
+// case was also forgotten. Listing every op here means adding one breaks this
+// test and forces a deliberate decision about the wire contract. An earlier
+// version only asserted that nothing serialised as "unknown", which passed
+// vacuously for the excluded ops: they produce an empty files array, so the
+// string it looked for could not appear whatever the label was.
 func TestUT_Summarize_AllMergeOpsSerialise(t *testing.T) {
 	t.Parallel()
 
-	for op := MergeKeep; op <= MergePrompt; op++ {
-		result := &DiffResult{Results: []MergeResult{{Path: "f", Op: op}}}
-		data, err := json.Marshal(Summarize(result))
-		require.NoError(t, err)
-		assert.NotContains(t, string(data), `"unknown"`, "MergeOp %d serialised as unknown", op)
+	policy := map[MergeOp]struct {
+		included bool
+		label    string
+	}{
+		MergeKeep:      {false, "keep"},
+		MergeAdd:       {true, "add"},
+		MergeDelete:    {true, "delete"},
+		MergeUpdate:    {true, "update"},
+		MergeConflict:  {true, "conflict"},
+		MergeUserAdded: {false, "user-added"},
+		MergePrompt:    {true, "prompt"},
 	}
+
+	for op := MergeKeep; op <= MergePrompt; op++ {
+		want, known := policy[op]
+		require.True(t, known,
+			"MergeOp %d has no declared JSON policy — a new op must be consciously "+
+				"included in or excluded from the published contract", op)
+
+		assert.NotEqual(t, "unknown", op.String(), "MergeOp %d has no String() case", op)
+		assert.Equal(t, want.label, op.String(), "MergeOp %d label drifted", op)
+
+		files := Summarize(&DiffResult{Results: []MergeResult{{Path: "f", Op: op}}}).Files
+		if !want.included {
+			assert.Empty(t, files, "op %q must be excluded from files", want.label)
+			continue
+		}
+		require.Len(t, files, 1, "op %q must appear in files", want.label)
+		assert.Equal(t, want.label, files[0].Op)
+	}
+
+	require.Len(t, policy, int(MergePrompt-MergeKeep)+1,
+		"policy table must cover every MergeOp in types.go")
 }
 
 // TestUT_Summarize_OpInclusionPolicy asserts files includes add/delete/update/
@@ -130,6 +169,10 @@ func TestUT_Summarize_CountsMatchTextDiffLines(t *testing.T) {
 	summary := Summarize(result)
 
 	for _, r := range result.Results {
+		// IsBinary is excluded deliberately, not incidentally: binary
+		// results are a documented divergence from the counts-equal-text
+		// rule, pinned separately by
+		// TestUT_Summarize_BinaryDivergesFromTextByDesign.
 		if r.Op != MergeUpdate || r.IsBinary {
 			continue
 		}
@@ -165,22 +208,18 @@ func TestUT_Summarize_CountsMatchTextDiffLines(t *testing.T) {
 	}
 }
 
-// bytesSplitLines splits text formatter output into lines for counting,
-// without pulling in the formatter's own splitLines (which operates on raw
-// file content, not already-rendered "+"/"-" prefixed output lines).
+// bytesSplitLines splits text formatter output into lines for counting.
+//
+// It deliberately does NOT reuse the formatter's own splitLines: that one
+// operates on raw file content, where a trailing newline legitimately yields a
+// final empty line the text path prints. Here every line already ends in "\n"
+// via Fprintln, so the trailing empty segment is an artefact of the rendering
+// and must be dropped or it would be counted as an extra diff line.
 func bytesSplitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := range len(s) {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
+	if s == "" {
+		return nil
 	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
+	return strings.Split(strings.TrimSuffix(s, "\n"), "\n")
 }
 
 func TestUT_Summarize_BinaryFileNotDumped(t *testing.T) {
@@ -297,6 +336,65 @@ func TestUT_Summarize_CountsMatchTextDiffLinesAllOps(t *testing.T) {
 			require.Len(t, files, 1)
 			assert.Equal(t, wantAdded, files[0].Added, "added drifted from the text formatter")
 			assert.Equal(t, wantDeleted, files[0].Deleted, "deleted drifted from the text formatter")
+		})
+	}
+}
+
+// TestUT_Summarize_BinaryDivergesFromTextByDesign pins the one place where the
+// JSON counts intentionally do NOT equal the text formatter's +/- line count.
+//
+// formatFileAdd/Delete/Update never consult IsBinary, so the text path splits
+// and prints raw bytes for a binary file exactly as for a text one. #351
+// requires the JSON side to flag such a file and never emit or count its
+// content, and the text side cannot be changed to match without breaking the
+// byte-identical-output criterion. This test asserts BOTH halves — that text
+// really does emit lines, and that JSON really does report 0/0 — so the
+// divergence is a recorded decision rather than an untested assumption. If a
+// future change makes the text path binary-aware, this test fails and the
+// contract comment in summary.go must be revisited with it.
+func TestUT_Summarize_BinaryDivergesFromTextByDesign(t *testing.T) {
+	t.Parallel()
+
+	// Real non-UTF8 bytes containing newlines: a naive implementation would
+	// split these into several counted lines.
+	blob := []byte{0x89, 'P', 'N', 'G', '\n', 0x00, 0xff, '\n', 0x1a, '\n'}
+
+	cases := []struct {
+		name   string
+		result MergeResult
+	}{
+		{"add", MergeResult{Path: "added.bin", Op: MergeAdd, IsBinary: true, Content: blob}},
+		{"delete", MergeResult{Path: "removed.bin", Op: MergeDelete, IsBinary: true, BaseContent: blob}},
+		{"update", MergeResult{Path: "asset.bin", Op: MergeUpdate, IsBinary: true, OursContent: blob, Content: []byte{0x00, '\n', 0x01, '\n'}}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			FormatDiff([]MergeResult{tc.result}, "src", "old", "new", FormatOptions{Writer: &buf})
+
+			textLines := 0
+			for _, line := range bytesSplitLines(buf.String()) {
+				switch {
+				case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+				case strings.HasPrefix(line, "+"), strings.HasPrefix(line, "-"):
+					textLines++
+				}
+			}
+			require.Positive(t, textLines,
+				"fixture is not exercising the divergence: the text path emitted no +/- lines for binary content")
+
+			files := Summarize(&DiffResult{Results: []MergeResult{tc.result}}).Files
+			require.Len(t, files, 1)
+			assert.True(t, files[0].IsBinary, "binary file must be flagged")
+			assert.Zero(t, files[0].Added, "binary must never contribute an added count")
+			assert.Zero(t, files[0].Deleted, "binary must never contribute a deleted count")
+
+			data, err := json.Marshal(Summarize(&DiffResult{Results: []MergeResult{tc.result}}))
+			require.NoError(t, err)
+			assert.NotContains(t, string(data), "PNG", "binary content leaked into the JSON output")
 		})
 	}
 }

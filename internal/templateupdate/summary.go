@@ -41,8 +41,22 @@ type DiffFileSummary struct {
 //   - a prompt is always 0/0 (added/deleted are only computed for
 //     add/delete/update below).
 //
-// Binary files are the ONE exception: IsBinary true always reports 0/0, and
-// their content is never split or dumped into the summary, regardless of Op.
+// Binary files are the ONE exception, and it is a DELIBERATE DIVERGENCE from
+// the rule above rather than an instance of it. The text formatter does not
+// consult IsBinary at all — formatFileAdd/Delete/Update split and print raw
+// bytes for a binary file just as for a text one — so for a binary result with
+// real content the text path emits N +/- lines while this reports 0/0. That is
+// required by #351 ("binary files are flagged rather than emitting byte
+// content", "no full file contents appear in the default JSON output"), and
+// the text side cannot be changed to match without breaking the
+// byte-identical-output criterion. Pinned by
+// TestUT_Summarize_BinaryDivergesFromTextByDesign; do not "fix" it by teaching
+// this function to count binary lines.
+//
+// Today the divergence is unreachable through the CLI: merger.go only ever
+// sets IsBinary alongside Op: MergePrompt, which is 0/0 regardless. It becomes
+// reachable the moment mergeNewTemplateFile propagates IsBinary for an Add,
+// which is why it is pinned now rather than left to be discovered then.
 //
 // files includes ops add/delete/update/conflict/prompt and EXCLUDES
 // keep/user-added. The text formatter additionally skips prompt entirely

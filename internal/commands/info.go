@@ -346,7 +346,7 @@ func buildTemplateInfoJSON(config *scaffold.TemplateConfig, hasReadme, hasHowto 
 			Prompt:   v.Prompt,
 			Default:  v.Default,
 			Required: v.Required,
-			Options:  v.Options,
+			Options:  slices.Clone(v.Options),
 			Secret:   v.Secret,
 		})
 	}
@@ -355,12 +355,15 @@ func buildTemplateInfoJSON(config *scaffold.TemplateConfig, hasReadme, hasHowto 
 		PreScaffold:  []string{},
 		PostScaffold: []string{},
 	}
+	// Cloned, not aliased: the DTO is documented as a pure value, and handing
+	// out slices backed by the caller's config makes that false — a mutation
+	// through the DTO would reach back into the parsed template config.
 	if config.Hooks != nil {
 		if len(config.Hooks.PreScaffold) > 0 {
-			hooks.PreScaffold = config.Hooks.PreScaffold
+			hooks.PreScaffold = slices.Clone(config.Hooks.PreScaffold)
 		}
 		if len(config.Hooks.PostScaffold) > 0 {
-			hooks.PostScaffold = config.Hooks.PostScaffold
+			hooks.PostScaffold = slices.Clone(config.Hooks.PostScaffold)
 		}
 	}
 

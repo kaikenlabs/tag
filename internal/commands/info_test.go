@@ -656,3 +656,53 @@ func TestUT_TemplateInfo_UpdateFlagWithJSON(t *testing.T) {
 		})
 	}
 }
+
+// TestUT_TemplateInfoJSON_AuthorSuppliedANSIIsEscapedNotGenerated makes the
+// no-ANSI guarantee precise, because the guarantee is narrower than it sounds
+// and the obvious test for it passes by accident.
+//
+// TestUT_TemplateInfoJSON_ContainsNoANSI uses a fixture containing no escape
+// sequences, so it cannot tell "TAG never emits ANSI" apart from "nothing had
+// any". What #350 actually requires is that TAG never GENERATES ANSI into the
+// JSON path — that is, glamour's rendered output never reaches it. Bytes the
+// template author put in their own description are data, and the text path
+// prints them raw today; silently stripping them in JSON would corrupt user
+// content, so this asserts round-tripping rather than sanitisation.
+//
+// Two distinct claims, both checked here:
+//  1. the ENCODED document contains no raw ESC byte (encoding/json escapes it),
+//     so piping `tag template info --format json` to a terminal is safe;
+//  2. the decoded value is byte-for-byte what the author wrote — TAG neither
+//     added escape sequences of its own nor removed the author's.
+func TestUT_TemplateInfoJSON_AuthorSuppliedANSIIsEscapedNotGenerated(t *testing.T) {
+	t.Parallel()
+
+	const redDescription = "\x1b[31mdanger\x1b[0m"
+
+	dir := t.TempDir()
+	createTemplateConfig(t, dir, map[string]any{
+		"name":        "ansi-template",
+		"description": redDescription,
+		"vars":        map[string]any{"greeting": "\x1b[32mhi\x1b[0m"},
+	})
+
+	run := runCLI(t, templateInfoCommand(), "info", dir, "--format", formatJSON)
+	require.NoError(t, run.Err)
+
+	assert.NotContains(t, run.Writer, "\x1b",
+		"the encoded JSON document must never carry a raw ESC byte")
+
+	var parsed struct {
+		Description string `json:"description"`
+		Variables   []struct {
+			Name    string `json:"name"`
+			Default any    `json:"default"`
+		} `json:"variables"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(run.Writer), &parsed))
+
+	assert.Equal(t, redDescription, parsed.Description,
+		"author-supplied bytes must round-trip unchanged, neither stripped nor added to")
+	require.Len(t, parsed.Variables, 1)
+	assert.Equal(t, "\x1b[32mhi\x1b[0m", parsed.Variables[0].Default)
+}

@@ -2,13 +2,14 @@ package templateupdate
 
 import (
 	"bytes"
-	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/jsonout"
 )
 
 // updateGoldenDiff rewrites the diff golden fixtures instead of asserting
@@ -127,10 +128,13 @@ func TestUT_SummarizeJSONGolden(t *testing.T) {
 		Skipped: []string{"ignored/by-rule.txt"},
 	})
 
+	// Encoded through jsonout.Write, not a hand-rolled encoder: that package
+	// exists so the wire policy (indent, trailing newline, HTML escaping) is
+	// decided in exactly one place. A golden built with its own encoder would
+	// keep passing if that policy changed, and would then no longer describe
+	// what `tag diff --format json` actually emits.
 	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetIndent("", "  ")
-	require.NoError(t, enc.Encode(summary))
+	require.NoError(t, jsonout.Write(&buf, summary))
 
 	assertDiffGolden(t, "diff-json", buf.String())
 }
