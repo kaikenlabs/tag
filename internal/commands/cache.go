@@ -7,6 +7,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
@@ -55,12 +56,22 @@ func cacheClearCommand() *cli.Command {
 	}
 }
 
+func cacheListFlags() []cli.Flag {
+	return []cli.Flag{formatFlag(formatText, formatJSON)}
+}
+
 func cacheListCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "ls",
 		Aliases: []string{"list"},
 		Usage:   "List cached templates",
+		Flags:   cacheListFlags(),
 		Action: func(c *cli.Context) error {
+			format, err := resolveFormat(c, formatText, formatJSON)
+			if err != nil {
+				return err
+			}
+
 			cache, err := remote.NewFSCache("")
 			if err != nil {
 				return app.Errorf("failed to open cache: %w", err)
@@ -71,12 +82,17 @@ func cacheListCommand() *cli.Command {
 				return app.Errorf("failed to list cache: %w", err)
 			}
 
+			out := cmdOut(c)
+			if format == formatJSON {
+				return jsonout.Write(out, map[string]any{"entries": entries})
+			}
+
 			if len(entries) == 0 {
-				fmt.Fprintln(c.App.Writer, "No cached templates.")
+				fmt.Fprintln(out, "No cached templates.")
 				return nil
 			}
 
-			printCacheEntries(c.App.Writer, entries)
+			printCacheEntries(out, entries)
 			return nil
 		},
 	}

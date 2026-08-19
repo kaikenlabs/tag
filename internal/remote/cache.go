@@ -232,8 +232,8 @@ func (c *FSCache) Cleanup() (int, error) {
 
 // CacheEntry contains a cache key and its metadata.
 type CacheEntry struct {
-	Key  string
-	Meta *CacheMeta // nil if metadata is missing/corrupt
+	Key  string     `json:"key"`
+	Meta *CacheMeta `json:"meta"` // nil if metadata is missing/corrupt
 }
 
 // List returns all cache entries with their metadata.
@@ -241,12 +241,12 @@ func (c *FSCache) List() ([]CacheEntry, error) {
 	entries, err := os.ReadDir(c.baseDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return make([]CacheEntry, 0), nil
 		}
 		return nil, err
 	}
 
-	var result []CacheEntry
+	result := make([]CacheEntry, 0, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue

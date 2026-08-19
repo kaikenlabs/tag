@@ -17,10 +17,10 @@ type CheckOptions struct {
 
 // CheckResult contains the outcome of a template freshness check.
 type CheckResult struct {
-	UpToDate   bool   // true if project matches latest template commit
-	CurrentSHA string // commit SHA stored in .tagconfig.json
-	LatestSHA  string // latest commit SHA from remote
-	Source     string // template source string
+	UpToDate   bool   `json:"up_to_date"`  // true if project matches latest template commit
+	CurrentSHA string `json:"current_sha"` // commit SHA stored in .tagconfig.json
+	LatestSHA  string `json:"latest_sha"`  // latest commit SHA from remote
+	Source     string `json:"source"`      // template source string
 }
 
 // Checker checks whether a project's template is up to date with upstream.

@@ -124,6 +124,8 @@ func TestUT_TrailingFormatFlag_IsParsed(t *testing.T) {
 		{"template variables", templateVariablesCommand, []string{"variables", dir, "--format", "xml"}},
 		{"template graph", templateGraphCommand, []string{"graph", dir, "--format", "xml"}},
 		{"test", TestCommand, []string{"test", dir, "--format", "xml"}},
+		{"dialect show", dialectShowCommand, []string{"show", "go", "--format", "xml"}},
+		{"lib search", libSearchCommand, []string{"search", "foo", "--format", "xml"}},
 	}
 
 	for _, tt := range tests {
@@ -189,25 +191,35 @@ func TestUT_ReparseTrailingFlags_FlagKinds(t *testing.T) {
 			name:           "value flag after positional",
 			args:           []string{"query", "--limit", "5"},
 			wantPositional: []string{"query"},
-			check:          func(t *testing.T, c *cli.Context) { assert.Equal(t, 5, c.Int("limit")) },
+			check: func(t *testing.T, c *cli.Context) {
+				t.Helper()
+				assert.Equal(t, 5, c.Int("limit"))
+			},
 		},
 		{
 			name:           "equals form",
 			args:           []string{"query", "--format=json"},
 			wantPositional: []string{"query"},
-			check:          func(t *testing.T, c *cli.Context) { assert.Equal(t, formatJSON, c.String("format")) },
+			check: func(t *testing.T, c *cli.Context) {
+				t.Helper()
+				assert.Equal(t, formatJSON, c.String("format"))
+			},
 		},
 		{
 			name:           "bool flag consumes no value",
 			args:           []string{"query", "--strict", "second"},
 			wantPositional: []string{"query", "second"},
-			check:          func(t *testing.T, c *cli.Context) { assert.True(t, c.Bool("strict")) },
+			check: func(t *testing.T, c *cli.Context) {
+				t.Helper()
+				assert.True(t, c.Bool("strict"))
+			},
 		},
 		{
 			name:           "repeated slice flag via alias",
 			args:           []string{"query", "-m", "a=1", "-m", "b=2"},
 			wantPositional: []string{"query"},
 			check: func(t *testing.T, c *cli.Context) {
+				t.Helper()
 				assert.Equal(t, []string{"a=1", "b=2"}, c.StringSlice("meta"))
 			},
 		},

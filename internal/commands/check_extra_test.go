@@ -41,7 +41,7 @@ func TestUT_CheckCommand_Structure(t *testing.T) {
 
 	assert.Equal(t, "check", cmd.Name)
 	require.NotNil(t, cmd.Action)
-	require.Len(t, cmd.Flags, 3)
+	require.Len(t, cmd.Flags, 4)
 
 	flagNames := map[string]bool{}
 	for _, f := range cmd.Flags {

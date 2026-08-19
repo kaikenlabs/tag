@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/kaikenlabs/tag/internal/config"
+	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/search"
 	"github.com/kaikenlabs/tag/internal/xdg"
@@ -146,12 +147,22 @@ func printAddResult(w io.Writer, result *library.AddResult) {
 	fmt.Fprintf(w, "Run with: tag scaffold %s\n", result.Name)
 }
 
+func libListFlags() []cli.Flag {
+	return []cli.Flag{formatFlag(formatText, formatJSON)}
+}
+
 func libListCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "ls",
 		Aliases: []string{"list"},
 		Usage:   "List installed templates",
+		Flags:   libListFlags(),
 		Action: func(c *cli.Context) error {
+			format, err := resolveFormat(c, formatText, formatJSON)
+			if err != nil {
+				return err
+			}
+
 			lib, err := newLocalLibrary()
 			if err != nil {
 				return app.Errorf("failed to initialize library: %w", err)
@@ -162,33 +173,41 @@ func libListCommand() *cli.Command {
 				return asAppError(err)
 			}
 
+			out := cmdOut(c)
+			if format == formatJSON {
+				return jsonout.Write(out, map[string]any{"templates": entries})
+			}
+
 			if len(entries) == 0 {
-				fmt.Fprintln(c.App.Writer, "No templates installed.")
-				fmt.Fprintln(c.App.Writer)
-				fmt.Fprintln(c.App.Writer, "Add one with: tag lib add <ref>")
+				fmt.Fprintln(out, "No templates installed.")
+				fmt.Fprintln(out)
+				fmt.Fprintln(out, "Add one with: tag lib add <ref>")
 				return nil
 			}
 
-			// Print table header
-			fmt.Fprintf(c.App.Writer, "%-20s %-30s %-10s %s\n", "NAME", "SOURCE", "VERSION", "DESCRIPTION")
-			fmt.Fprintf(c.App.Writer, "%-20s %-30s %-10s %s\n", "----", "------", "-------", "-----------")
-
-			for _, entry := range entries {
-				version := entry.Version
-				if version == "" {
-					version = "-"
-				}
-				desc := truncate(entry.Description, 40)
-				fmt.Fprintf(c.App.Writer, "%-20s %-30s %-10s %s\n",
-					truncate(entry.Name, 20),
-					truncate(entry.Source, 30),
-					truncate(version, 10),
-					desc,
-				)
-			}
-
+			printLibEntries(out, entries)
 			return nil
 		},
+	}
+}
+
+// printLibEntries renders the installed-templates table.
+func printLibEntries(w io.Writer, entries []*library.Entry) {
+	fmt.Fprintf(w, "%-20s %-30s %-10s %s\n", "NAME", "SOURCE", "VERSION", "DESCRIPTION")
+	fmt.Fprintf(w, "%-20s %-30s %-10s %s\n", "----", "------", "-------", "-----------")
+
+	for _, entry := range entries {
+		version := entry.Version
+		if version == "" {
+			version = "-"
+		}
+		desc := truncate(entry.Description, 40)
+		fmt.Fprintf(w, "%-20s %-30s %-10s %s\n",
+			truncate(entry.Name, 20),
+			truncate(entry.Source, 30),
+			truncate(version, 10),
+			desc,
+		)
 	}
 }
 
@@ -438,6 +457,27 @@ func splitEditorArgs(editor string) ([]string, error) {
 	return shlex.Split(editor)
 }
 
+func libSearchFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.IntFlag{
+			Name:  "limit",
+			Usage: "Maximum number of results (1-100)",
+			Value: 10,
+		},
+		&cli.StringFlag{
+			Name:  "sort",
+			Usage: "Sort by: stars, forks, or updated",
+			Value: "stars",
+		},
+		&cli.StringFlag{
+			Name:  "order",
+			Usage: "Order: asc or desc",
+			Value: "desc",
+		},
+		formatFlag(formatText, formatJSON),
+	}
+}
+
 func libSearchCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "search",
@@ -457,26 +497,20 @@ EXAMPLES:
 
   # Add a found template
   tag lib add gh:<owner>/<repo>`,
-		Flags: []cli.Flag{
-			&cli.IntFlag{
-				Name:  "limit",
-				Usage: "Maximum number of results (1-100)",
-				Value: 10,
-			},
-			&cli.StringFlag{
-				Name:  "sort",
-				Usage: "Sort by: stars, forks, or updated",
-				Value: "stars",
-			},
-			&cli.StringFlag{
-				Name:  "order",
-				Usage: "Order: asc or desc",
-				Value: "desc",
-			},
-		},
+		Flags: libSearchFlags(),
 		Action: func(c *cli.Context) error {
-			query := strings.Join(c.Args().Slice(), " ")
-			return runLibSearch(c, query)
+			args, err := reparseTrailingFlags(c, libSearchFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
+			}
+
+			format, err := resolveFormat(c, formatText, formatJSON)
+			if err != nil {
+				return err
+			}
+
+			query := strings.Join(args, " ")
+			return runLibSearch(c, format, query)
 		},
 	}
 }
@@ -485,7 +519,7 @@ EXAMPLES:
 // tests point it at an httptest server.
 var searchBaseURL string
 
-func runLibSearch(c *cli.Context, query string) error {
+func runLibSearch(c *cli.Context, format, query string) error {
 	token := os.Getenv("GITHUB_TOKEN")
 	opts := search.Options{
 		Limit: c.Int("limit"),
@@ -499,18 +533,23 @@ func runLibSearch(c *cli.Context, query string) error {
 		return app.Errorf("search failed: %w", err)
 	}
 
+	out := cmdOut(c)
+	if format == formatJSON {
+		return jsonout.Write(out, map[string]any{"results": results})
+	}
+
 	if len(results) == 0 {
-		fmt.Fprintln(c.App.Writer, "No templates found.")
-		fmt.Fprintln(c.App.Writer)
+		fmt.Fprintln(out, "No templates found.")
+		fmt.Fprintln(out)
 		if strings.TrimSpace(query) != "" {
-			fmt.Fprintf(c.App.Writer, "No results for %q. Try a different query or leave it empty to list all templates.\n", query)
+			fmt.Fprintf(out, "No results for %q. Try a different query or leave it empty to list all templates.\n", query)
 		} else {
-			fmt.Fprintln(c.App.Writer, `No templates with topic "tag-template" found on GitHub yet.`)
+			fmt.Fprintln(out, `No templates with topic "tag-template" found on GitHub yet.`)
 		}
 		return nil
 	}
 
-	printSearchResults(c.App.Writer, results)
+	printSearchResults(out, results)
 	return nil
 }
 

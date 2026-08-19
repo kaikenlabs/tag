@@ -2,10 +2,11 @@ package commands
 
 import (
 	"fmt"
-	"os"
+	"io"
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/templateupdate"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -44,14 +45,20 @@ Examples:
 			},
 			&cli.BoolFlag{
 				Name:  "quiet",
-				Usage: "Suppress output, only set exit code",
+				Usage: "Suppress output (including JSON), only set exit code",
 			},
+			formatFlag(formatText, formatJSON),
 		},
 		Action: checkAction,
 	}
 }
 
 func checkAction(c *cli.Context) error {
+	format, err := resolveFormat(c, formatText, formatJSON)
+	if err != nil {
+		return err
+	}
+
 	resolver := newGitResolver()
 	checker := templateupdate.NewChecker(resolver)
 	result, err := checker.Check(c.Context, templateupdate.CheckOptions{
@@ -62,25 +69,35 @@ func checkAction(c *cli.Context) error {
 		return app.Errorf("check: %w", err)
 	}
 
-	quiet := c.Bool("quiet")
+	if !c.Bool("quiet") {
+		if writeErr := writeCheckResult(cmdOut(c), format, result); writeErr != nil {
+			return app.Errorf("write check result: %w", writeErr)
+		}
+	}
 
 	if result.UpToDate {
-		if !quiet {
-			fmt.Fprintf(os.Stdout, "✓ Project is up to date with template (commit %s)\n", shortCommitSHA(result.CurrentSHA))
-		}
+		return nil
+	}
+	return cli.Exit("", 1)
+}
+
+// writeCheckResult renders result in the requested format to w.
+func writeCheckResult(w io.Writer, format string, result *templateupdate.CheckResult) error {
+	if format == formatJSON {
+		return jsonout.Write(w, result)
+	}
+
+	if result.UpToDate {
+		fmt.Fprintf(w, "✓ Project is up to date with template (commit %s)\n", shortCommitSHA(result.CurrentSHA))
 		return nil
 	}
 
-	// Updates available — exit 1.
-	if !quiet {
-		fmt.Fprintf(os.Stdout, "✗ Template updates available\n")
-		fmt.Fprintf(os.Stdout, "  Template: %s\n", result.Source)
-		fmt.Fprintf(os.Stdout, "  Current:  %s\n", shortCommitSHA(result.CurrentSHA))
-		fmt.Fprintf(os.Stdout, "  Latest:   %s\n", shortCommitSHA(result.LatestSHA))
-		fmt.Fprintf(os.Stdout, "  Run 'tag diff' to see changes, 'tag update' to apply.\n")
-	}
-
-	return cli.Exit("", 1)
+	fmt.Fprintf(w, "✗ Template updates available\n")
+	fmt.Fprintf(w, "  Template: %s\n", result.Source)
+	fmt.Fprintf(w, "  Current:  %s\n", shortCommitSHA(result.CurrentSHA))
+	fmt.Fprintf(w, "  Latest:   %s\n", shortCommitSHA(result.LatestSHA))
+	fmt.Fprintf(w, "  Run 'tag diff' to see changes, 'tag update' to apply.\n")
+	return nil
 }
 
 // newGitResolver creates a GitFetcher suitable for commit resolution.

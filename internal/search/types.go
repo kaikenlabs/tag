@@ -6,13 +6,13 @@ import "time"
 
 // SearchResult holds the display data for a single template found on GitHub.
 type SearchResult struct {
-	Name        string    // Repository name (without owner)
-	FullName    string    // owner/repo format
-	Description string    // Repository description
-	URL         string    // HTML URL to the repository
-	Stars       int       // GitHub stargazers count
-	UpdatedAt   time.Time // Timestamp of the last push
-	Language    string    // Primary programming language (may be empty)
+	Name        string    `json:"name"`        // Repository name (without owner)
+	FullName    string    `json:"full_name"`   // owner/repo format
+	Description string    `json:"description"` // Repository description
+	URL         string    `json:"url"`         // HTML URL to the repository
+	Stars       int       `json:"stars"`       // GitHub stargazers count
+	UpdatedAt   time.Time `json:"updated_at"`  // Timestamp of the last push
+	Language    string    `json:"language"`    // Primary programming language (may be empty)
 }
 
 // Options controls GitHub repository search behaviour.
