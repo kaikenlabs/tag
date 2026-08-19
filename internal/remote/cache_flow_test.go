@@ -146,7 +146,8 @@ func TestUT_FSCache_List_NonexistentBaseDir(t *testing.T) {
 
 	entries, err := cache.List()
 	require.NoError(t, err)
-	assert.Nil(t, entries)
+	assert.NotNil(t, entries, "List must return an empty slice, not nil, so JSON serialises as []")
+	assert.Empty(t, entries)
 }
 
 func TestUT_FSCache_SetTTL(t *testing.T) {

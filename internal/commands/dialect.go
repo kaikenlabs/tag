@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/dialect"
+	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -39,20 +40,59 @@ EXAMPLES
 	}
 }
 
+// dialectListEntry is the JSON shape for one row of `dialect list`. It
+// deliberately omits provenance: the registry does not track where a dialect
+// came from, and the text path's hardcoded "built-in" would mislead scripts.
+type dialectListEntry struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+func dialectListFlags() []cli.Flag {
+	return []cli.Flag{formatFlag(formatText, formatJSON)}
+}
+
 func dialectListCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "list",
 		Usage:   "List available dialects",
 		Aliases: []string{"ls"},
+		Flags:   dialectListFlags(),
 		Action: func(c *cli.Context) error {
+			format, err := resolveFormat(c, formatText, formatJSON)
+			if err != nil {
+				return err
+			}
+
 			reg, err := loadDialectRegistryGlobal()
 			if err != nil {
 				return app.Errorf("failed to load dialects: %w", err)
 			}
-			printDialectList(c.App.Writer, reg)
+
+			out := cmdOut(c)
+			if format == formatJSON {
+				return jsonout.Write(out, map[string]any{"dialects": dialectListEntries(reg)})
+			}
+
+			printDialectList(out, reg)
 			return nil
 		},
 	}
+}
+
+// dialectListEntries materialises the registry's dialects as JSON-ready rows.
+func dialectListEntries(reg *dialect.Registry) []dialectListEntry {
+	names := reg.Names()
+	entries := make([]dialectListEntry, 0, len(names))
+	for _, name := range names {
+		d := reg.Get(name)
+		entries = append(entries, dialectListEntry{Name: name, Description: d.Description})
+	}
+	return entries
+}
+
+func dialectShowFlags() []cli.Flag {
+	return []cli.Flag{formatFlag(formatText, formatJSON)}
 }
 
 func dialectShowCommand() *cli.Command {
@@ -60,12 +100,22 @@ func dialectShowCommand() *cli.Command {
 		Name:      "show",
 		Usage:     "Show type mappings for a dialect",
 		ArgsUsage: "<dialect>",
+		Flags:     dialectShowFlags(),
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
+			args, err := reparseTrailingFlags(c, dialectShowFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
+			}
+			if len(args) == 0 {
 				return app.Errorf("missing dialect name. Usage: tag dialect show <dialect>")
 			}
 
-			dialectName := c.Args().First()
+			format, err := resolveFormat(c, formatText, formatJSON)
+			if err != nil {
+				return err
+			}
+
+			dialectName := args[0]
 
 			reg, err := loadDialectRegistryGlobal()
 			if err != nil {
@@ -77,10 +127,26 @@ func dialectShowCommand() *cli.Command {
 				return app.Errorf("unknown dialect %q. Run 'tag dialect list' to see available dialects.", dialectName)
 			}
 
-			printDialectShow(c.App.Writer, d)
+			out := cmdOut(c)
+			if format == formatJSON {
+				return writeDialectJSON(out, d)
+			}
+
+			printDialectShow(out, d)
 			return nil
 		},
 	}
+}
+
+// writeDialectJSON serialises a dialect as a bare JSON object. A dialect with
+// no declared types has a nil Types map; it is copied out to an empty map so
+// the wire shape is {} rather than null.
+func writeDialectJSON(w io.Writer, d *dialect.Dialect) error {
+	payload := *d
+	if payload.Types == nil {
+		payload.Types = map[string]string{}
+	}
+	return jsonout.Write(w, payload)
 }
 
 func printDialectList(w io.Writer, reg *dialect.Registry) {

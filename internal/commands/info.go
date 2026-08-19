@@ -16,6 +16,16 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
+func templateInfoFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "update",
+			Aliases: []string{"u"},
+			Usage:   "Force refresh of cached remote templates",
+		},
+	}
+}
+
 // InfoCommand returns the info command definition.
 func templateInfoCommand() *cli.Command {
 	return &cli.Command{
@@ -41,24 +51,22 @@ Examples:
 
   # Force refresh of cached remote template
   tag template info gh:user/awesome-template --update`,
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "update",
-				Aliases: []string{"u"},
-				Usage:   "Force refresh of cached remote templates",
-			},
-		},
+		Flags:        templateInfoFlags(),
 		Action:       infoAction,
 		BashComplete: completeLibraryTemplateNames,
 	}
 }
 
 func infoAction(c *cli.Context) error {
-	if c.NArg() < 1 {
+	args, err := reparseTrailingFlags(c, templateInfoFlags())
+	if err != nil {
+		return app.UsageErrorf("%s", err)
+	}
+	if len(args) < 1 {
 		return app.UsageErrorf("template reference is required\n\nUsage: tag template info <template>")
 	}
 
-	ref := c.Args().Get(0)
+	ref := args[0]
 
 	templateDir, err := resolveTemplateDir(c, ref)
 	if err != nil {

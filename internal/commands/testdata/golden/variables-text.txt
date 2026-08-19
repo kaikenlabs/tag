@@ -1,0 +1,8 @@
+Variables declared in tag.template.json:
+  project_name    (string, default: my-project)  — used in 1 file(s), 1 reference(s)
+
+No undeclared variables.
+
+No unused variables.
+
+Summary: 1 declared, 0 undeclared, 0 unused

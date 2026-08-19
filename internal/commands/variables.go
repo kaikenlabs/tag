@@ -1,13 +1,21 @@
 package commands
 
 import (
-	"os"
-
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/vars"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
+
+func templateVariablesFlags() []cli.Flag {
+	return []cli.Flag{
+		formatFlag(formatText, formatJSON),
+		&cli.BoolFlag{
+			Name:  "strict",
+			Usage: "exit with non-zero status when undeclared or unused variables are found",
+		},
+	}
+}
 
 func templateVariablesCommand() *cli.Command {
 	return &cli.Command{
@@ -30,30 +38,24 @@ Examples:
   tag template variables ./my-template
   tag template variables --format json
   tag template variables --strict`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "format",
-				Usage: "output format: text or json",
-				Value: "text",
-			},
-			&cli.BoolFlag{
-				Name:  "strict",
-				Usage: "exit with non-zero status when undeclared or unused variables are found",
-			},
-		},
+		Flags: templateVariablesFlags(),
 		Action: func(c *cli.Context) error {
-			if c.NArg() > 1 {
-				return app.UsageErrorf("expected at most one path argument, got %d", c.NArg())
+			args, err := reparseTrailingFlags(c, templateVariablesFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
+			}
+			if len(args) > 1 {
+				return app.UsageErrorf("expected at most one path argument, got %d", len(args))
 			}
 
-			format := c.String("format")
-			if format != "text" && format != "json" {
-				return app.UsageErrorf("unsupported format %q (use text or json)", format)
+			format, err := resolveFormat(c, formatText, formatJSON)
+			if err != nil {
+				return err
 			}
 
 			root := "."
-			if c.NArg() == 1 {
-				root = c.Args().First()
+			if len(args) == 1 {
+				root = args[0]
 			}
 
 			report, err := vars.Analyze(root)
@@ -61,8 +63,8 @@ Examples:
 				return app.Errorf("variable analysis failed: %w", err)
 			}
 
-			out := os.Stdout
-			if format == "json" {
+			out := cmdOut(c)
+			if format == formatJSON {
 				if jsonErr := vars.WriteJSON(out, report); jsonErr != nil {
 					return app.Errorf("write json: %w", jsonErr)
 				}

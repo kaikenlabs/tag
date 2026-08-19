@@ -29,6 +29,8 @@ The `--dry-run` flag stops after the Plan phase and prints the combination matri
 |----------|----------|-------------|
 | `template-dir` | No | Path to template directory (default: current directory) |
 
+Flags may appear before or after `template-dir`: `tag test ./my-template --format json` and `tag test --format json ./my-template` are equivalent.
+
 ## Flags
 
 | Flag | Short | Description |
@@ -175,7 +177,7 @@ tag test ./my-template --max-cases 256        # Higher cap
 |------|---------|
 | `0` | All combinations passed |
 | `1` | One or more combinations failed validation |
-| `2` | Internal error (template parse failure, config error, etc.) |
+| `2` | Internal error (template parse failure, config error, unsupported `--format` value, etc.) |
 
 ## JSON Output Format
 

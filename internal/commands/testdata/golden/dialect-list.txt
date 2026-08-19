@@ -1,0 +1,7 @@
+NAME         SOURCE     DESCRIPTION
+go           built-in   Go language type mappings
+mysql        built-in   MySQL database type mappings
+openapi      built-in   OpenAPI 3.x schema type mappings
+postgres     built-in   PostgreSQL database type mappings
+protobuf     built-in   Protocol Buffers type mappings
+typescript   built-in   TypeScript language type mappings

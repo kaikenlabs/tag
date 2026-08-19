@@ -18,9 +18,9 @@ var (
 
 // Dialect represents a single dialect with its type mappings.
 type Dialect struct {
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description,omitempty"`
-	Types       map[string]string `yaml:"types"`
+	Name        string            `yaml:"name" json:"name"`
+	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
+	Types       map[string]string `yaml:"types" json:"types"`
 }
 
 // Registry holds a collection of named dialects and resolves canonical types

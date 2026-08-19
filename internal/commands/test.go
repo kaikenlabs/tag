@@ -50,11 +50,16 @@ EXIT CODES
   2  One or more errors (config, setup)`,
 		Flags: testFlags(),
 		Action: func(c *cli.Context) error {
-			root := "."
-			if c.NArg() > 0 {
-				root = c.Args().First()
+			args, err := reparseTrailingFlags(c, testFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
 			}
-			return testAction(c, c.App.Writer, root)
+
+			root := "."
+			if len(args) > 0 {
+				root = args[0]
+			}
+			return testAction(c, cmdOut(c), root)
 		},
 	}
 }
@@ -118,11 +123,7 @@ func testFlags() []cli.Flag {
 			Value: 64,
 			Usage: "Safety limit for total combinations (0 = unlimited)",
 		},
-		&cli.StringFlag{
-			Name:  "format",
-			Value: "text",
-			Usage: "Output format: text or json",
-		},
+		formatFlag(formatText, formatJSON),
 		&cli.BoolFlag{
 			Name:    "verbose",
 			Aliases: []string{"v"},
@@ -136,6 +137,11 @@ func testFlags() []cli.Flag {
 }
 
 func testAction(c *cli.Context, w io.Writer, templateDir string) error {
+	format, err := resolveFormat(c, formatText, formatJSON)
+	if err != nil {
+		return err
+	}
+
 	pinVars, err := parse.ParseKeyValues(c.StringSlice("pin"), true)
 	if err != nil {
 		return app.Errorf("invalid --pin value: %w", err)
@@ -163,7 +169,7 @@ func testAction(c *cli.Context, w io.Writer, templateDir string) error {
 		MaxCases:    c.Int("max-cases"),
 		Verbose:     c.Bool("verbose"),
 		AcceptHooks: c.Bool("accept-hooks"),
-		Format:      c.String("format"),
+		Format:      format,
 	}
 
 	plan, err := testrunner.Plan(cfg)
@@ -178,7 +184,7 @@ func testAction(c *cli.Context, w io.Writer, templateDir string) error {
 	}
 
 	// Print header (skip for JSON to keep stdout machine-parseable).
-	if cfg.Format != "json" {
+	if cfg.Format != formatJSON {
 		fmt.Fprintf(w, "Template: %s\n", templateDir)
 		fmt.Fprintf(w, "Boolean variables: %v\n", plan.BoolVars)
 		fmt.Fprintf(w, "Test cases: %d | Combinations: %d | Parallel: %d\n\n",
@@ -196,7 +202,7 @@ func testAction(c *cli.Context, w io.Writer, templateDir string) error {
 	}
 
 	switch cfg.Format {
-	case "json":
+	case formatJSON:
 		if jsonErr := testrunner.PrintJSONReport(w, report); jsonErr != nil {
 			return app.Errorf("write JSON report: %w", jsonErr)
 		}

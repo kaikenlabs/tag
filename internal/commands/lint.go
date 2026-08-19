@@ -2,13 +2,16 @@ package commands
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/lint"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
+
+func templateLintFlags() []cli.Flag {
+	return []cli.Flag{formatFlag(formatText, formatJSON)}
+}
 
 func templateLintCommand() *cli.Command {
 	return &cli.Command{
@@ -21,26 +24,24 @@ func templateLintCommand() *cli.Command {
   - Variable references against declared variables
 
 Returns exit code 0 on success, 1 on lint errors, 2 on usage errors.`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "format",
-				Usage: "output format: text or json",
-				Value: "text",
-			},
-		},
+		Flags: templateLintFlags(),
 		Action: func(c *cli.Context) error {
-			if c.NArg() > 1 {
-				return app.UsageErrorf("expected at most one path argument, got %d", c.NArg())
+			args, err := reparseTrailingFlags(c, templateLintFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
+			}
+			if len(args) > 1 {
+				return app.UsageErrorf("expected at most one path argument, got %d", len(args))
 			}
 
-			format := c.String("format")
-			if format != "text" && format != "json" {
-				return app.UsageErrorf("unsupported format %q (use text or json)", format)
+			format, err := resolveFormat(c, formatText, formatJSON)
+			if err != nil {
+				return err
 			}
 
 			root := "."
-			if c.NArg() == 1 {
-				root = c.Args().First()
+			if len(args) == 1 {
+				root = args[0]
 			}
 
 			linter, err := lint.NewLinter(root)
@@ -53,8 +54,8 @@ Returns exit code 0 on success, 1 on lint errors, 2 on usage errors.`,
 				return app.Errorf("lint failed: %w", err)
 			}
 
-			out := os.Stdout
-			if format == "json" {
+			out := cmdOut(c)
+			if format == formatJSON {
 				if err := lint.WriteJSON(out, result); err != nil {
 					return app.Errorf("write json: %w", err)
 				}

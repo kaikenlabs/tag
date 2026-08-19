@@ -1,10 +1,11 @@
 package vars
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/kaikenlabs/tag/internal/jsonout"
 )
 
 // WriteText writes the analysis report in human-readable text format.
@@ -112,9 +113,7 @@ func WriteJSON(w io.Writer, report *Report) error {
 	// Ensure slices are [] not null in JSON.
 	ensureNonNilSlices(report)
 
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(report)
+	return jsonout.Write(w, report)
 }
 
 func ensureNonNilSlices(report *Report) {

@@ -76,7 +76,7 @@ The `past` filter handles irregular verbs, consonant doubling, and preserves cas
 
 Override built-in mappings by placing YAML files in `_dialects/` within a template. Three-tier loading: built-in → user-global (`~/.local/share/tag/dialects/`) → template-local.
 
-CLI: `tag dialect list`, `tag dialect show <name>`
+CLI: `tag dialect list` (`--format json` → `{"dialects": [{"name","description"}]}`, no `source` field — the registry doesn't track provenance), `tag dialect show <name>` (`--format json` → bare `{"name","description","types"}`)
 
 ### Global Functions
 
@@ -514,6 +514,7 @@ func {{ op.operationId | pascal }}() {}
 tag lib add gh:user/template           # Install
 tag lib add gh:user/template --as name # Custom name
 tag lib ls                             # List
+tag lib ls --format json               # Machine-readable output
 tag lib edit my-template               # Open in editor
 tag lib update my-template             # Re-fetch
 tag lib update                         # Update all
@@ -522,12 +523,28 @@ tag lib rm my-template                 # Remove
 
 Cookiecutter templates are auto-detected and converted when added.
 
+### Template Search
+
+```bash
+tag lib search kubernetes                    # Search GitHub for templates
+tag lib search kubernetes --limit 5          # Cap results (default: 10, max 100)
+tag lib search --sort updated --order asc    # Sort by stars/forks/updated (default: stars desc)
+tag lib search --format json                 # Machine-readable output ({"results": [...]})
+```
+
+The query is variadic (all non-flag arguments are joined with spaces), so flags may appear before or after it: `tag lib search foo --limit 5` treats `--limit` as a flag, not as part of the query text.
+
+A dash-prefixed token that doesn't match a known flag is a usage error rather than being folded into the query. To search for a literal dash-prefixed term, put it after another argument and a `--` separator: `tag lib search go -- -language:java`. A leading `--` (`tag lib search -- -x`) does not work — urfave/cli consumes it before TAG sees it.
+
+Exit codes: `0` = success (including zero results), `1` = search request failed, `2` = usage error (unsupported `--format` value, unrecognised flag).
+
 ### Template Linting
 
 ```bash
 tag template lint                      # Lint current directory
 tag template lint ./path/to/template   # Lint specific template
 tag template lint --format json        # Machine-readable output for CI
+tag template lint ./path --format json # Flags may come before or after the path
 ```
 
 Validates:
@@ -546,6 +563,7 @@ tag template variables                 # Audit current directory
 tag template vars ./path/to/template   # Audit specific template (vars is an alias)
 tag template variables --format json   # Machine-readable output
 tag template variables --strict        # Non-zero exit on issues (for CI)
+tag template variables ./path --format json # Flags may come before or after the path
 ```
 
 Cross-references declared variables in `tag.template.json` with usage in templates:
@@ -583,10 +601,9 @@ Exit codes: `0` = applied or previewed, `1` = rename error (undeclared, name tak
 tag template graph                     # Analyze current directory
 tag template graph ./path/to/template  # Analyze a specific template
 tag template graph --format json       # Machine-readable output
+tag template graph ./path --format json # Flags may come before or after the path
 tag template graph --format dot | dot -Tpng -o graph.png
 ```
-
-Flags must precede the positional argument.
 
 Builds the implicit dependency graph between generators by reading each template's frontmatter:
 
@@ -611,9 +628,12 @@ Exit code is `0` even when warnings are present — `graph` reports, it does not
 
 ```bash
 tag cache list                         # Show cached templates
+tag cache list --format json           # Machine-readable output ({"entries": [{"key","meta"}]})
 tag cache clear                        # Clear expired entries
 tag cache clear --all                  # Clear entire cache
 ```
+
+`cache list --format json` redacts query strings from cached URLs (`original_ref`/`resolved_url` in `meta` become `...?[redacted]`) so presigned-URL credentials aren't printed; the text table never showed these URLs at all, so it is unaffected.
 
 ### Bundle Prerequisites
 
@@ -750,6 +770,7 @@ Commands for keeping scaffolded projects in sync with upstream template changes.
 tag check                              # Check if upstream has newer commits (exit 0/1)
 tag check --quiet                      # CI mode: exit code only, no output
 tag check --ref main                   # Check against a specific branch/tag
+tag check --format json                # Machine-readable output ({"up_to_date","current_sha","latest_sha","source"})
 
 tag diff                               # Show unified diff of proposed changes
 tag diff --stat                        # Show compact diffstat summary
@@ -783,6 +804,8 @@ tag update --abort                     # Abort and restore from backup
 **Conflict workflow**: If conflicts occur, resolve them manually in the affected files, then run `tag update --continue` to finalize. Or run `tag update --abort` to restore from backup.
 
 **`.tagconfig.json` tracking**: After a successful update, `.tagconfig.json` is updated with the new `commit` SHA. The `tag check` command compares this SHA against the latest remote commit.
+
+**`tag check --quiet` and `--format json`**: `--quiet` suppresses all output — including the JSON document — in both formats; only the exit code is left to inspect. Exit codes are unchanged by `--format`: `1` still fires when updates are available, after the JSON (when not `--quiet`) has been written.
 
 #### CI Integration
 
@@ -833,6 +856,7 @@ jobs:
 
 ```bash
 tag test [template-dir]                   # Test current directory (or specified path)
+tag test ./my-template --format json      # Flags may come before or after the path
 ```
 
 Discovers boolean variables in `tag.template.json`, generates all 2^N combinations, scaffolds each one in an isolated temp directory, and optionally runs validation commands. Useful for verifying templates work correctly with all boolean flag permutations before publishing.

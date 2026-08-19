@@ -1,0 +1,7 @@
+digraph generators {
+  rankdir=LR;
+  node [fontname="Helvetica"];
+  edge [fontname="Helvetica" fontsize=10];
+
+
+}

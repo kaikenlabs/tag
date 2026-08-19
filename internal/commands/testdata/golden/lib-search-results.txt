@@ -1,0 +1,9 @@
+Found 2 template(s):
+
+REPOSITORY                               STARS  UPDATED      DESCRIPTION
+----------                               -----  -------      -----------
+acme/go-api                              142    2024-03-15   Production Go HTTP service template
+acme/py-svc                              7      2024-03-15   
+
+To install a template:
+  tag lib add gh:<owner>/<repo>
