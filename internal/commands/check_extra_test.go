@@ -41,17 +41,25 @@ func TestUT_CheckCommand_Structure(t *testing.T) {
 
 	assert.Equal(t, "check", cmd.Name)
 	require.NotNil(t, cmd.Action)
-	require.Len(t, cmd.Flags, 4)
 
 	flagNames := map[string]bool{}
+	var formatFlag *cli.StringFlag
 	for _, f := range cmd.Flags {
 		for _, n := range f.Names() {
 			flagNames[n] = true
+		}
+		if sf, ok := f.(*cli.StringFlag); ok && sf.Name == "format" {
+			formatFlag = sf
 		}
 	}
 	assert.True(t, flagNames["dir"])
 	assert.True(t, flagNames["ref"])
 	assert.True(t, flagNames["quiet"])
+
+	// A bare flag count is a magic number that any added flag would satisfy
+	// without noticing; pin the flag this ticket actually cares about instead.
+	require.NotNil(t, formatFlag, "check must expose --format")
+	assert.Equal(t, formatText, formatFlag.Value, "default format must be text so existing invocations are unchanged")
 }
 
 func TestUT_NewGitResolver_ReturnsResolver(t *testing.T) {

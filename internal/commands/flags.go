@@ -37,8 +37,12 @@ func formatFlag(allowed ...string) *cli.StringFlag {
 // first positional, so a trailing --format is not yet visible on the context.
 func resolveFormat(c *cli.Context, allowed ...string) (string, error) {
 	format := c.String("format")
-	if format == "" {
-		// Contexts built by hand in tests do not register the flag at all.
+
+	// An unregistered flag and an explicitly empty one both read back as "".
+	// Only the former is benign — it is what hand-built test contexts produce.
+	// `--format=""` is a real invocation and must be rejected, or a consumer
+	// whose $FORMAT expanded to nothing silently receives text.
+	if format == "" && !c.IsSet("format") {
 		return formatText, nil
 	}
 
@@ -178,12 +182,13 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 // and be reported as "requires a value", which sends the reader looking for a
 // missing argument rather than a misspelled flag.
 //
-// The "--" hint only works when the token follows a positional argument: given
+// The "--" escape only survives when it follows a positional argument: given
 // `cmd -- -x`, urfave/cli consumes the "--" itself and never hands it to us,
-// whereas in `cmd query -- -x` parsing has already stopped and the "--"
-// survives into c.Args().
+// whereas in `cmd query -- -x` parsing has already stopped and the "--" reaches
+// c.Args(). The hint says "after another argument" rather than a bare "use --"
+// so it does not send the reader down a path that cannot work.
 func unknownFlagError(name string) error {
-	return fmt.Errorf("unknown flag -%s (put it before the arguments, or use \"--\" to pass it through as an argument)", name)
+	return fmt.Errorf("unknown flag -%s (to pass it as a literal argument, put it after another argument and a \"--\" separator)", name)
 }
 
 // commonScaffoldFlags returns flags shared between the scaffold and run commands.

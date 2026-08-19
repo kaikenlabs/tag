@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,11 +52,23 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 		entries, ok := parsed["entries"].([]any)
 		require.True(t, ok)
 		require.Len(t, entries, 1)
+
+		entry, ok := entries[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "go-api", entry["key"])
+
+		meta, ok := entry["meta"].(map[string]any)
+		require.True(t, ok, "meta object must be present")
+		assert.Equal(t, "v1.2.0", meta["version"])
+		assert.Equal(t, goldenTime.Format(time.RFC3339), meta["fetched_at"])
 	})
 
 	t.Run("lib ls", func(t *testing.T) {
 		seedHome(t)
-		seedLibrary(t, &library.Entry{Name: "go-api", Source: "gh:acme/go-api", AddedAt: goldenTime, UpdatedAt: goldenTime})
+		seedLibrary(t, &library.Entry{
+			Name: "go-api", Source: "gh:acme/go-api", Version: "v1.2.0",
+			AddedAt: goldenTime, UpdatedAt: goldenTime,
+		})
 		run := runCLI(t, LibCommand(), "lib", "ls", "--format", "json")
 		require.NoError(t, run.Err)
 		assert.Empty(t, run.Stdout)
@@ -66,6 +79,12 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 		templates, ok := parsed["templates"].([]any)
 		require.True(t, ok)
 		require.Len(t, templates, 1)
+
+		tmpl, ok := templates[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "go-api", tmpl["name"])
+		assert.Equal(t, "gh:acme/go-api", tmpl["source"])
+		assert.Equal(t, "v1.2.0", tmpl["version"])
 	})
 
 	t.Run("lib search", func(t *testing.T) {
@@ -80,6 +99,13 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 		results, ok := parsed["results"].([]any)
 		require.True(t, ok)
 		require.Len(t, results, 1)
+
+		result, ok := results[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "go-api", result["name"])
+		assert.Equal(t, "acme/go-api", result["full_name"])
+		assert.Equal(t, "desc", result["description"])
+		assert.Equal(t, float64(5), result["stars"])
 	})
 
 	t.Run("dialect list", func(t *testing.T) {
@@ -94,6 +120,18 @@ func TestUT_SixCommands_FormatJSON_Shape(t *testing.T) {
 		dialects, ok := parsed["dialects"].([]any)
 		require.True(t, ok)
 		assert.NotEmpty(t, dialects)
+
+		var goDialect map[string]any
+		for _, d := range dialects {
+			entry, ok := d.(map[string]any)
+			require.True(t, ok)
+			if entry["name"] == "go" {
+				goDialect = entry
+				break
+			}
+		}
+		require.NotNil(t, goDialect, "expected the built-in \"go\" dialect in the list")
+		assert.Equal(t, "Go language type mappings", goDialect["description"])
 	})
 
 	t.Run("dialect show", func(t *testing.T) {

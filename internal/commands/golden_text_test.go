@@ -23,11 +23,21 @@ import (
 // updateGoldenText rewrites the golden fixtures instead of asserting against
 // them. Run with: go test ./internal/commands -run TestUT_TextGolden -update-golden
 //
-// The fixtures were captured from the pre-epic output paths in the commit that
-// introduced this file, before any --format work landed. A later commit that
-// changes one is visible as a testdata diff in review — that is the whole point
-// of the "text output stays byte-identical" acceptance criterion. Regenerating a
-// fixture to make a failing test pass defeats it.
+// Provenance matters here, because a golden regenerated from the code it is
+// meant to police proves only that the code equals itself:
+//
+//   - The six #346 fixtures were captured in the commit that introduced this
+//     file, before any --format work landed on the branch.
+//   - The four #345 fixtures (lint-text, variables-text, graph-text, graph-dot)
+//     were captured by building `main` in a git worktree and running its binary
+//     against the same fixture template, then asserting the refactored code
+//     reproduces those bytes.
+//
+// A later commit that changes a fixture is visible as a testdata diff in
+// review — that is the whole point of the "text output stays byte-identical"
+// acceptance criterion, and regenerating a fixture to make a failing test pass
+// defeats it. If output must legitimately change, recapture from the previous
+// release rather than from the working tree, and say so in the commit message.
 var updateGoldenText = flag.Bool("update-golden", false, "rewrite golden text fixtures")
 
 // cliRun is the captured result of one command invocation.
@@ -103,8 +113,11 @@ func seedHome(t *testing.T) string {
 	return home
 }
 
-// seedCacheEntry writes a cache entry with a fixed timestamp.
-func seedCacheEntry(t *testing.T, home, key, version string, expires *time.Time) {
+// seedCacheEntry writes a cache entry with a fixed timestamp. Optional opts
+// mutate the CacheMeta before it is written — e.g. to set a ResolvedURL/
+// OriginalRef containing a query-string credential for the redaction tests,
+// which the fixed defaults below cannot express.
+func seedCacheEntry(t *testing.T, home, key, version string, expires *time.Time, opts ...func(*remote.CacheMeta)) {
 	t.Helper()
 
 	entryDir := filepath.Join(home, ".tag", "cache", key)
@@ -116,6 +129,9 @@ func seedCacheEntry(t *testing.T, home, key, version string, expires *time.Time)
 		Version:     version,
 		FetchedAt:   goldenTime,
 		ExpiresAt:   expires,
+	}
+	for _, opt := range opts {
+		opt(&meta)
 	}
 	data, err := json.Marshal(meta)
 	require.NoError(t, err)
@@ -204,6 +220,18 @@ func seedProject(t *testing.T, currentSHA, latestSHA string) string {
 	newGitResolver = func() remote.LatestCommitResolver { return stubResolver{sha: latestSHA} }
 	t.Cleanup(func() { newGitResolver = original })
 
+	return dir
+}
+
+// seedTemplate writes a minimal template directory. Used for the four commands
+// #345 retrofits onto the shared --format helpers, whose text paths must also
+// stay byte-identical.
+func seedTemplate(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte(validTemplateConfig), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go.tmpl"), []byte("package {{ vars.project_name }}\n"), 0o600))
 	return dir
 }
 
@@ -297,6 +325,31 @@ func TestUT_TextGolden(t *testing.T) {
 		run := runCLI(t, CheckCommand(), "check", "--dir", dir)
 		require.NoError(t, run.Err)
 		assertGolden(t, "check-up-to-date", run.All())
+	})
+
+	// The four commands #345 retrofits onto the shared helpers. Their print
+	// paths were not meant to change; these fixtures are what proves it.
+	t.Run("lint-text", func(t *testing.T) {
+		run := runCLI(t, templateLintCommand(), "lint", seedTemplate(t))
+		assertGolden(t, "lint-text", run.All())
+	})
+
+	t.Run("variables-text", func(t *testing.T) {
+		run := runCLI(t, templateVariablesCommand(), "variables", seedTemplate(t))
+		require.NoError(t, run.Err)
+		assertGolden(t, "variables-text", run.All())
+	})
+
+	t.Run("graph-text", func(t *testing.T) {
+		run := runCLI(t, templateGraphCommand(), "graph", seedTemplate(t))
+		require.NoError(t, run.Err)
+		assertGolden(t, "graph-text", run.All())
+	})
+
+	t.Run("graph-dot", func(t *testing.T) {
+		run := runCLI(t, templateGraphCommand(), "graph", seedTemplate(t), "--format", formatDOT)
+		require.NoError(t, run.Err)
+		assertGolden(t, "graph-dot", run.All())
 	})
 
 	t.Run("check-updates-available", func(t *testing.T) {
