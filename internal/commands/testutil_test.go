@@ -184,6 +184,13 @@ func createSharedDir(t *testing.T, basePath string) {
 func setupFakeLibrary(t *testing.T, templateName string) string {
 	t.Helper()
 
+	// Isolate HOME as well as the library dir. A scaffold driven through
+	// scaffoldAction ends in replay.Save, whose getReplayDir resolves
+	// os.UserHomeDir() directly (internal/replay/save.go) — with the real HOME
+	// every such test dropped a file into the developer's ~/.tag/replay, which
+	// is how hundreds accumulated there.
+	t.Setenv("HOME", t.TempDir())
+
 	dataDir := t.TempDir()
 
 	// Create template directory on disk

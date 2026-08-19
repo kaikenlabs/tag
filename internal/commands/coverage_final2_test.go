@@ -284,7 +284,7 @@ func TestUT_DoctorCheckTemplates_InvalidConfig(t *testing.T) {
 	// Should have a fail result for the bad template
 	hasFail := false
 	for _, r := range results {
-		if r.status == doctorFail {
+		if r.Status == doctorFail {
 			hasFail = true
 		}
 	}
@@ -292,16 +292,24 @@ func TestUT_DoctorCheckTemplates_InvalidConfig(t *testing.T) {
 }
 
 func TestUT_DoctorCheckLibraries_EmptyLibrary(t *testing.T) {
+	// library.New (called by doctorCheckLibraries) also builds a resolver
+	// that touches $HOME/.tag/cache, so HOME must be isolated too, not just
+	// XDG_DATA_HOME. Not parallel: t.Setenv.
+	t.Setenv("HOME", t.TempDir())
 	dataDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataDir)
 
 	results := doctorCheckLibraries()
 	require.NotEmpty(t, results)
-	assert.Equal(t, doctorPass, results[0].status)
-	assert.Contains(t, results[0].label, "none installed")
+	assert.Equal(t, doctorPass, results[0].Status)
+	assert.Contains(t, results[0].Label, "none installed")
 }
 
 func TestUT_DoctorCheckLibraries_InaccessiblePath(t *testing.T) {
+	// library.New (called by doctorCheckLibraries) also builds a resolver
+	// that touches $HOME/.tag/cache, so HOME must be isolated too, not just
+	// XDG_DATA_HOME. Not parallel: t.Setenv.
+	t.Setenv("HOME", t.TempDir())
 	xdgDir := t.TempDir()
 	// xdg.DataHome returns $XDG_DATA_HOME/tag, so the library is at $XDG_DATA_HOME/tag/
 	tagDataDir := filepath.Join(xdgDir, "tag")
@@ -325,7 +333,7 @@ func TestUT_DoctorCheckLibraries_InaccessiblePath(t *testing.T) {
 	// Should have a fail for inaccessible path (template dir doesn't exist)
 	hasFail := false
 	for _, r := range results {
-		if r.status == doctorFail {
+		if r.Status == doctorFail {
 			hasFail = true
 		}
 	}
@@ -333,6 +341,12 @@ func TestUT_DoctorCheckLibraries_InaccessiblePath(t *testing.T) {
 }
 
 func TestUT_DoctorAction_AllPass_NoError(t *testing.T) {
+	// doctorAction -> doctorCheckLibraries reads $HOME/$XDG_DATA_HOME
+	// directly, bypassing the overridable newLocalLibrary var. The previous
+	// version only isolated XDG_DATA_HOME, but library.New also builds a
+	// resolver that touches $HOME/.tag/cache — seedHome isolates both.
+	// Not parallel: seedHome and t.Setenv below mutate process env.
+	seedHome(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")
 	dir := t.TempDir()
 	tagDir := filepath.Join(dir, types.TemplatesDir)
@@ -344,10 +358,8 @@ func TestUT_DoctorAction_AllPass_NoError(t *testing.T) {
 	require.NoError(t, os.Chdir(dir))
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-
 	var buf bytes.Buffer
-	err = doctorAction(context.Background(), &buf, "dev")
+	err = doctorAction(context.Background(), &buf, "dev", formatText)
 	// With GITHUB_TOKEN set and proper .tag/ structure, should pass or warn
 	if err != nil {
 		var cmdErr *app.CommandError
@@ -361,14 +373,14 @@ func TestUT_DoctorCheckTAGVersion_UpdateAvailable(t *testing.T) {
 	// Non-dev build with a version higher than latest shows "update available" or passes
 	result := doctorCheckTAGVersion(context.Background(), "0.0.1")
 	// Should be either warn (update available) or pass (already up to date)
-	assert.Contains(t, []doctorStatus{doctorWarn, doctorPass}, result.status)
+	assert.Contains(t, []doctorStatus{doctorWarn, doctorPass}, result.Status)
 }
 
 func TestUT_DoctorCheckTAGVersion_DevBuildSkips(t *testing.T) {
 	t.Parallel()
 	result := doctorCheckTAGVersion(context.Background(), "dev-build")
-	assert.Equal(t, doctorPass, result.status)
-	assert.Contains(t, result.label, "dev build")
+	assert.Equal(t, doctorPass, result.Status)
+	assert.Contains(t, result.Label, "dev build")
 }
 
 // ===========================================================================

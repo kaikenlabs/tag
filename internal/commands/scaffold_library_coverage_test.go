@@ -61,6 +61,13 @@ func newCoverageCLIContext(t *testing.T, args []string, flagValues map[string]st
 func setupFakeLibraryWithConfig(t *testing.T, name string) string {
 	t.Helper()
 
+	// Isolate HOME as well as the library dir. A scaffold driven through
+	// scaffoldAction ends in replay.Save, whose getReplayDir resolves
+	// os.UserHomeDir() directly (internal/replay/save.go) — with the real HOME
+	// every such test dropped a file into the developer's ~/.tag/replay, which
+	// is how hundreds accumulated there.
+	t.Setenv("HOME", t.TempDir())
+
 	dataDir := t.TempDir()
 	templateDir := filepath.Join(dataDir, "templates", name)
 	require.NoError(t, os.MkdirAll(templateDir, 0o750))

@@ -183,7 +183,7 @@ func TestUT_ReadFrontmatterDesc_SkipsSubdirectories(t *testing.T) {
 
 func TestUT_FilterByRequirements_AllMet(t *testing.T) {
 	t.Parallel()
-	items := []generatorInfo{
+	items := []GeneratorInfo{
 		{Name: "gen1", Requires: []string{"use_db"}},
 		{Name: "gen2", Requires: []string{"use_api"}},
 	}
@@ -195,7 +195,7 @@ func TestUT_FilterByRequirements_AllMet(t *testing.T) {
 
 func TestUT_FilterByRequirements_SomeUnmet(t *testing.T) {
 	t.Parallel()
-	items := []generatorInfo{
+	items := []GeneratorInfo{
 		{Name: "gen1", Requires: []string{"use_db"}},
 		{Name: "gen2", Requires: []string{"use_api"}},
 	}
@@ -208,7 +208,7 @@ func TestUT_FilterByRequirements_SomeUnmet(t *testing.T) {
 
 func TestUT_FilterByRequirements_NoRequirements(t *testing.T) {
 	t.Parallel()
-	items := []generatorInfo{
+	items := []GeneratorInfo{
 		{Name: "gen1"},
 		{Name: "gen2"},
 	}
@@ -220,7 +220,7 @@ func TestUT_FilterByRequirements_NoRequirements(t *testing.T) {
 
 func TestUT_FilterByRequirements_NilVars(t *testing.T) {
 	t.Parallel()
-	items := []generatorInfo{
+	items := []GeneratorInfo{
 		{Name: "no_req"},
 		{Name: "has_req", Requires: []string{"use_db"}},
 	}
@@ -235,7 +235,7 @@ func TestUT_FilterByRequirements_NilVars(t *testing.T) {
 func TestUT_PrintGeneratorLine_NameAndDescription(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	printGeneratorLine(&buf, generatorInfo{Name: "model", Description: "Generate a model"})
+	printGeneratorLine(&buf, GeneratorInfo{Name: "model", Description: "Generate a model"})
 
 	assert.Contains(t, buf.String(), "model")
 	assert.Contains(t, buf.String(), "Generate a model")
@@ -244,7 +244,7 @@ func TestUT_PrintGeneratorLine_NameAndDescription(t *testing.T) {
 func TestUT_PrintGeneratorLine_NameOnly(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	printGeneratorLine(&buf, generatorInfo{Name: "simple"})
+	printGeneratorLine(&buf, GeneratorInfo{Name: "simple"})
 
 	out := buf.String()
 	assert.Contains(t, out, "simple")
@@ -255,7 +255,7 @@ func TestUT_PrintGeneratorLine_NameOnly(t *testing.T) {
 func TestUT_PrintGeneratorLine_WithRequires(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	printGeneratorLine(&buf, generatorInfo{
+	printGeneratorLine(&buf, GeneratorInfo{
 		Name:        "dbgen",
 		Description: "DB generator",
 		Requires:    []string{"use_db", "use_orm"},
@@ -269,7 +269,13 @@ func TestUT_PrintGeneratorLine_WithRequires(t *testing.T) {
 // --- generateList ---
 
 func TestUT_GenerateList_WithTemplateOriginHeader(t *testing.T) {
-	t.Parallel()
+	// cfg.Template is set, so collectGeneratorLists calls the overridable
+	// newLocalLibrary var. seedLibrary stubs it to an isolated empty library;
+	// without it this test would hit the developer's real library. Not
+	// parallel: seedLibrary mutates a package-level var and races with any
+	// sibling test doing the same.
+	seedLibrary(t)
+
 	dir := t.TempDir()
 	cfg := createTestConfig(t, dir)
 	cfg.Template = &config.TemplateOrigin{
@@ -282,7 +288,7 @@ func TestUT_GenerateList_WithTemplateOriginHeader(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "svc"), 0o750))
 
 	var buf bytes.Buffer
-	err := generateList(cfg, false, &buf)
+	err := generateList(cfg, false, &buf, formatText)
 	require.NoError(t, err)
 
 	out := buf.String()
@@ -290,7 +296,13 @@ func TestUT_GenerateList_WithTemplateOriginHeader(t *testing.T) {
 }
 
 func TestUT_GenerateList_TemplateOriginNoVersion(t *testing.T) {
-	t.Parallel()
+	// cfg.Template is set, so collectGeneratorLists calls the overridable
+	// newLocalLibrary var. seedLibrary stubs it to an isolated empty library;
+	// without it this test would hit the developer's real library. Not
+	// parallel: seedLibrary mutates a package-level var and races with any
+	// sibling test doing the same.
+	seedLibrary(t)
+
 	dir := t.TempDir()
 	cfg := createTestConfig(t, dir)
 	cfg.Template = &config.TemplateOrigin{
@@ -301,7 +313,7 @@ func TestUT_GenerateList_TemplateOriginNoVersion(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "svc"), 0o750))
 
 	var buf bytes.Buffer
-	err := generateList(cfg, false, &buf)
+	err := generateList(cfg, false, &buf, formatText)
 	require.NoError(t, err)
 
 	out := buf.String()
@@ -315,7 +327,7 @@ func TestUT_GenerateList_NoTemplateOriginHint(t *testing.T) {
 	cfg := createTestConfig(t, dir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, false, &buf)
+	err := generateList(cfg, false, &buf, formatText)
 	require.NoError(t, err)
 
 	out := buf.String()
@@ -338,7 +350,7 @@ func TestUT_GenerateList_LocalWithBundles(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "full-stack.json"), data, 0o644))
 
 	var buf bytes.Buffer
-	err = generateList(cfg, false, &buf)
+	err = generateList(cfg, false, &buf, formatText)
 	require.NoError(t, err)
 
 	out := buf.String()

@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"os"
-
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/config"
@@ -39,19 +37,22 @@ func templateNewCommand(cfg *config.Config) *cli.Command {
 	}
 }
 
+// templateListCommand and generateListCommand share one implementation
+// (generateList) and the SAME flags slice (generateListFlags), so `template
+// list` and `generate list` cannot drift in either their flags or their
+// output shape.
 func templateListCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:    "list",
 		Aliases: []string{"ls"},
 		Usage:   "List available generators and bundles",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  flags.AllFlag,
-				Usage: "Show all generators and bundles, including those with unmet requirements",
-			},
-		},
+		Flags:   generateListFlags(),
 		Action: func(c *cli.Context) error {
-			return generateList(cfg, c.Bool(flags.AllFlag), os.Stdout)
+			format, err := resolveFormat(c, formatText, formatJSON)
+			if err != nil {
+				return err
+			}
+			return generateList(cfg, c.Bool(flags.AllFlag), cmdOut(c), format)
 		},
 	}
 }

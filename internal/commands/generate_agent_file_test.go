@@ -145,13 +145,13 @@ func TestUT_BuildAgentContent(t *testing.T) {
 	t.Parallel()
 
 	lists := generatorLists{
-		templateGens: []generatorInfo{
+		templateGens: []GeneratorInfo{
 			{Name: "api", Description: "API handler"},
 		},
-		localGens: []generatorInfo{
+		localGens: []GeneratorInfo{
 			{Name: "model", Description: "Data model"},
 		},
-		templateBundles: []generatorInfo{
+		templateBundles: []GeneratorInfo{
 			{Name: "crud", Description: "Full CRUD"},
 		},
 	}

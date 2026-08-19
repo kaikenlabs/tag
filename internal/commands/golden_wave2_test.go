@@ -81,7 +81,7 @@ func TestUT_TextGoldenWave2(t *testing.T) {
 		cfg := seedGenerators(t)
 
 		var buf bytes.Buffer
-		require.NoError(t, generateList(cfg, false, &buf))
+		require.NoError(t, generateList(cfg, false, &buf, formatText))
 		assertGolden(t, "generate-list", buf.String())
 	})
 
@@ -91,7 +91,7 @@ func TestUT_TextGoldenWave2(t *testing.T) {
 		cfg := seedGenerators(t)
 
 		var buf bytes.Buffer
-		require.NoError(t, generateList(cfg, true, &buf))
+		require.NoError(t, generateList(cfg, true, &buf, formatText))
 		assertGolden(t, "generate-list-all", buf.String())
 	})
 
@@ -127,7 +127,7 @@ func TestUT_TextGoldenWave2(t *testing.T) {
 
 		// "dev" short-circuits the update check, so no network call is made.
 		var buf bytes.Buffer
-		err := doctorAction(context.Background(), &buf, "dev")
+		err := doctorAction(context.Background(), &buf, "dev", formatText)
 		require.Error(t, err, "an empty project warns, so doctor must exit non-zero")
 		assertGolden(t, "doctor-empty-project", buf.String())
 	})

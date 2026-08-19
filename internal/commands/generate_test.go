@@ -1107,7 +1107,7 @@ func TestUT_GenerateList_NoGenerators(t *testing.T) {
 	cfg := createTestConfig(t, tmpDir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, true, &buf)
+	err := generateList(cfg, true, &buf, formatText)
 
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "No generators found.")
@@ -1125,7 +1125,7 @@ func TestUT_GenerateList_LocalGenerators(t *testing.T) {
 	cfg := createTestConfig(t, tmpDir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, true, &buf)
+	err := generateList(cfg, true, &buf, formatText)
 
 	require.NoError(t, err)
 	output := buf.String()
@@ -1146,7 +1146,7 @@ func TestUT_GenerateList_GeneratorWithDescription(t *testing.T) {
 
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg, true, io.Discard)
+	err := generateList(cfg, true, io.Discard, formatText)
 
 	require.NoError(t, err)
 }
@@ -1162,7 +1162,7 @@ func TestUT_GenerateList_WithBundles(t *testing.T) {
 
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg, true, io.Discard)
+	err := generateList(cfg, true, io.Discard, formatText)
 
 	require.NoError(t, err)
 }
@@ -1179,14 +1179,14 @@ func TestUT_GenerateList_BundleDescriptionShown(t *testing.T) {
 	cfg := createTestConfig(t, tmpDir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, true, &buf)
+	err := generateList(cfg, true, &buf, formatText)
 
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "Scaffolds a full feature")
 }
 
 func TestUT_GenerateList_NoConfig(t *testing.T) {
-	err := generateList(nil, true, io.Discard)
+	err := generateList(nil, true, io.Discard, formatText)
 
 	require.Error(t, err)
 }
@@ -1291,7 +1291,7 @@ func TestUT_GenerateList_FrontmatterDescShown(t *testing.T) {
 	cfg := createTestConfig(t, tmpDir)
 
 	var buf bytes.Buffer
-	err := generateList(cfg, true, &buf)
+	err := generateList(cfg, true, &buf, formatText)
 
 	require.NoError(t, err)
 	output := buf.String()
@@ -1715,7 +1715,7 @@ Hello`)
 	}
 
 	var buf bytes.Buffer
-	err := generateList(cfg, false, &buf)
+	err := generateList(cfg, false, &buf, formatText)
 
 	require.NoError(t, err)
 	output := buf.String()
@@ -1741,7 +1741,7 @@ Hello`)
 	}
 
 	var buf bytes.Buffer
-	err := generateList(cfg, true, &buf)
+	err := generateList(cfg, true, &buf, formatText)
 
 	require.NoError(t, err)
 	output := buf.String()
@@ -1767,7 +1767,7 @@ Hello`)
 	}
 
 	var buf bytes.Buffer
-	err := generateList(cfg, false, &buf)
+	err := generateList(cfg, false, &buf, formatText)
 
 	require.NoError(t, err)
 	output := buf.String()
