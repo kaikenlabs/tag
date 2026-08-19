@@ -1,0 +1,13 @@
+ENVIRONMENT
+  ✓  Git installed
+  ⚠  GITHUB_TOKEN — not set — needed for private repos and higher API rate limits
+  ✓  TAG version (dev) — dev build, skipping update check
+
+PROJECT
+  ⚠  .tag/ directory — not found — run: tag template init
+
+TEMPLATES
+  ✓  templates (no .tag/ found, skipped)
+
+LIBRARIES
+  ✓  libraries (none installed)

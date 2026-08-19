@@ -1,0 +1,10 @@
+Available generators:
+
+  PROJECT GENERATORS
+  gatedgen             Needs a flag that is not set [requires: use_db]
+  mygen                A test generator
+
+  BUNDLES
+  mybundle             A test bundle
+
+Run: tag generate <name> <target> [args]

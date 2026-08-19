@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -101,10 +102,20 @@ func newTestApp(cmd *cli.Command, out io.Writer) *cli.App {
 	}
 }
 
+// goldenDir is resolved absolutely: some golden tests t.Chdir into a temp
+// directory, which would otherwise send a relative testdata path there.
+func goldenDir() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("cannot resolve golden fixture directory")
+	}
+	return filepath.Join(filepath.Dir(file), "testdata", "golden")
+}
+
 func assertGolden(t *testing.T, name, got string) {
 	t.Helper()
 
-	path := filepath.Join("testdata", "golden", name+".txt")
+	path := filepath.Join(goldenDir(), name+".txt")
 	if *updateGoldenText {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
 		require.NoError(t, os.WriteFile(path, []byte(got), 0o600))

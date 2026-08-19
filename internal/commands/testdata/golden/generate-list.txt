@@ -1,0 +1,9 @@
+Available generators:
+
+  PROJECT GENERATORS
+  mygen                A test generator
+
+  BUNDLES
+  mybundle             A test bundle
+
+Run: tag generate <name> <target> [args]
