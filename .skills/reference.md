@@ -538,6 +538,41 @@ A dash-prefixed token that doesn't match a known flag is a usage error rather th
 
 Exit codes: `0` = success (including zero results), `1` = search request failed, `2` = usage error (unsupported `--format` value, unrecognised flag).
 
+### Template Info
+
+```bash
+tag template info <template>                # Human-readable metadata
+tag template info gh:user/awesome-template  # Works with any template reference (local, library, remote)
+tag template info <template> --update       # Force refresh of cached remote templates
+tag template info <template> --format json  # Machine-readable output
+tag template info --format json <template>  # Flags may come before or after the template argument
+```
+
+Bare JSON object (no envelope): `{"name","description","version","variables":[{"name","type","prompt","default","required","options","secret"}],"hooks":{"pre_scaffold":[],"post_scaffold":[]},"has_readme","has_howto"}`.
+
+```json
+{
+  "name": "go-api",
+  "description": "Go REST API template",
+  "version": "v1.2.0",
+  "variables": [
+    { "name": "author", "type": "string", "required": true, "secret": false },
+    { "name": "license", "type": "choice", "required": true, "options": ["MIT", "Apache-2.0", "GPL-3.0"], "secret": false },
+    { "name": "port", "type": "number", "default": 8080, "required": false, "secret": false }
+  ],
+  "hooks": {
+    "pre_scaffold": [],
+    "post_scaffold": ["go mod tidy", "git init"]
+  },
+  "has_readme": true,
+  "has_howto": false
+}
+```
+
+`variables` is sorted by name and reports the resolved variable definitions — the same values the text output shows — not the raw declarations from `tag.template.json`. `hooks` always carries both `pre_scaffold` and `post_scaffold`, `[]` when a phase has no hooks. `has_readme`/`has_howto` are booleans only: README/HOWTO content is never included, and the glamour-rendered ANSI of the text view never appears in JSON. There is deliberately no `source` field. `--update` works the same in JSON mode as in text mode.
+
+`tag template info` takes exactly one template argument; a second positional is a usage error (exit `2`), not silently ignored.
+
 ### Template Linting
 
 ```bash
@@ -793,6 +828,7 @@ tag diff                               # Show unified diff of proposed changes
 tag diff --stat                        # Show compact diffstat summary
 tag diff --no-color                    # Pipe-friendly (no ANSI)
 tag diff --ref v2.0.0                  # Diff against a specific ref
+tag diff --format json                 # Machine-readable output ({"old_sha","new_sha","source","files":[{"path","op","conflicted","is_binary","added","deleted"}]})
 
 tag update                             # Apply upstream template changes (3-way merge)
 tag update --dry-run                   # Preview changes without applying
@@ -823,6 +859,23 @@ tag update --abort                     # Abort and restore from backup
 **`.tagconfig.json` tracking**: After a successful update, `.tagconfig.json` is updated with the new `commit` SHA. The `tag check` command compares this SHA against the latest remote commit.
 
 **`tag check --quiet` and `--format json`**: `--quiet` suppresses all output — including the JSON document — in both formats; only the exit code is left to inspect. Exit codes are unchanged by `--format`: `1` still fires when updates are available, after the JSON (when not `--quiet`) has been written.
+
+**`tag diff --format json`**: bare object, no envelope.
+
+```json
+{
+  "old_sha": "a1b2c3d",
+  "new_sha": "e4f5a6b",
+  "source": "gh:user/go-api-template",
+  "files": [
+    { "path": "main.go", "op": "update", "conflicted": false, "is_binary": false, "added": 3, "deleted": 1 },
+    { "path": "assets/logo.png", "op": "update", "conflicted": false, "is_binary": true, "added": 0, "deleted": 0 },
+    { "path": "config.yaml", "op": "conflict", "conflicted": true, "is_binary": false, "added": 0, "deleted": 0 }
+  ]
+}
+```
+
+`files` is `[]`, never `null`, when the project is already up to date, and the JSON is written unconditionally in that case rather than the text "Already up to date." sentence. `op` is one of `add`/`delete`/`update`/`conflict`/`prompt`; files needing no change (`keep`, user-added) are omitted from the array. Binary files are flagged with `is_binary` and always report `0`/`0` for `added`/`deleted` rather than having their bytes counted or dumped — no file contents ever appear in the output. `added`/`deleted` count the same +/- lines the text diff prints for that file, so a file whose content ends in a newline counts a trailing empty line; this is one more than `git diff --numstat` would report for the same file and is expected, not a bug. `--stat` and `--no-color` are accepted but have no effect under `--format json`. Exit codes are unchanged from text: unaffected by whether the project is up to date, non-zero only on error (e.g. `2` for a rejected positional argument — `tag diff` takes none).
 
 #### CI Integration
 
