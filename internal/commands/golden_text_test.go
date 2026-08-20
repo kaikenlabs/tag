@@ -61,6 +61,11 @@ type cliRun struct {
 	// this empty; that emptiness is the machine-readable form of "stdout is
 	// clean", which JSON consumers depend on.
 	Stdout string
+	// ErrOut is what the command wrote to c.App.ErrWriter. Under --format json
+	// several commands deliberately reroute human-facing text there; asserting
+	// only that it is absent from stdout would equally pass an implementation
+	// that threw it away, so the positive half of that claim needs its own sink.
+	ErrOut string
 	Err    error
 }
 
@@ -104,13 +109,45 @@ func runCLICapturingStdout(t *testing.T, cmd *cli.Command, argv ...string) cliRu
 }
 
 func newTestApp(cmd *cli.Command, out io.Writer) *cli.App {
+	return newTestAppWithErr(cmd, out, io.Discard)
+}
+
+// newTestAppWithErr builds the same App with a caller-supplied ErrWriter.
+//
+// Flags mirrors the binary exactly by construction (commands.GlobalFlags is the
+// same list main.go uses), not by a copy that can drift. Without it, --dry-run,
+// --path, --shared-path and --bundle-path are unknown to the test App and any
+// argv containing one fails to parse — which is why no command-level test could
+// reach generate's dry-run path before.
+func newTestAppWithErr(cmd *cli.Command, out, errOut io.Writer) *cli.App {
 	return &cli.App{
 		Writer:    out,
-		ErrWriter: io.Discard,
+		ErrWriter: errOut,
+		Flags:     GlobalFlags(),
 		Commands:  []*cli.Command{cmd},
 		// Default handler calls os.Exit for any cli.ExitCoder (check returns one).
 		ExitErrHandler: func(*cli.Context, error) {},
 	}
+}
+
+// runCLICapturingAll captures c.App.Writer, c.App.ErrWriter and the real
+// os.Stdout in one run, which is what a "--format json" assertion needs: the
+// document on one sink, the human text on another, and proof that nothing
+// escaped to the third.
+//
+// It redirects a process global, so a test using it must NOT call t.Parallel.
+func runCLICapturingAll(t *testing.T, cmd *cli.Command, argv ...string) cliRun {
+	t.Helper()
+
+	var out, errOut bytes.Buffer
+	app := newTestAppWithErr(cmd, &out, &errOut)
+
+	var err error
+	stdout := captureStdout(t, func() {
+		err = app.Run(append([]string{"tag"}, argv...))
+	})
+
+	return cliRun{Writer: out.String(), Stdout: stdout, ErrOut: errOut.String(), Err: err}
 }
 
 // goldenDir is resolved absolutely: some golden tests t.Chdir into a temp

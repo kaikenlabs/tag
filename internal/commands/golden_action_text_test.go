@@ -25,6 +25,16 @@ import (
 //
 // The fixtures deliberately use relative paths and fixed timestamps so no
 // t.TempDir() path leaks into the recorded bytes.
+//
+// One correction, worth recording because it is the only fixture in this file
+// whose bytes were changed after capture: extract-summary was first captured
+// against a test App that declared NO flags, so the global --path flag was
+// unregistered and c.String(PathFlag) read back as "" instead of its real
+// default ".tag" — the fixture recorded "Extracted template: handler/..." which
+// the shipped binary never prints. It was corrected to the output of an actual
+// `tag extract` run of the unmodified binary (".tag/handler/..."), and the test
+// App now builds its flags from commands.GlobalFlags(), the same list main.go
+// uses, so the harness cannot drift from the binary this way again.
 func TestUT_ActionTextGolden(t *testing.T) {
 	t.Run("undo-list", func(t *testing.T) {
 		dir := seedUndoProject(t)
