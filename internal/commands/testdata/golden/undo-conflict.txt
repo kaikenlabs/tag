@@ -1,0 +1,4 @@
+Conflict: the following files were modified after generation:
+  - handler.go
+
+Use --force to override, or --partial to revert unmodified files only.

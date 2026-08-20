@@ -1,0 +1,5 @@
+About to undo generation gen_1_aaa (model) — 1 file(s)
+  [create] handler.go
+
+Non-interactive mode: use --yes to confirm undo automatically.
+Undo cancelled.
