@@ -49,9 +49,9 @@ func TestUT_PrintUpdateSummary_PrintsAllOps(t *testing.T) {
 		},
 	}
 
-	output := captureStdout(t, func() {
-		printUpdateSummary(result)
-	})
+	var buf bytes.Buffer
+	printUpdateSummary(&buf, result)
+	output := buf.String()
 
 	assert.Contains(t, output, "+ a.txt (added)")
 	assert.Contains(t, output, "✓ b.txt (updated)")

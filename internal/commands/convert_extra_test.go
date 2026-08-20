@@ -38,7 +38,6 @@ func newConvertCLIContext(t *testing.T, args []string, flagValues map[string]str
 }
 
 func TestUT_ConvertCookiecutterAction_DryRun(t *testing.T) {
-	t.Parallel()
 	sourceDir := t.TempDir()
 
 	// Create a minimal cookiecutter template
@@ -68,7 +67,6 @@ func TestUT_ConvertCookiecutterAction_DryRun(t *testing.T) {
 }
 
 func TestUT_ConvertCookiecutterAction_HappyPath(t *testing.T) {
-	t.Parallel()
 	sourceDir := t.TempDir()
 
 	// Create a minimal cookiecutter template

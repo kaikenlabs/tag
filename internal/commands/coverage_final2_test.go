@@ -46,7 +46,7 @@ func TestUT_GenerateWithHooks_ErrUserQuit_ReturnsNil(t *testing.T) {
 		flags.NoHooksFlag:    true,
 	})
 
-	err := generateWithHooks(ctx, cfg, "gen", "name", func(_ *history.Recorder) (engine.GenerateResult, error) {
+	_, err := generateWithHooks(ctx, cfg, "gen", "name", false, func(_ *history.Recorder) (engine.GenerateResult, error) {
 		return engine.GenerateResult{}, writer.ErrUserQuit
 	})
 	assert.NoError(t, err, "ErrUserQuit should be handled gracefully")
@@ -65,7 +65,7 @@ func TestUT_GenerateWithHooks_DryRun_SkipsHistory(t *testing.T) {
 		flags.DryRunFlag:     true,
 	})
 
-	err := generateWithHooks(ctx, cfg, "gen", "name", func(_ *history.Recorder) (engine.GenerateResult, error) {
+	_, err := generateWithHooks(ctx, cfg, "gen", "name", false, func(_ *history.Recorder) (engine.GenerateResult, error) {
 		return engine.GenerateResult{Created: 1}, nil
 	})
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestUT_GenerateWithHooks_VerbosePrintsDetails(t *testing.T) {
 	require.NoError(t, set.Parse([]string{"gen", "name"}))
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	err := generateWithHooks(ctx, cfg, "gen", "name", func(_ *history.Recorder) (engine.GenerateResult, error) {
+	_, err := generateWithHooks(ctx, cfg, "gen", "name", false, func(_ *history.Recorder) (engine.GenerateResult, error) {
 		return engine.GenerateResult{
 			Created: 1,
 			Details: []engine.FileOpDetail{
@@ -213,10 +213,9 @@ func TestUT_ShortCommitSHA(t *testing.T) {
 func TestUT_PrintUpdateSummary_EmptyApplied(t *testing.T) {
 	result := &templateupdate.UpdateResult{Applied: nil}
 	// Should not panic
-	output := captureStdout(t, func() {
-		printUpdateSummary(result)
-	})
-	assert.Empty(t, output)
+	var buf bytes.Buffer
+	printUpdateSummary(&buf, result)
+	assert.Empty(t, buf.String())
 }
 
 func TestUT_UpdateTemplateAction_AcceptOursOnly(t *testing.T) {

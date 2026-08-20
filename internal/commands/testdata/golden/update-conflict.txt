@@ -1,0 +1,18 @@
+Updating from template (abc1234 → def4567)
+
+Variable changes:
+  + author (new, optional) — using default: unset
+  - legacy (removed)
+
+
+Hook changes:
+  NEW post_scaffold hook:
+    + make fmt
+
+  ✓ cmd/main.go (updated)
+  + internal/new.go (added)
+  - internal/old.go (deleted)
+  ⚠ conf.go (conflict)
+
+⚠ 1 conflict(s) found. Resolve manually, then run: tag update --continue
+  Or: tag update --accept-ours | --accept-theirs

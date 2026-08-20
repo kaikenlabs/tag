@@ -1,0 +1,14 @@
+Would update from abc1234 → def4567
+
+Variable changes:
+  + author (new, optional) — using default: unset
+  - legacy (removed)
+
+
+Hook changes:
+  NEW post_scaffold hook:
+    + make fmt
+
+  ✓ cmd/main.go (updated)
+  + internal/new.go (added)
+  - internal/old.go (deleted)

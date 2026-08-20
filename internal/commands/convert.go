@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
+	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
@@ -32,7 +33,7 @@ func convertCookiecutterCommand() *cli.Command {
 		Description: `Convert a Cookiecutter template to TAG format.
 
 This command converts cookiecutter.json to tag.template.json and renames
-path placeholders from {{ cookiecutter.var }} to __var__ syntax.
+path placeholders from {{ cookiecutter.var }} to {{ vars.var }} syntax.
 
 Template content (Jinja2) is mostly compatible with TAG's Gonja engine,
 but the tool will analyze and report any potential incompatibilities.
@@ -58,29 +59,46 @@ EXAMPLES:
 
   # Force overwrite existing output
   tag convert cookiecutter ./cookiecutter-myproject -o ./output --force`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Usage:   "Output directory (default: <source-name>-tag)",
-			},
-			&cli.BoolFlag{
-				Name:    "force",
-				Aliases: []string{"f"},
-				Usage:   "Overwrite output directory if it exists",
-			},
-		},
+		Flags:  convertCookiecutterFlags(),
 		Action: convertCookiecutterAction,
 	}
 }
 
+// convertCookiecutterFlags is shared between the command definition and
+// reparseTrailingFlags, so a trailing --format (or --dry-run, a global flag)
+// is recognised rather than silently dropped.
+func convertCookiecutterFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "output",
+			Aliases: []string{"o"},
+			Usage:   "Output directory (default: <source-name>-tag)",
+		},
+		&cli.BoolFlag{
+			Name:    "force",
+			Aliases: []string{"f"},
+			Usage:   "Overwrite output directory if it exists",
+		},
+		formatFlag(formatText, formatJSON),
+	}
+}
+
 func convertCookiecutterAction(c *cli.Context) error {
-	// Validate arguments
-	if c.NArg() < 1 {
+	args, err := reparseTrailingFlags(c, convertCookiecutterFlags())
+	if err != nil {
+		return err
+	}
+
+	if len(args) < 1 {
 		return app.UsageErrorf("source template is required\n\nUsage: tag convert cookiecutter <source>")
 	}
 
-	source := c.Args().Get(0)
+	format, err := resolveFormat(c, formatText, formatJSON)
+	if err != nil {
+		return err
+	}
+
+	source := args[0]
 	destination := c.String("output")
 
 	// Create converter
@@ -101,6 +119,10 @@ func convertCookiecutterAction(c *cli.Context) error {
 	result, err := converter.Convert(c.Context, opts)
 	if err != nil {
 		return app.Errorf("conversion failed: %w", err)
+	}
+
+	if format == formatJSON {
+		return jsonout.Write(cmdOut(c), result)
 	}
 
 	// Display results

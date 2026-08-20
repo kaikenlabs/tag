@@ -33,8 +33,11 @@ The conversion process:
 |------|-------|-------------|
 | `--output <path>` | `-o` | Output directory (default: `<source-name>-tag`) |
 | `--force` | `-f` | Overwrite output directory if it exists |
+| `--format <fmt>` | | Output format: `text` (default) or `json` |
 
 Use the global `--dry-run` / `-d` flag to preview conversion without writing files.
+
+`--force` and `--format` are recognised whether they appear before or after the `<source>` argument — a trailing `tag convert cookiecutter ./cookiecutter-myproject --format json` works the same as putting the flag first.
 
 ## Examples
 
@@ -89,6 +92,45 @@ Converted template: ./myproject-tag
 
 See: https://tag.kaikenlabs.com/docs/migration
 ```
+
+## Machine-Readable Output
+
+```bash
+tag convert cookiecutter ./cookiecutter-myproject -o ./myproject-tag --format json
+```
+
+```json
+{
+  "source": "./cookiecutter-myproject",
+  "destination": "./myproject-tag",
+  "variables_converted": 8,
+  "dirs_renamed": 3,
+  "files_renamed": 12,
+  "files_processed": 25,
+  "hooks_copied": 2,
+  "incompatibilities": [
+    {
+      "path": "setup.py.tmpl",
+      "line": 8,
+      "kind": "default_filter_syntax",
+      "message": "...",
+      "original": "{{ author|default('Anonymous') }}",
+      "suggestion": "{{ author|default:\"Anonymous\" }}",
+      "severity": "warning"
+    }
+  ],
+  "warnings": [],
+  "dry_run": false,
+  "files": [
+    { "from": "{{ cookiecutter.project_name }}/README.md", "to": "{{ vars.project_name }}/README.md" }
+  ],
+  "variables": [
+    { "name": "project_name", "original_type": "string", "tag_type": "string" }
+  ]
+}
+```
+
+Bare object, no envelope. `severity` is a plain string (`"info"`/`"warning"`/`"error"`). The array fields (`incompatibilities`, `warnings`, `files`, `variables`) are always present as `[]`, never omitted or `null`, even when empty. `files[].to` and every path/content conversion rewrite `{{ cookiecutter.var }}` to `{{ vars.var }}` **in place** — there is no `__var__` double-underscore form. `variables[].default` appears only in JSON (the text summary above never prints variable defaults); `original`/`suggestion` on an incompatibility are shown in the text output truncated to 60 characters, but appear in full in JSON.
 
 ## What Gets Converted
 

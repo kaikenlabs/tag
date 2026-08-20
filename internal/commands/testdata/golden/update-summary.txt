@@ -1,0 +1,4 @@
+  + a.txt (added)
+  ✓ b.txt (updated)
+  - c.txt (deleted)
+  ⚠ d.txt (conflict)

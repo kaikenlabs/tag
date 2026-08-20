@@ -264,7 +264,8 @@ my-project/
 | Command | Description |
 |---------|-------------|
 | `tag scaffold [template] [name]` | Create project (no args = picker). Alias: `tag s` |
-| `tag generate <gen-or-bundle> <name>` | Run generator or bundle. Alias: `tag g` |
+| `tag generate <gen-or-bundle> <name>` | Run generator or bundle (`--format json`). Alias: `tag g` |
+| `tag extract --name <n> --as <gen> <file>` | Extract a generator template from an existing source file (`--format json`, `-i` not supported with `--format json`) |
 | `tag generate list [--all]` | List generators and bundles (`--format json`). Alias: `tag g list` |
 | `tag generate info <name>` | Show JSON metadata for a generator or bundle |
 | `tag generate agent-file <format>` | Generate AI agent reference file |
@@ -276,7 +277,7 @@ my-project/
 | `tag template variables [path]` | Audit variable declarations vs usage (`--format json`, `--strict`) |
 | `tag template rename-var <old> <new> [path]` | Rename a variable across config and templates (`--dry-run`) |
 | `tag template graph [path]` | Visualize generator dependencies (`--format text\|json\|dot`) |
-| `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template |
+| `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template (`--format json`) |
 | `tag dialect list` | List available type-mapping dialects (`--format json`) |
 | `tag dialect show <name>` | Show type mappings for a dialect (`--format json`) |
 | `tag lib add <ref>` | Install template to library |
@@ -285,13 +286,13 @@ my-project/
 | `tag lib rm <name>` | Remove template |
 | `tag lib update [name]` | Update from source |
 | `tag test [template-dir]` | Matrix-test all boolean variable combinations (`--format json`) |
-| `tag undo` | Revert the last generation |
-| `tag undo --list` | Show generation history |
+| `tag undo` | Revert the last generation (`--format json` requires `--yes`) |
+| `tag undo --list` | Show generation history (`--format json` → `{"generations":[...]}`) |
 | `tag undo --id <id>` | Revert a specific generation |
 | `tag doctor` | Diagnose environment/project/template/library health (`--format json`). Exit 0/1/2 = pass/warn/fail |
 | `tag check [--quiet] [--ref REF]` | Check if upstream template changed (`--format json`). Exit 0 = up-to-date, 1 = updates available |
 | `tag diff [--stat] [--no-color]` | Show what would change if you ran `tag update` (read-only) (`--format json`) |
-| `tag update [--set k=v] [--skip-hooks]` | Apply upstream template changes via 3-way merge |
+| `tag update [--set k=v] [--skip-hooks]` | Apply upstream template changes via 3-way merge (`--format json`) |
 | `tag update --continue` | Resume after manual conflict resolution |
 | `tag update --abort` | Abort update and restore from backup |
 | `tag upgrade` | Self-upgrade to latest release |
@@ -321,7 +322,7 @@ my-project/
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |
 | `--force` | scaffold | Overwrite existing output |
-| `--format text\|json` | doctor, version, check, diff, cache ls, lib ls, lib search, dialect list, dialect show, template info, template lint, template variables, template graph (also `dot`), generate list, template list, test | Output format (default: `text`). Unknown value = usage error, exit 2 |
+| `--format text\|json` | doctor, version, check, diff, cache ls, lib ls, lib search, dialect list, dialect show, template info, template lint, template variables, template graph (also `dot`), generate list, template list, test, generate, extract, undo, undo --list, update, convert cookiecutter | Output format (default: `text`). Unknown value = usage error, exit 2 |
 
 ## Pitfalls
 

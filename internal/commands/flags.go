@@ -78,6 +78,19 @@ func cmdOut(c *cli.Context) io.Writer {
 	return os.Stdout
 }
 
+// cmdErr returns the sink a command should send human-facing text to when
+// stdout is reserved for a JSON document. It is the ErrWriter counterpart of
+// cmdOut, and exists for the same reason: urfave/cli only fills ErrWriter in
+// during App.Setup, so a hand-rolled context — which this package's tests are
+// full of — leaves it nil, and writing to a nil io.Writer panics rather than
+// failing politely.
+func cmdErr(c *cli.Context) io.Writer {
+	if c != nil && c.App != nil && c.App.ErrWriter != nil {
+		return c.App.ErrWriter
+	}
+	return os.Stderr
+}
+
 // reparseTrailingFlags rescans c.Args() for flag-like tokens that Go's flag
 // parser silently dropped (it stops at the first non-flag argument).
 // Recognised flags are applied via c.Set(); the remaining positional arguments
@@ -104,20 +117,40 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 	valueless := make(map[string]bool)
 	canonical := make(map[string]string)
 
-	for _, f := range cliFlags {
-		names := f.Names()
-		if len(names) == 0 {
-			continue
-		}
-		primary := names[0]
-		for _, n := range names {
-			canonical[n] = primary
-		}
-		if df, ok := f.(cli.DocGenerationFlag); ok && !df.TakesValue() {
+	register := func(flags []cli.Flag) {
+		for _, f := range flags {
+			names := f.Names()
+			if len(names) == 0 {
+				continue
+			}
+			primary := names[0]
 			for _, n := range names {
-				valueless[n] = true
+				canonical[n] = primary
+			}
+			if df, ok := f.(cli.DocGenerationFlag); ok && !df.TakesValue() {
+				for _, n := range names {
+					valueless[n] = true
+				}
 			}
 		}
+	}
+
+	register(cliFlags)
+
+	// The App's own flags (--dry-run, --path, --shared-path, --bundle-path) are
+	// declared in main.go, not on any command, so a command that relies on them
+	// would otherwise see a trailing --dry-run as an unknown flag. Registering
+	// them here is enough on its own: cli.Context.Set resolves a name through
+	// the whole context lineage (see lookupFlagSet), so the value lands on
+	// whichever context actually owns the flag. A command-local flag of the same
+	// name still wins, because Lineage() runs child-to-parent.
+	//
+	// Before this, `tag generate model User --dry-run` silently DROPPED
+	// --dry-run: nothing rescanned the tail. Registering only the command's own
+	// flags would have converted that silent drop into a hard error instead of
+	// making it work.
+	if c != nil && c.App != nil {
+		register(c.App.Flags)
 	}
 
 	var positional []string
@@ -189,6 +222,44 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 // so it does not send the reader down a path that cannot work.
 func unknownFlagError(name string) error {
 	return fmt.Errorf("unknown flag -%s (to pass it as a literal argument, put it after another argument and a \"--\" separator)", name)
+}
+
+// GlobalFlags returns the flags declared on the cli.App itself rather than on
+// any single command: they apply to several commands and are read through the
+// context lineage (e.g. generate reads --dry-run, --path, --shared-path and
+// --bundle-path without declaring any of them).
+//
+// This lives here, rather than inline in main.go, so the test harness builds
+// its App from the same list the binary does. The two had drifted: tests
+// constructed an App with no flags at all, so no test could invoke
+// `generate --dry-run` — it failed to parse — and the whole dry-run surface was
+// unreachable from the command-level suite.
+func GlobalFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:    flags.DryRunFlag,
+			Aliases: []string{"d"},
+			Usage:   "Dry run mode (applies to: generate, convert)",
+		},
+		&cli.StringFlag{
+			Name:    flags.PathFlag,
+			Value:   ".tag",
+			Usage:   "Creates the templates directory path at the root of the project.",
+			EnvVars: []string{"TAG_PATH"},
+		},
+		&cli.StringFlag{
+			Name:    flags.SharedPathFlag,
+			Value:   "_shared",
+			Usage:   "Shared template directory name",
+			EnvVars: []string{"TAG_SHARED_PATH"},
+		},
+		&cli.StringFlag{
+			Name:    flags.BundlePathFlag,
+			Value:   "_bundles",
+			Usage:   "Bundles directory name",
+			EnvVars: []string{"TAG_BUNDLE_PATH"},
+		},
+	}
 }
 
 // commonScaffoldFlags returns flags shared between the scaffold and run commands.

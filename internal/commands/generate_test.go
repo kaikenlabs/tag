@@ -242,8 +242,12 @@ func TestUT_GenerateAction_MetaViaAppRun(t *testing.T) {
 	// This is the only test that covers the actual urfave/cli StringSlice parsing path,
 	// which is the last untested layer between the user's shell and the engine.
 	//
-	// urfave/cli v2 requires flags BEFORE positional args (POSIX compliance).
-	// "tag generate -m key=val gen name" works; "tag generate gen name -m key=val" does NOT.
+	// urfave/cli v2 requires flags BEFORE positional args (POSIX compliance) —
+	// "tag generate -m key=val gen name" is the native path. A trailing
+	// "tag generate gen name -m key=val" used to be silently swallowed as
+	// extra positional args; generateAction now calls reparseTrailingFlags
+	// (needed so a trailing --format works at all), which fixes that as a
+	// side effect for every flag on generateFlags(), --meta included.
 	tests := []struct {
 		name     string
 		args     []string
@@ -255,9 +259,9 @@ func TestUT_GenerateAction_MetaViaAppRun(t *testing.T) {
 			wantMeta: true,
 		},
 		{
-			name:     "flags after args are silently ignored by urfave/cli v2",
+			name:     "flags after args are now recognised via reparseTrailingFlags",
 			args:     []string{"tag", "generate", "hello", "widget", "-m", "fields=name:string", "-m", "domain=tenant", "--no-hooks"},
-			wantMeta: false,
+			wantMeta: true,
 		},
 	}
 
@@ -2164,7 +2168,7 @@ func TestUT_GenerateWithHooks_PostHookFailureIsWarning(t *testing.T) {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	t.Cleanup(func() { slog.SetDefault(origLogger) })
 
-	err = generateWithHooks(ctx, cfg, "mygen", "mytarget", func(_ *history.Recorder) (engine.GenerateResult, error) {
+	_, err = generateWithHooks(ctx, cfg, "mygen", "mytarget", false, func(_ *history.Recorder) (engine.GenerateResult, error) {
 		return engine.GenerateResult{Created: 1}, nil
 	})
 
@@ -2190,7 +2194,7 @@ func TestUT_GenerateWithHooks_PreHookFailureIsFatal(t *testing.T) {
 	require.NoError(t, os.Chdir(tmpDir))
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-	err = generateWithHooks(ctx, cfg, "mygen", "mytarget", func(_ *history.Recorder) (engine.GenerateResult, error) {
+	_, err = generateWithHooks(ctx, cfg, "mygen", "mytarget", false, func(_ *history.Recorder) (engine.GenerateResult, error) {
 		t.Fatal("generate function should not be called when pre-hook fails")
 		return engine.GenerateResult{}, nil
 	})

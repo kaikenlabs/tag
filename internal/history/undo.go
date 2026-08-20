@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -26,25 +27,53 @@ type UndoOptions struct {
 	Out io.Writer
 }
 
+// UndoResult reports what Undo actually did, so a caller (in particular a
+// JSON-mode command) can build its output from the engine's own counts
+// rather than recomputing them.
+type UndoResult struct {
+	// GenID is the generation that was undone.
+	GenID string
+	// Files is a per-file breakdown, in the generation's original order.
+	Files []UndoFileResult
+	// Reverted is the number of files actually reverted.
+	Reverted int
+	// Skipped is the number of files left untouched because they conflicted
+	// (only possible under Partial).
+	Skipped int
+	// Conflicts lists the paths that conflicted. It is only non-empty when
+	// Force or Partial allowed the undo to proceed anyway; without either,
+	// a conflict aborts before this result is built (see ConflictError).
+	// Under Force the conflicting files are reverted regardless, so a path
+	// can appear here AND have Reverted true in Files.
+	Conflicts []string
+}
+
+// UndoFileResult records what happened to a single file entry during Undo.
+type UndoFileResult struct {
+	Path     string
+	Action   fileaction.Action
+	Reverted bool
+}
+
 // Undo reverts a generation recorded in tagDir's manifest.
 // On success, the generation entry is removed from the manifest.
-func Undo(tagDir string, opts UndoOptions) error {
+func Undo(tagDir string, opts UndoOptions) (*UndoResult, error) {
 	m, err := Load(tagDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Resolve target generation.
 	var gen Generation
 	if opts.GenID == "" {
 		if len(m.Generations) == 0 {
-			return errors.New("no generations to undo")
+			return nil, errors.New("no generations to undo")
 		}
 		gen = m.Generations[len(m.Generations)-1]
 	} else {
 		idx := indexByID(m, opts.GenID)
 		if idx < 0 {
-			return ErrNotFound
+			return nil, ErrNotFound
 		}
 		gen = m.Generations[idx]
 	}
@@ -54,15 +83,17 @@ func Undo(tagDir string, opts UndoOptions) error {
 
 	if len(conflicted) > 0 {
 		if !opts.Force && !opts.Partial {
-			return &ConflictError{Paths: conflicted}
+			return nil, &ConflictError{Paths: conflicted}
 		}
 		if opts.Partial {
 			printConflictWarning(opts.Out, gen.ID, conflicted)
 		}
 	}
 
-	// Revert files in reverse order.
+	// Revert files in reverse order; results are recorded by index so the
+	// returned slice ends up in the generation's original order.
 	backupDir := filepath.Join(tagDir, types.HistoryBackupsDir, gen.ID)
+	files := make([]UndoFileResult, len(gen.Files))
 	var reverted, skipped int
 	for i := len(gen.Files) - 1; i >= 0; i-- {
 		entry := gen.Files[i]
@@ -70,13 +101,15 @@ func Undo(tagDir string, opts UndoOptions) error {
 		// In partial mode, skip conflicted files.
 		if opts.Partial && !opts.Force && isConflicted(entry, conflicted) {
 			skipped++
+			files[i] = UndoFileResult{Path: entry.Path, Action: entry.Action, Reverted: false}
 			continue
 		}
 
 		if err := revertFile(entry, backupDir); err != nil {
-			return fmt.Errorf("undo file %s: %w", entry.Path, err)
+			return nil, fmt.Errorf("undo file %s: %w", entry.Path, err)
 		}
 		reverted++
+		files[i] = UndoFileResult{Path: entry.Path, Action: entry.Action, Reverted: true}
 	}
 
 	// Clean up empty directories left by deleted files.
@@ -87,11 +120,17 @@ func Undo(tagDir string, opts UndoOptions) error {
 
 	// Remove generation from manifest.
 	if err := Remove(tagDir, gen.ID); err != nil {
-		return fmt.Errorf("update manifest: %w", err)
+		return nil, fmt.Errorf("update manifest: %w", err)
 	}
 
 	printSummary(opts.Out, gen, reverted, skipped)
-	return nil
+	return &UndoResult{
+		GenID:     gen.ID,
+		Files:     files,
+		Reverted:  reverted,
+		Skipped:   skipped,
+		Conflicts: conflicted,
+	}, nil
 }
 
 // ListGenerations returns all generations in the manifest, newest first.

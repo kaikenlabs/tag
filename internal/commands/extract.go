@@ -7,6 +7,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/extract"
+	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
@@ -36,38 +37,64 @@ EXAMPLES:
 
   # Interactively confirm each replacement
   tag extract --name user --as handler -i internal/handler/user_handler.go`,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  flags.NameFlag,
-				Usage: "Entity name to parameterize (e.g. user, order, product)",
-			},
-			&cli.StringFlag{
-				Name:  flags.AsFlag,
-				Usage: "Generator name (output directory under .tag/)",
-			},
-			&cli.BoolFlag{
-				Name:    flags.DryRunFlag,
-				Aliases: []string{"d"},
-				Usage:   "Preview what would be written without creating any files",
-			},
-			&cli.BoolFlag{
-				Name:    flags.InteractiveFlag,
-				Aliases: []string{"i"},
-				Usage:   "Confirm each replacement interactively",
-			},
-		},
+		Flags:  extractFlags(),
 		Action: extractAction,
 	}
 }
 
+// extractFlags is shared between the command definition and
+// reparseTrailingFlags, so a trailing --format is recognised rather than
+// silently dropped.
+func extractFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:  flags.NameFlag,
+			Usage: "Entity name to parameterize (e.g. user, order, product)",
+		},
+		&cli.StringFlag{
+			Name:  flags.AsFlag,
+			Usage: "Generator name (output directory under .tag/)",
+		},
+		&cli.BoolFlag{
+			Name:    flags.DryRunFlag,
+			Aliases: []string{"d"},
+			Usage:   "Preview what would be written without creating any files",
+		},
+		&cli.BoolFlag{
+			Name:    flags.InteractiveFlag,
+			Aliases: []string{"i"},
+			Usage:   "Confirm each replacement interactively",
+		},
+		formatFlag(formatText, formatJSON),
+	}
+}
+
 func extractAction(c *cli.Context) error {
-	if c.NArg() < 1 {
+	args, err := reparseTrailingFlags(c, extractFlags())
+	if err != nil {
+		return err
+	}
+
+	if len(args) < 1 {
 		return app.UsageErrorf("source file is required\n\nUsage: tag extract --name <name> --as <generator> <source-file>")
 	}
 
-	sourcePath := c.Args().Get(0)
+	format, err := resolveFormat(c, formatText, formatJSON)
+	if err != nil {
+		return err
+	}
+	jsonMode := format == formatJSON
+
+	sourcePath := args[0]
 	name := c.String(flags.NameFlag)
 	as := c.String(flags.AsFlag)
+	interactive := c.Bool(flags.InteractiveFlag)
+
+	// D3: silently disabling an explicitly requested flag is worse than
+	// refusing outright.
+	if jsonMode && interactive {
+		return app.UsageErrorf("--format json does not support -i/--interactive")
+	}
 
 	if name == "" {
 		return app.UsageErrorf("--name flag is required\n\nUsage: tag extract --name <name> --as <generator> <source-file>")
@@ -77,8 +104,8 @@ func extractAction(c *cli.Context) error {
 	}
 
 	// Validate generator name for path safety.
-	if err := ValidateNameSafe(as); err != nil {
-		return app.Errorf("invalid generator name: %w", err)
+	if nameErr := ValidateNameSafe(as); nameErr != nil {
+		return app.Errorf("invalid generator name: %w", nameErr)
 	}
 
 	// Validate source file exists.
@@ -94,7 +121,6 @@ func extractAction(c *cli.Context) error {
 	}
 
 	tagDir := c.String(flags.PathFlag)
-	interactive := c.Bool(flags.InteractiveFlag)
 
 	opts := extract.Options{
 		Name:        name,
@@ -103,6 +129,13 @@ func extractAction(c *cli.Context) error {
 		Interactive: interactive,
 		TagDir:      tagDir,
 		Writer:      c.App.Writer,
+	}
+
+	// The dry-run preview writes human text through opts.Writer; in JSON mode
+	// it must not reach stdout, so it is rerouted to c.App.ErrWriter — visible
+	// to a human, absent from the parseable document.
+	if jsonMode {
+		opts.Writer = cmdErr(c)
 	}
 
 	if interactive {
@@ -114,6 +147,10 @@ func extractAction(c *cli.Context) error {
 		return err
 	}
 
+	if jsonMode {
+		return jsonout.Write(cmdOut(c), newExtractDoc(result, opts.DryRun))
+	}
+
 	if !opts.DryRun {
 		fmt.Fprintf(c.App.Writer, "Extracted template: %s\n", result.TemplatePath)
 		fmt.Fprintf(c.App.Writer, "  to: %s\n", result.ToPath)
@@ -121,4 +158,28 @@ func extractAction(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+// extractDoc is the JSON shape for `extract --format json`. Content carries
+// the generated template body only in dry-run (D8): in dry-run nothing is on
+// disk, so omitting it would leave the consumer with no way to see the
+// result; on a real run the content is already on disk and unbounded, so it
+// is omitted.
+type extractDoc struct {
+	TemplatePath string `json:"template_path"`
+	ToPath       string `json:"to_path"`
+	Replacements int    `json:"replacements"`
+	Content      string `json:"content,omitempty"`
+}
+
+func newExtractDoc(result *extract.Result, dryRun bool) extractDoc {
+	doc := extractDoc{
+		TemplatePath: result.TemplatePath,
+		ToPath:       result.ToPath,
+		Replacements: result.Replacements,
+	}
+	if dryRun {
+		doc.Content = result.Content
+	}
+	return doc
 }

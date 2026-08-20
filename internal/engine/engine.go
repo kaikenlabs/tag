@@ -123,14 +123,33 @@ func NewCore(parser TemplateParser, fwr writer.FileWriter, out io.Writer) Core {
 	}
 }
 
+// isTerminalFd reports whether fd refers to a terminal. It is a variable so the
+// dry-run prompt gate can be exercised without a real TTY — see
+// TestUT_DiffPromptEnabled_OnlyWhenSinkIsRealTerminal for why that matters.
+var isTerminalFd = func(fd uintptr) bool {
+	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
+}
+
+// diffPromptEnabled reports whether the interactive dry-run prompt (y/n/a/q per
+// file) should fire for a diff being written to out.
+//
+// It requires BOTH that the process's stdout is a terminal AND that out is that
+// same stdout. The second condition is the load-bearing one: the prompt reads
+// from os.Stdin, so firing it when the diff is going anywhere else — io.Discard
+// under `--format json`, a test buffer, a pipe — blocks forever on input nobody
+// will type. Before this, only the first condition was checked.
+func diffPromptEnabled(out io.Writer) bool {
+	return out == os.Stdout && isTerminalFd(os.Stdout.Fd())
+}
+
 // dryRunWriterOpts returns WriterOption slice for dry-run mode.
-// When dryRun is true, diff output is directed to out and TTY is auto-detected.
+// When dryRun is true, diff output is directed to out; see diffPromptEnabled for
+// when that diff is also interactive.
 func dryRunWriterOpts(dryRun bool, out io.Writer) []writer.WriterOption {
 	if !dryRun {
 		return nil
 	}
-	isTTY := isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
-	return []writer.WriterOption{writer.WithDiffOutput(out, os.Stdin, isTTY)}
+	return []writer.WriterOption{writer.WithDiffOutput(out, os.Stdin, diffPromptEnabled(out))}
 }
 
 // Generate generates code from templates using the Gonja-based engine.

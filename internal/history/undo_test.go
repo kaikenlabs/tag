@@ -35,7 +35,10 @@ func TestUT_UndoEngine_LastGeneration_DeletesCreatedFiles(t *testing.T) {
 	require.NoError(t, Append(tagDir, gen))
 
 	var out bytes.Buffer
-	require.NoError(t, Undo(tagDir, UndoOptions{Out: &out}))
+	result, undoErr := Undo(tagDir, UndoOptions{Out: &out})
+	require.NoError(t, undoErr)
+	assert.Equal(t, "gen_1_aaa", result.GenID)
+	assert.Equal(t, 1, result.Reverted)
 
 	_, statErr := os.Stat(target)
 	assert.True(t, os.IsNotExist(statErr), "created file should be deleted")
@@ -70,7 +73,8 @@ func TestUT_UndoEngine_LastGeneration_RestoresModifiedFiles(t *testing.T) {
 	}
 	require.NoError(t, Append(tagDir, gen))
 
-	require.NoError(t, Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}}))
+	_, undoErr := Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
+	require.NoError(t, undoErr)
 
 	restored, err := os.ReadFile(target)
 	require.NoError(t, err)
@@ -120,7 +124,8 @@ func TestUT_RevertFile_RestoresOverwriteAndOpenAPIMerge(t *testing.T) {
 			}
 			require.NoError(t, Append(tagDir, gen))
 
-			require.NoError(t, Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}}))
+			_, undoErr := Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
+			require.NoError(t, undoErr)
 
 			after, err := os.ReadFile(target)
 			require.NoError(t, err)
@@ -151,7 +156,8 @@ func TestUT_UndoEngine_SpecificID_ByID(t *testing.T) {
 	require.NoError(t, Append(tagDir, gen1))
 	require.NoError(t, Append(tagDir, gen2))
 
-	require.NoError(t, Undo(tagDir, UndoOptions{GenID: "gen_2_bbb", Out: &bytes.Buffer{}}))
+	_, undoErr := Undo(tagDir, UndoOptions{GenID: "gen_2_bbb", Out: &bytes.Buffer{}})
+	require.NoError(t, undoErr)
 
 	_, statErr := os.Stat(target)
 	assert.True(t, os.IsNotExist(statErr))
@@ -164,13 +170,13 @@ func TestUT_UndoEngine_SpecificID_ByID(t *testing.T) {
 
 func TestUT_UndoEngine_UnknownID_ReturnsErrNotFound(t *testing.T) {
 	tagDir, _ := setupUndoEnv(t)
-	err := Undo(tagDir, UndoOptions{GenID: "gen_unknown", Out: &bytes.Buffer{}})
+	_, err := Undo(tagDir, UndoOptions{GenID: "gen_unknown", Out: &bytes.Buffer{}})
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestUT_UndoEngine_NoGenerations_ReturnsError(t *testing.T) {
 	tagDir, _ := setupUndoEnv(t)
-	err := Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
+	_, err := Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
 	assert.Error(t, err)
 }
 
@@ -190,7 +196,7 @@ func TestUT_UndoEngine_ConflictDetection_Blocks_ByDefault(t *testing.T) {
 	// Simulate user modification after generation.
 	require.NoError(t, os.WriteFile(target, []byte("user modified"), 0o644))
 
-	err := Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
+	_, err := Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
 	assert.ErrorIs(t, err, ErrConflict)
 }
 
@@ -208,7 +214,7 @@ func TestUT_UndoEngine_ConflictDetection_Force_Proceeds(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(target, []byte("user modified"), 0o644))
 
-	err := Undo(tagDir, UndoOptions{Force: true, Out: &bytes.Buffer{}})
+	_, err := Undo(tagDir, UndoOptions{Force: true, Out: &bytes.Buffer{}})
 	assert.NoError(t, err)
 	_, statErr := os.Stat(target)
 	assert.True(t, os.IsNotExist(statErr))
@@ -238,8 +244,11 @@ func TestUT_UndoEngine_ConflictDetection_Partial_SkipsConflicted(t *testing.T) {
 	require.NoError(t, os.WriteFile(dirtyFile, []byte("user modified"), 0o644))
 
 	var out bytes.Buffer
-	err := Undo(tagDir, UndoOptions{Partial: true, Out: &out})
+	result, err := Undo(tagDir, UndoOptions{Partial: true, Out: &out})
 	assert.NoError(t, err)
+	assert.Equal(t, 1, result.Reverted)
+	assert.Equal(t, 1, result.Skipped)
+	assert.Equal(t, []string{dirtyFile}, result.Conflicts)
 
 	_, cleanStatErr := os.Stat(cleanFile)
 	assert.True(t, os.IsNotExist(cleanStatErr), "clean file should be deleted")
@@ -266,7 +275,8 @@ func TestUT_UndoEngine_DeletesEmptyDirectories(t *testing.T) {
 	}
 	require.NoError(t, Append(tagDir, gen))
 
-	require.NoError(t, Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}}))
+	_, undoErr := Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
+	require.NoError(t, undoErr)
 
 	_, dirStatErr := os.Stat(subDir)
 	assert.True(t, os.IsNotExist(dirStatErr), "empty directory should be removed")
@@ -299,7 +309,8 @@ func TestUT_UndoEngine_UndoTwice_SecondReturnsNotFound(t *testing.T) {
 	}
 	require.NoError(t, Append(tagDir, gen))
 
-	require.NoError(t, Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}}))
-	err = Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
+	_, undoErr := Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
+	require.NoError(t, undoErr)
+	_, err = Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}})
 	assert.Error(t, err, "second undo should fail because no generations remain")
 }

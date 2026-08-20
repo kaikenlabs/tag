@@ -530,7 +530,8 @@ func TestIT_GenerateAppend_RecordsAppendAction(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, string(originalContent), string(afterContent), "file should differ after append")
 
-	require.NoError(t, history.Undo(tagDir, history.UndoOptions{}))
+	_, undoErr := history.Undo(tagDir, history.UndoOptions{})
+	require.NoError(t, undoErr)
 
 	restoredContent, err := os.ReadFile(targetPath)
 	require.NoError(t, err)
@@ -551,7 +552,8 @@ func TestIT_UndoCreate_DeletesFile(t *testing.T) {
 	require.FileExists(t, createdPath, "file should exist after generation")
 
 	var out bytes.Buffer
-	require.NoError(t, history.Undo(tagDir, history.UndoOptions{Out: &out}))
+	_, undoErr := history.Undo(tagDir, history.UndoOptions{Out: &out})
+	require.NoError(t, undoErr)
 
 	assert.NoFileExists(t, createdPath, "file should be deleted after undo")
 	assert.Contains(t, out.String(), "1 file(s) reverted")
@@ -577,7 +579,8 @@ func TestIT_UndoInject_RestoresFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, string(originalContent), string(afterContent), "file should differ after inject")
 
-	require.NoError(t, history.Undo(tagDir, history.UndoOptions{}))
+	_, undoErr := history.Undo(tagDir, history.UndoOptions{})
+	require.NoError(t, undoErr)
 
 	restoredContent, err := os.ReadFile(targetPath)
 	require.NoError(t, err)
@@ -599,7 +602,7 @@ func TestIT_UndoConflict_ErrorWithoutForce(t *testing.T) {
 	targetPath := filepath.Join(workDir, "app", "router.go")
 	require.NoError(t, os.WriteFile(targetPath, []byte("// manually edited\n"), 0o644))
 
-	err := history.Undo(tagDir, history.UndoOptions{})
+	_, err := history.Undo(tagDir, history.UndoOptions{})
 	var conflictErr *history.ConflictError
 	require.ErrorAs(t, err, &conflictErr)
 	assert.NotEmpty(t, conflictErr.Paths)
@@ -625,7 +628,8 @@ func TestIT_UndoConflict_ForceOverrides(t *testing.T) {
 	require.NoError(t, os.WriteFile(targetPath, []byte("// manually edited\n"), 0o644))
 
 	var out bytes.Buffer
-	require.NoError(t, history.Undo(tagDir, history.UndoOptions{Force: true, Out: &out}))
+	_, undoErr := history.Undo(tagDir, history.UndoOptions{Force: true, Out: &out})
+	require.NoError(t, undoErr)
 	assert.Contains(t, out.String(), "1 file(s) reverted")
 
 	restoredContent, err := os.ReadFile(targetPath)

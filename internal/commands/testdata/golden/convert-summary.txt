@@ -1,0 +1,18 @@
+Converted template: /tmp/output
+
+✓ Variables: 7 converted
+✓ Directories renamed: 2
+✓ Files renamed: 3
+✓ Files processed: 12
+⚠ Hooks: 1 files copied (review required)
+
+⚠ Content incompatibilities found: 1
+  Minor adjustments may be needed:
+  - src/main.py:4 - filter-syntax
+    Found: {{ cookiecutter.name|jsonify }}
+    Gonja: {{ vars.name | tojson }}
+
+Warnings:
+  ⚠ hooks/pre_gen_project.py must be reviewed by hand
+
+See: https://tag.kaikenlabs.com/docs/migration

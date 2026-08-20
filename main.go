@@ -8,7 +8,6 @@ import (
 
 	"github.com/kaikenlabs/tag/pkg/prettylog"
 
-	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 
 	"github.com/kaikenlabs/tag/internal/commands"
@@ -76,31 +75,7 @@ func main() {
 				Recipes:   recipesDoc,
 			}),
 		},
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    flags.DryRunFlag,
-				Aliases: []string{"d"},
-				Usage:   "Dry run mode (applies to: generate, convert)",
-			},
-			&cli.StringFlag{
-				Name:    flags.PathFlag,
-				Value:   ".tag",
-				Usage:   "Creates the templates directory path at the root of the project.",
-				EnvVars: []string{"TAG_PATH"},
-			},
-			&cli.StringFlag{
-				Name:    flags.SharedPathFlag,
-				Value:   "_shared",
-				Usage:   "Shared template directory name",
-				EnvVars: []string{"TAG_SHARED_PATH"},
-			},
-			&cli.StringFlag{
-				Name:    flags.BundlePathFlag,
-				Value:   "_bundles",
-				Usage:   "Bundles directory name",
-				EnvVars: []string{"TAG_BUNDLE_PATH"},
-			},
-		},
+		Flags: commands.GlobalFlags(),
 		// Custom error handler to avoid urfave/cli printing errors (we use slog).
 		ExitErrHandler: handleExitError,
 	}

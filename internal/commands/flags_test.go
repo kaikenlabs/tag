@@ -148,3 +148,70 @@ func TestUT_ReparseTrailingFlags(t *testing.T) {
 		})
 	}
 }
+
+// TestUT_ReparseTrailingFlags_AppliesAppLevelGlobalFlag pins the fix for a
+// silent-ignore bug that adding --format to `generate` would otherwise have
+// turned into a hard error.
+//
+// `--dry-run`, `--path`, `--shared-path` and `--bundle-path` are declared on
+// the cli.App in main.go, not on any command. urfave/cli stops parsing at the
+// first positional, so `tag generate model User --dry-run` silently DROPPED
+// --dry-run before this change: nothing rescanned the tail, and the value was
+// left sitting in c.Args(). Feeding the reparser only the command's own flags
+// would have made the same invocation fail with "unknown flag -dry-run", which
+// is louder but still wrong.
+//
+// Context.Set already resolves a flag through the whole lineage
+// (context.go lookupFlagSet), so the only thing missing was the lookup table:
+// the reparser now also registers c.App.Flags.
+func TestUT_ReparseTrailingFlags_AppliesAppLevelGlobalFlag(t *testing.T) {
+	globalFlags := []cli.Flag{
+		&cli.BoolFlag{Name: "dry-run", Aliases: []string{"d"}},
+		&cli.StringFlag{Name: "path", Aliases: []string{"p"}},
+	}
+	cmdFlags := []cli.Flag{
+		&cli.StringFlag{Name: "format", Value: "text"},
+	}
+
+	app := &cli.App{Flags: globalFlags}
+	globalSet := flag.NewFlagSet("global", flag.ContinueOnError)
+	for _, f := range globalFlags {
+		require.NoError(t, f.Apply(globalSet))
+	}
+	require.NoError(t, globalSet.Parse(nil))
+	parent := cli.NewContext(app, globalSet, nil)
+
+	cmdSet := flag.NewFlagSet("cmd", flag.ContinueOnError)
+	for _, f := range cmdFlags {
+		require.NoError(t, f.Apply(cmdSet))
+	}
+	require.NoError(t, cmdSet.Parse([]string{"model", "User", "--dry-run", "--path", ".tag", "--format", "json"}))
+	c := cli.NewContext(app, cmdSet, parent)
+
+	positional, err := reparseTrailingFlags(c, cmdFlags)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"model", "User"}, positional)
+	assert.True(t, c.Bool("dry-run"), "trailing global --dry-run must be applied, not dropped and not rejected")
+	assert.Equal(t, ".tag", c.String("path"), "trailing global --path must consume its value")
+	assert.Equal(t, "json", c.String("format"), "the command's own trailing flag must still work")
+}
+
+// A dash-prefixed token that matches neither the command's flags nor the App's
+// globals must still be an error — the fix widens the lookup table, it does not
+// make the reparser permissive.
+func TestUT_ReparseTrailingFlags_UnknownFlagStillRejectedWithGlobals(t *testing.T) {
+	app := &cli.App{Flags: []cli.Flag{&cli.BoolFlag{Name: "dry-run"}}}
+	cmdFlags := []cli.Flag{&cli.StringFlag{Name: "format", Value: "text"}}
+
+	cmdSet := flag.NewFlagSet("cmd", flag.ContinueOnError)
+	for _, f := range cmdFlags {
+		require.NoError(t, f.Apply(cmdSet))
+	}
+	require.NoError(t, cmdSet.Parse([]string{"model", "--nope"}))
+	c := cli.NewContext(app, cmdSet, nil)
+
+	_, err := reparseTrailingFlags(c, cmdFlags)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag -nope")
+}
