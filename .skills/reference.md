@@ -513,9 +513,11 @@ func {{ op.operationId | pascal }}() {}
 ```bash
 tag lib add gh:user/template           # Install
 tag lib add gh:user/template --as name # Custom name
+tag lib add --as name gh:user/template # Flags may come before or after the ref
 tag lib ls                             # List
 tag lib ls --format json               # Machine-readable output
 tag lib edit my-template               # Open in editor
+tag lib edit my-template --editor vim  # Flags may come before or after the name too
 tag lib update my-template             # Re-fetch
 tag lib update                         # Update all
 tag lib rm my-template                 # Remove
@@ -616,9 +618,8 @@ Exit codes: `0` = no issues (or non-strict), `1` = issues found (`--strict`), `2
 tag template rename-var --dry-run old_name new_name   # Preview every change
 tag template rename-var old_name new_name             # Apply in current directory
 tag template rename-var old_name new_name ./template  # Apply to a specific template
+tag template rename-var old_name new_name --dry-run   # Flags may come before or after the positionals
 ```
-
-Flags must precede the positional arguments.
 
 Rewrites the declaration in `tag.template.json`, derived defaults, hook commands, bundle and generator `requires` entries, all `{{ vars.* }}` / `{% ... vars.* ... %}` expressions, and file/directory name placeholders (renamed on disk).
 
@@ -730,7 +731,9 @@ Template file `to` paths contain raw template expressions (e.g. `{{ name | snake
 ### Agent File
 
 ```bash
-tag generate agent-file <format> [-o <path>]
+tag generate agent-file claude              # Writes CLAUDE.md
+tag generate agent-file claude -o docs/AGENTS.md   # Override output path
+tag generate agent-file -o docs/AGENTS.md claude   # Flags may come before or after the format
 ```
 
 Generates a reference file for AI coding agents listing available generators and bundles.

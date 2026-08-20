@@ -52,33 +52,17 @@ func main() {
 		Name:                 AppName,
 		Usage:                "Template-driven code generation and project scaffolding",
 		EnableBashCompletion: true,
-		Commands: []*cli.Command{
-			commands.GenerateCommand(cfg),
-			commands.ScaffoldCommand(),
-			commands.TemplateCommand(cfg),
-			commands.LibCommand(),
-			commands.DialectCommand(),
-			commands.CacheCommand(),
-			commands.ConvertCommand(),
-			commands.ExtractCommand(),
-			commands.UndoCommand(),
-			commands.CheckCommand(),
-			commands.DiffCommand(),
-			commands.UpdateTemplateCommand(),
-			commands.VersionCommand(Version),
-			commands.UpgradeCommand(Version),
-			commands.TestCommand(),
-			commands.DoctorCommand(Version),
-			commands.SkillCommand(Version, commands.SkillDocs{
-				Guide:     skillDoc,
-				Reference: referenceDoc,
-				Recipes:   recipesDoc,
-			}),
-		},
+		Commands: commands.RootCommands(cfg, Version, commands.SkillDocs{
+			Guide:     skillDoc,
+			Reference: referenceDoc,
+			Recipes:   recipesDoc,
+		}),
 		Flags: commands.GlobalFlags(),
 		// Custom error handler to avoid urfave/cli printing errors (we use slog).
 		ExitErrHandler: handleExitError,
 	}
+	// CompletionCommand needs the *cli.App itself to generate its completion
+	// script, so it cannot be part of RootCommands and is appended here instead.
 	tag.Commands = append(tag.Commands, commands.CompletionCommand(tag))
 
 	if err := tag.Run(os.Args); err != nil {

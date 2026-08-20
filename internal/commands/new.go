@@ -17,6 +17,27 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
+func templateNewGeneratorFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "package",
+			Value:   "mypackage",
+			Usage:   "Specifies the package for the generator",
+			Aliases: []string{"p"},
+		},
+		&cli.BoolFlag{
+			Name:    flags.LibFlag,
+			Usage:   "Create generator in the library template referenced by .tagconfig.json",
+			Aliases: []string{"l"},
+		},
+		&cli.StringFlag{
+			Name:    flags.InBundleFlag,
+			Usage:   "Create generator inside a self-contained bundle directory",
+			Aliases: []string{"B"},
+		},
+	}
+}
+
 func templateNewGeneratorCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:      "generator",
@@ -49,42 +70,30 @@ EXAMPLES:
 		Action: func(c *cli.Context) error {
 			return newAction(c, cfg)
 		},
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "package",
-				Value:   "mypackage",
-				Usage:   "Specifies the package for the generator",
-				Aliases: []string{"p"},
-			},
-			&cli.BoolFlag{
-				Name:    flags.LibFlag,
-				Usage:   "Create generator in the library template referenced by .tagconfig.json",
-				Aliases: []string{"l"},
-			},
-			&cli.StringFlag{
-				Name:    flags.InBundleFlag,
-				Usage:   "Create generator inside a self-contained bundle directory",
-				Aliases: []string{"B"},
-			},
-		},
+		Flags: templateNewGeneratorFlags(),
 	}
 }
 
 func newAction(c *cli.Context, cfg *config.Config) error {
-	generator := c.Args().Get(0)
-	if generator == "" {
+	args, err := reparseTrailingFlags(c, templateNewGeneratorFlags())
+	if err != nil {
+		return app.UsageErrorf("%s", err)
+	}
+	if len(args) < 1 {
 		return app.UsageErrorf("please provide the generator name")
 	}
+	generator := args[0]
 
-	if err := ValidateNameSafe(generator); err != nil {
+	if err = ValidateNameSafe(generator); err != nil {
 		return app.Errorf("invalid generator name: %w", err)
 	}
 
-	if err := validate.GeneratorName(generator); err != nil {
+	if err = validate.GeneratorName(generator); err != nil {
 		return app.Errorf("invalid generator name: %w", err)
 	}
 
-	if err := config.CheckConfig(cfg); err != nil {
+	err = config.CheckConfig(cfg)
+	if err != nil {
 		return err
 	}
 
@@ -131,12 +140,12 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 		return app.Errorf("error creating base template: %w", err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Warn("error closing file", "error", err.Error()) //nolint:gosec // G706: slog structured logging; log injection not a concern in a CLI tool
+		if closeErr := file.Close(); closeErr != nil {
+			slog.Warn("error closing file", "error", closeErr.Error()) //nolint:gosec // G706: slog structured logging; log injection not a concern in a CLI tool
 		}
 	}()
 
-	if _, err := fmt.Fprintf(file, newGeneratorTemplate, c.String("package"), c.String("package")); err != nil {
+	if _, err = fmt.Fprintf(file, newGeneratorTemplate, c.String("package"), c.String("package")); err != nil {
 		return app.Errorf("error creating file %s: %w", file.Name(), err)
 	}
 

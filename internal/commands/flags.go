@@ -135,15 +135,12 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 		}
 	}
 
-	register(cliFlags)
-
 	// The App's own flags (--dry-run, --path, --shared-path, --bundle-path) are
 	// declared in main.go, not on any command, so a command that relies on them
 	// would otherwise see a trailing --dry-run as an unknown flag. Registering
 	// them here is enough on its own: cli.Context.Set resolves a name through
 	// the whole context lineage (see lookupFlagSet), so the value lands on
-	// whichever context actually owns the flag. A command-local flag of the same
-	// name still wins, because Lineage() runs child-to-parent.
+	// whichever context actually owns the flag.
 	//
 	// Before this, `tag generate model User --dry-run` silently DROPPED
 	// --dry-run: nothing rescanned the tail. Registering only the command's own
@@ -152,6 +149,12 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 	if c != nil && c.App != nil {
 		register(c.App.Flags)
 	}
+
+	// Registered LAST so that on a shared alias mapping to a different
+	// canonical name, the command's own flag wins over an App-level global:
+	// register() overwrites canonical[alias] unconditionally, so whichever
+	// call runs second decides the winner regardless of Lineage() order.
+	register(cliFlags)
 
 	var positional []string
 	for i := 0; i < len(args); i++ {
