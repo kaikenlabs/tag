@@ -171,7 +171,21 @@ func TestUT_UndoJSON_ListEmitsGenerationsKey(t *testing.T) {
 	require.Len(t, doc.Generations, 1)
 	assert.Equal(t, "gen_1_aaa", doc.Generations[0].ID)
 	assert.Equal(t, "model", doc.Generations[0].Template)
-	assert.Equal(t, 1, doc.Generations[0].Files)
+	assert.Equal(t, 1, doc.Generations[0].FileCount)
+
+	// The key is "file_count", not "files". Across this repo "files" is always
+	// an ARRAY (generate, rename-var, history, templateupdate manifest and
+	// summary) and scalar counts are named *_count (file_count,
+	// reference_count, total_count). `undo --list` emitting a NUMBER under
+	// "files" would collide with `undo`'s own document, where "files" is the
+	// per-file array — same command, same key, two types.
+	var raw struct {
+		Generations []map[string]any `json:"generations"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(run.Writer), &raw))
+	require.Len(t, raw.Generations, 1)
+	assert.Contains(t, raw.Generations[0], "file_count")
+	assert.NotContains(t, raw.Generations[0], "files")
 }
 
 // TestUT_UndoJSON_ListEmptyIsEmptyArrayNotNull pins the []T,0,n convention

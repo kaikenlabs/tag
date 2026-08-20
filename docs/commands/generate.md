@@ -59,7 +59,7 @@ When a project was scaffolded from a template, the scaffold-time variables (e.g.
 | `--no-hooks` | | Skip execution of pre and post hooks |
 | `--dry-run` | `-d` | Preview output without writing files |
 | `--all` | | (`list` subcommand only) Show all generators/bundles, including those with unmet requirements |
-| `--format <fmt>` | | (`list` subcommand only) Output format: `text` (default) or `json` |
+| `--format <fmt>` | | Output format: `text` (default) or `json`. Applies both to `tag generate <generator> <name>` and to `tag generate list` |
 
 ## Global Flags
 
@@ -200,6 +200,36 @@ tag generate --on-existing overwrite handler User
 ```
 
 A post-generation summary shows how many files were created, skipped, or overwritten.
+
+### Machine-Readable Output
+
+```bash
+tag generate model User --format json
+tag generate --dry-run crud Product --format json
+```
+
+```json
+{
+  "files": [
+    { "path": "internal/model/widget.go", "action": "create" },
+    { "path": "internal/router.go", "action": "inject" }
+  ],
+  "created": 1,
+  "skipped": 0,
+  "overwritten": 0,
+  "modified": 1,
+  "dry_run": false
+}
+```
+
+Bare object, no envelope. `action` is the real per-file action — `inject` and `append` stay distinct, unlike the `--verbose` text summary's `modified` word which collapses both. `files` is `[]`, never `null`, on a run that touches nothing.
+
+In JSON mode:
+- `--dry-run` never prompts on stdin regardless of terminal state — the interactive `[y]es/[n]o/[a]ll/[q]uit` review is a text-mode-only feature.
+- Hook output and a failed post-generation hook's warning go to stderr, not stdout, so stdout stays a single parseable document. The `--verbose` text summary is not printed.
+- On an `--on-existing=fail` conflict, the document is still written — with a `conflicts` array of the paths that already existed — and the command still exits non-zero. Any other failure exits non-zero with an empty stdout instead.
+
+`--format` is recognised in any position: before the generator/name (`tag generate --format json handler User`) or after it (`tag generate handler User --format json`). The command rescans the tail of the argument list for recognised flags it did not already see, so a trailing `--format` (or `--meta`, `--on-existing`, etc.) is never silently dropped.
 
 ### Using Different Template Paths
 

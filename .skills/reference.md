@@ -874,6 +874,8 @@ tag undo --partial                     # Revert unmodified files, skip conflicti
 
 **Conflict detection**: If a file was modified after generation was recorded, `undo` refuses to overwrite it with a clear error. Use `--force` to override or `--partial` to skip conflicting files.
 
+`tag undo` takes no positional arguments — select a generation with `--id`, not a bare token. A stray positional (e.g. `tag undo gen_1741000000_a3f2bc`) is a usage error (exit `2`), not a silent fallback to the last generation.
+
 **Manifest location**: `.tag/history.json` — generated automatically, do not edit manually.
 
 **Backup location**: `.tag/history/backups/<generation-id>/` — stores pre-modification copies for inject/append/overwrite/openapi-merge operations; `undo` restores from these for all four.
@@ -903,7 +905,7 @@ On a conflict (a file was modified after generation and neither `--force` nor
 `conflicts` populated — and the command still exits non-zero. Under `--partial`,
 skipped-but-conflicting files show up in both `conflicts` and as `"reverted": false`
 entries in `files`. `--list` also emits JSON, wrapped under a noun key:
-`tag undo --list --format json` → `{"generations":[{"id","template","command","files"}]}`
+`tag undo --list --format json` → `{"generations":[{"id","template","command","file_count"}]}` (a count — `files` is reserved for the per-file array in `tag undo`'s own document)
 (`files` here is the file *count*, not a per-file array).
 
 ### Environment Diagnostics
@@ -948,6 +950,8 @@ tag update --accept-hooks              # Run changed hooks without prompting
 tag update --continue                  # Resume after manual conflict resolution
 tag update --abort                     # Abort and restore from backup
 ```
+
+`tag update` takes no positional arguments; a stray token (e.g. `tag update stray`) is a usage error (exit `2`), the same rejection pattern as `tag diff` and `tag undo`.
 
 **How update works**: Renders the template at the old commit SHA and the new commit SHA (both with your variables), reads your current project files, then performs a 3-way merge (base=old template, ours=your files, theirs=new template). Conflicts are written with standard `<<<<<<<`/`=======`/`>>>>>>>` markers.
 

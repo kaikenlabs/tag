@@ -254,7 +254,12 @@ type undoGenerationJSON struct {
 	ID       string `json:"id"`
 	Template string `json:"template,omitempty"`
 	Command  string `json:"command"`
-	Files    int    `json:"files"`
+	// FileCount, not Files: everywhere else in this repo "files" is an array
+	// (generate's document, rename-var, history.Generation, templateupdate's
+	// manifest and summary) and scalar counts are named *_count. Emitting a
+	// number under "files" here would collide with `undo`'s own document,
+	// where "files" is the per-file array.
+	FileCount int `json:"file_count"`
 }
 
 // undoListDoc is the JSON shape for `undo --list --format json` (D7): a
@@ -268,10 +273,10 @@ func newUndoListDoc(gens []history.Generation) undoListDoc {
 	out := make([]undoGenerationJSON, 0, len(gens))
 	for _, g := range gens {
 		out = append(out, undoGenerationJSON{
-			ID:       g.ID,
-			Template: g.Template,
-			Command:  g.Command,
-			Files:    len(g.Files),
+			ID:        g.ID,
+			Template:  g.Template,
+			Command:   g.Command,
+			FileCount: len(g.Files),
 		})
 	}
 	return undoListDoc{Generations: out}
