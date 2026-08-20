@@ -37,7 +37,7 @@ func TestUT_ResolveAddToLib_AddToLibFlagTrue(t *testing.T) {
 		"add-to-lib": "true",
 	})
 
-	assert.True(t, resolveAddToLib(ctx, t.TempDir(), formatText))
+	assert.True(t, resolveAddToLib(ctx, t.TempDir(), false))
 }
 
 func TestUT_ResolveAddToLib_NoGenerators(t *testing.T) {
@@ -48,7 +48,7 @@ func TestUT_ResolveAddToLib_NoGenerators(t *testing.T) {
 	})
 
 	// A dir with no _generators or .tag subdirs → false
-	assert.False(t, resolveAddToLib(ctx, t.TempDir(), formatText))
+	assert.False(t, resolveAddToLib(ctx, t.TempDir(), false))
 }
 
 func TestUT_ResolveAddToLib_NoInput_WithGenerators(t *testing.T) {
@@ -62,7 +62,7 @@ func TestUT_ResolveAddToLib_NoInput_WithGenerators(t *testing.T) {
 	})
 
 	// Has generators but --no-input → false (safe default)
-	assert.False(t, resolveAddToLib(ctx, templateDir, formatText))
+	assert.False(t, resolveAddToLib(ctx, templateDir, false))
 }
 
 func TestUT_HasSubdirScaffold_ExistingDir(t *testing.T) {
@@ -137,7 +137,7 @@ func TestUT_ResolveTemplateName_FromPositionalArgs(t *testing.T) {
 	t.Parallel()
 
 	ctx := newScaffoldActionCLIContext(t, nil, nil)
-	name, err := resolveTemplateName(ctx, nil, []string{"my-tmpl"}, formatText)
+	name, err := resolveTemplateName(ctx, nil, []string{"my-tmpl"}, false)
 	require.NoError(t, err)
 	assert.Equal(t, "my-tmpl", name)
 }
@@ -149,7 +149,7 @@ func TestUT_ResolveTemplateName_NoArgsNoTTY(t *testing.T) {
 		"no-input": "true",
 	})
 
-	_, err := resolveTemplateName(ctx, nil, nil, formatText)
+	_, err := resolveTemplateName(ctx, nil, nil, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "template argument required")
 }
@@ -970,7 +970,7 @@ func TestUT_HandleCookiecutterDetection_NonInteractive(t *testing.T) {
 		"no-input": "true",
 	})
 
-	err := handleCookiecutterDetection(ctx, nil, "gh:user/cc-template", t.TempDir(), scaffold.Options{}, formatText)
+	err := handleCookiecutterDetection(ctx, nil, "gh:user/cc-template", t.TempDir(), scaffold.Options{}, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Cookiecutter template")
 	assert.Contains(t, err.Error(), "non-interactive")

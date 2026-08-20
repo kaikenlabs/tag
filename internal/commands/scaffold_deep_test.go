@@ -220,7 +220,7 @@ func TestUT_ScaffoldFromRef_WithOutputDir(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{templateDir, "out-proj"}, formatText)
+	err := scaffoldFromRef(ctx, []string{templateDir, "out-proj"}, false)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(outputPath)
@@ -264,7 +264,7 @@ func TestUT_ScaffoldFromRef_LibraryWithGenerators(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{"gen-tmpl", "gen-proj"}, formatText)
+	err := scaffoldFromRef(ctx, []string{"gen-tmpl", "gen-proj"}, false)
 	require.NoError(t, err)
 }
 
@@ -399,4 +399,39 @@ func TestUT_ScaffoldFlags_ContainsUpdateFlag(t *testing.T) {
 	assert.True(t, flagNames["update"], "scaffoldFlags should include --update")
 	assert.True(t, flagNames["no-input"], "scaffoldFlags should include --no-input")
 	assert.True(t, flagNames[flags.DryRunFlag], "scaffoldFlags should include --dry-run")
+}
+
+// TestUT_AddToLibrary_JSONModeWritesNothingToTheDocument pins the one path
+// that reaches addToLibrary under --format json: a remote template is added to
+// the library unconditionally, so these messages would otherwise land on
+// stdout beside the JSON document and break every consumer parsing it.
+//
+// setupFakeLibrary mutates a package-level var — do NOT use t.Parallel().
+func TestUT_AddToLibrary_JSONModeWritesNothingToTheDocument(t *testing.T) {
+	setupFakeLibrary(t, "existing-tmpl")
+
+	for _, tc := range []struct {
+		name     string
+		ref      string
+		jsonMode bool
+		wantOut  bool
+	}{
+		{name: "existing template, text mode", ref: "gh:test/existing-tmpl", jsonMode: false, wantOut: true},
+		{name: "existing template, json mode", ref: "gh:test/existing-tmpl", jsonMode: true, wantOut: false},
+		{name: "new template, text mode", ref: "gh:test/brand-new", jsonMode: false, wantOut: true},
+		{name: "new template, json mode", ref: "gh:test/brand-new", jsonMode: true, wantOut: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			ctx := cli.NewContext(&cli.App{Writer: &buf}, flag.NewFlagSet("test", flag.ContinueOnError), nil)
+
+			addToLibrary(ctx, tc.ref, t.TempDir(), tc.jsonMode)
+
+			if tc.wantOut {
+				assert.NotEmpty(t, buf.String(), "text mode must keep reporting the library outcome")
+				return
+			}
+			assert.Empty(t, buf.String(), "JSON mode must leave stdout to the document alone")
+		})
+	}
 }

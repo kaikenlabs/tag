@@ -62,5 +62,5 @@ type ScaffoldResult struct {
 	TemplateDir string         // Absolute path to the template directory (for README)
 	Vars        map[string]any // Resolved template variables
 	Opts        Options        // Options used for this scaffold run
-	Files       []FileEntry    // Files written (or would be written, in dry-run)
+	Files       []FileEntry
 }

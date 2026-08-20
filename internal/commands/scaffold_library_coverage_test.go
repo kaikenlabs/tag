@@ -177,7 +177,7 @@ func TestUT_ScaffoldFromLibrary_FullFlow(t *testing.T) {
 		"output":   outputPath,
 	}, nil)
 
-	err = scaffoldFromLibrary(ctx, lib, entry, []string{"lib-flow-tmpl", "lib-flow-proj"}, formatText)
+	err = scaffoldFromLibrary(ctx, lib, entry, []string{"lib-flow-tmpl", "lib-flow-proj"}, false)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(outputPath)
@@ -212,7 +212,7 @@ func TestUT_ScaffoldFromLibrary_InvalidMetaFlag(t *testing.T) {
 	require.NoError(t, set.Parse(nil))
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	err = scaffoldFromLibrary(ctx, lib, entry, []string{"meta-err-tmpl"}, formatText)
+	err = scaffoldFromLibrary(ctx, lib, entry, []string{"meta-err-tmpl"}, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid meta flag")
 }
@@ -235,7 +235,7 @@ func TestUT_ScaffoldFromLibrary_NoProjectName(t *testing.T) {
 	}, nil)
 
 	// Pass only template name, no project name → projectName == ""
-	err = scaffoldFromLibrary(ctx, lib, entry, []string{"noname-tmpl"}, formatText)
+	err = scaffoldFromLibrary(ctx, lib, entry, []string{"noname-tmpl"}, false)
 	require.NoError(t, err)
 }
 
@@ -249,7 +249,7 @@ func TestUT_ScaffoldFromRef_BareNameNotInLibrary_FallsToResolver(t *testing.T) {
 
 	// "unknown-name" is a bare name not in the library → falls through to resolver
 	ctx := newCoverageCLIContext(t, nil, map[string]string{"no-input": "true"}, nil)
-	err := scaffoldFromRef(ctx, []string{"unknown-name"}, formatText)
+	err := scaffoldFromRef(ctx, []string{"unknown-name"}, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve template")
 }
@@ -280,7 +280,7 @@ func TestUT_ScaffoldFromRef_LocalDir_WithMetaOverrides(t *testing.T) {
 	require.NoError(t, set.Parse(nil))
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	err := scaffoldFromRef(ctx, []string{templateDir, "meta-proj"}, formatText)
+	err := scaffoldFromRef(ctx, []string{templateDir, "meta-proj"}, false)
 	require.NoError(t, err)
 }
 
@@ -308,7 +308,7 @@ func TestUT_ScaffoldFromRef_LocalDir_InvalidMeta(t *testing.T) {
 	require.NoError(t, set.Parse(nil))
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	err := scaffoldFromRef(ctx, []string{templateDir}, formatText)
+	err := scaffoldFromRef(ctx, []string{templateDir}, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid meta flag")
 }
@@ -329,7 +329,7 @@ func TestUT_ScaffoldFromRef_LocalDir_WithAddToLibFlag(t *testing.T) {
 		flags.AddToLibFlag: "true",
 	}, nil)
 
-	err := scaffoldFromRef(ctx, []string{templateDir, "addtolib-proj"}, formatText)
+	err := scaffoldFromRef(ctx, []string{templateDir, "addtolib-proj"}, false)
 	require.NoError(t, err)
 }
 
@@ -350,7 +350,7 @@ func TestUT_ScaffoldFromRef_LocalDir_WithGenerators_NoInput(t *testing.T) {
 		"output":   outputPath,
 	}, nil)
 
-	err := scaffoldFromRef(ctx, []string{templateDir, "gen-noinput-proj"}, formatText)
+	err := scaffoldFromRef(ctx, []string{templateDir, "gen-noinput-proj"}, false)
 	require.NoError(t, err)
 }
 
@@ -366,7 +366,7 @@ func TestUT_ResolveAddToLib_WithTemplatesDir_NoInput_ReturnsFalse(t *testing.T) 
 	require.NoError(t, os.MkdirAll(filepath.Join(templateDir, types.TemplatesDir), 0o755))
 
 	ctx := newCoverageCLIContext(t, nil, map[string]string{"no-input": "true"}, nil)
-	assert.False(t, resolveAddToLib(ctx, templateDir, formatText))
+	assert.False(t, resolveAddToLib(ctx, templateDir, false))
 }
 
 func TestUT_ResolveAddToLib_WithBothDirs_NoInput_ReturnsFalse(t *testing.T) {
@@ -378,7 +378,7 @@ func TestUT_ResolveAddToLib_WithBothDirs_NoInput_ReturnsFalse(t *testing.T) {
 
 	ctx := newCoverageCLIContext(t, nil, map[string]string{"no-input": "true"}, nil)
 	// Non-interactive + generators → false (safe default)
-	assert.False(t, resolveAddToLib(ctx, templateDir, formatText))
+	assert.False(t, resolveAddToLib(ctx, templateDir, false))
 }
 
 // --------------------------------------------------------------------------
@@ -396,7 +396,7 @@ func TestUT_HandleCookiecutterDetection_NonTTY_ReturnsError(t *testing.T) {
 		"./my-cc-template",
 		t.TempDir(),
 		scaffold.Options{},
-		formatText,
+		false,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Cookiecutter template")
@@ -1200,7 +1200,7 @@ func TestUT_ScaffoldFromRef_CookiecutterDetection_NoInput(t *testing.T) {
 
 	ctx := newCoverageCLIContext(t, nil, map[string]string{"no-input": "true"}, nil)
 
-	err := scaffoldFromRef(ctx, []string{templateDir}, formatText)
+	err := scaffoldFromRef(ctx, []string{templateDir}, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Cookiecutter template")
 }
@@ -1319,6 +1319,6 @@ func TestUT_ScaffoldFromLibrary_TemplatePathError(t *testing.T) {
 	ctx := newCoverageCLIContext(t, nil, map[string]string{"no-input": "true"}, nil)
 
 	// The template dir doesn't exist on disk, so TemplatePath should fail
-	err = scaffoldFromLibrary(ctx, lib, entry, []string{"ghost-tmpl"}, formatText)
+	err = scaffoldFromLibrary(ctx, lib, entry, []string{"ghost-tmpl"}, false)
 	require.Error(t, err)
 }

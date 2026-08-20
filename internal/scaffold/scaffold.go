@@ -139,6 +139,14 @@ type runContext struct {
 func (s *Scaffold) Run(opts Options) (ScaffoldResult, error) {
 	ctx := &runContext{opts: opts}
 
+	// Run's Options are independent of the ones NewScaffold was built with, and
+	// DryRun has two readers: the writer's flag and executeScaffold's gating
+	// below. Left unsynced they can disagree, and building dry then running for
+	// real reports success while producing a project with no files in it.
+	if w, ok := s.writer.(*DefaultOutputWriter); ok {
+		w.SetDryRun(opts.DryRun)
+	}
+
 	if err := s.loadConfig(ctx); err != nil {
 		return ScaffoldResult{}, err
 	}
@@ -284,7 +292,6 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 	return nil
 }
 
-// executeScaffold prepares the output directory, runs hooks, writes files, and finalizes.
 // executeScaffold prepares the output directory, runs hooks, writes files, and finalizes.
 //
 // Every step that mutates the filesystem is gated on !opts.DryRun. A dry run is

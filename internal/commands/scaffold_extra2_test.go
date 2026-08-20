@@ -45,7 +45,7 @@ func TestUT_ResolveAddToLib_AddFlagEnabled_ReturnsTrue(t *testing.T) {
 	templateDir := t.TempDir()
 	ctx := newScaffoldCLIContextExtra(t, map[string]string{flags.AddToLibFlag: "true"})
 
-	assert.True(t, resolveAddToLib(ctx, templateDir, formatText))
+	assert.True(t, resolveAddToLib(ctx, templateDir, false))
 }
 
 func TestUT_ResolveAddToLib_NoGenerators_ReturnsFalse(t *testing.T) {
@@ -54,7 +54,7 @@ func TestUT_ResolveAddToLib_NoGenerators_ReturnsFalse(t *testing.T) {
 	templateDir := t.TempDir()
 	ctx := newScaffoldCLIContextExtra(t, nil)
 
-	assert.False(t, resolveAddToLib(ctx, templateDir, formatText))
+	assert.False(t, resolveAddToLib(ctx, templateDir, false))
 }
 
 func TestUT_ResolveAddToLib_NonInteractiveWithGenerators_ReturnsFalse(t *testing.T) {
@@ -64,7 +64,7 @@ func TestUT_ResolveAddToLib_NonInteractiveWithGenerators_ReturnsFalse(t *testing
 	require.NoError(t, os.MkdirAll(filepath.Join(templateDir, types.GeneratorsDir), 0o755))
 	ctx := newScaffoldCLIContextExtra(t, map[string]string{"no-input": "true"})
 
-	assert.False(t, resolveAddToLib(ctx, templateDir, formatText))
+	assert.False(t, resolveAddToLib(ctx, templateDir, false))
 }
 
 // TestUT_ScaffoldNonInteractive_TruthTable does not use t.Parallel(): isTTY is
@@ -72,18 +72,18 @@ func TestUT_ResolveAddToLib_NonInteractiveWithGenerators_ReturnsFalse(t *testing
 // same race the setupFakeLibrary lesson already documents for package vars.
 func TestUT_ScaffoldNonInteractive_TruthTable(t *testing.T) {
 	tests := []struct {
-		name    string
-		noInput bool
-		format  string
-		tty     bool
-		want    bool
+		name     string
+		noInput  bool
+		jsonMode bool
+		tty      bool
+		want     bool
 	}{
-		{"tty, text, no-input false -> interactive", false, formatText, true, false},
-		{"no-input forces non-interactive", true, formatText, true, true},
-		{"json format forces non-interactive despite tty", false, formatJSON, true, true},
-		{"non-tty forces non-interactive", false, formatText, false, true},
-		{"json format and non-tty", false, formatJSON, false, true},
-		{"no-input and json format", true, formatJSON, true, true},
+		{"tty, text, no-input false -> interactive", false, false, true, false},
+		{"no-input forces non-interactive", true, false, true, true},
+		{"json format forces non-interactive despite tty", false, true, true, true},
+		{"non-tty forces non-interactive", false, false, false, true},
+		{"json format and non-tty", false, true, false, true},
+		{"no-input and json format", true, true, true, true},
 	}
 
 	for _, tt := range tests {
@@ -98,7 +98,7 @@ func TestUT_ScaffoldNonInteractive_TruthTable(t *testing.T) {
 			}
 			ctx := newScaffoldCLIContextExtra(t, values)
 
-			assert.Equal(t, tt.want, nonInteractive(ctx, tt.format))
+			assert.Equal(t, tt.want, nonInteractive(ctx, tt.jsonMode))
 		})
 	}
 }
@@ -113,7 +113,7 @@ func TestUT_HandleCookiecutterDetection_NoInput_ReturnsHelpfulError(t *testing.T
 		"gh:acme/cookiecutter-api",
 		t.TempDir(),
 		scaffold.Options{},
-		formatText,
+		false,
 	)
 
 	require.Error(t, err)
