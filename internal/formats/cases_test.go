@@ -3,6 +3,7 @@ package formats
 import (
 	"sync"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -396,4 +397,29 @@ func TestUT_CasePascalCamel_ConcurrentUse(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+func TestUT_Cases_MultibyteInput(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func(string) string
+		str  string
+		want string
+	}{
+		{name: "camel leading multibyte", fn: CaseCamel, str: "ünicode test", want: "ünicodeTest"},
+		{name: "camel accented", fn: CaseCamel, str: "élan vital", want: "élanVital"},
+		{name: "camel uppercase multibyte lowered", fn: CaseCamel, str: "Ångström unit", want: "ångströmUnit"},
+		{name: "camel caseless script", fn: CaseCamel, str: "日本 語", want: "日本語"},
+		{name: "past single token multibyte", fn: CasePast, str: "ünicode", want: "ünicoded"},
+		{name: "past camelCase multibyte", fn: CasePast, str: "ürderCancel", want: "ürderCancelled"},
+		{name: "past PascalCase multibyte", fn: CasePast, str: "Übercancel", want: "Übercanceled"},
+		{name: "past caseless script", fn: CasePast, str: "日本cancel", want: "日本canceled"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.fn(tt.str)
+			assert.True(t, utf8.ValidString(got), "produced invalid UTF-8: %q", got)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
