@@ -39,20 +39,30 @@ func probeCommands(t *testing.T) []probedCommand {
 	root := RootCommands(cfg, "test", SkillDocs{})
 
 	var probes []probedCommand
+	walkCommandTree(root, func(cmd *cli.Command, path []string) {
+		if cmd.Action != nil && len(cmd.Flags) > 0 && (cmd.Args || cmd.ArgsUsage != "") {
+			probes = append(probes, probedCommand{path: path})
+		}
+	})
+	return probes
+}
+
+// walkCommandTree visits every command in the tree, passing each one its full
+// invocation path. Shared with the --format conformance test so both censuses
+// are derived from the same traversal of RootCommands rather than from two
+// copies that can disagree about subcommand nesting.
+func walkCommandTree(cmds []*cli.Command, visit func(cmd *cli.Command, path []string)) {
 	var walk func(cmds []*cli.Command, prefix []string)
 	walk = func(cmds []*cli.Command, prefix []string) {
 		for _, cmd := range cmds {
 			path := append(append([]string{}, prefix...), cmd.Name)
-			if cmd.Action != nil && len(cmd.Flags) > 0 && (cmd.Args || cmd.ArgsUsage != "") {
-				probes = append(probes, probedCommand{path: path})
-			}
+			visit(cmd, path)
 			if len(cmd.Subcommands) > 0 {
 				walk(cmd.Subcommands, path)
 			}
 		}
 	}
-	walk(root, nil)
-	return probes
+	walk(cmds, nil)
 }
 
 func newProbeApp(t *testing.T) *cli.App {
