@@ -285,9 +285,21 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 }
 
 // executeScaffold prepares the output directory, runs hooks, writes files, and finalizes.
+// executeScaffold prepares the output directory, runs hooks, writes files, and finalizes.
+//
+// Every step that mutates the filesystem is gated on !opts.DryRun. A dry run is
+// documented (docs/commands/scaffold.md:46,185) as a preview that creates no
+// output directory and writes nothing; before #383 only the per-file writes in
+// OutputWriter honoured that, so a preview created the output directory, wrote
+// .tagconfig.json and the history manifest, executed hooks, and — under
+// --force — deleted the user's existing directory.
 func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
-	// Prepare output directory (safety checks, force handling)
-	if err := prepareOutputDir(ctx.outputDir, ctx.opts.Force); err != nil {
+	dryRun := ctx.opts.DryRun
+
+	// Prepare output directory (safety checks, force handling). In dry-run the
+	// validation still runs — a preview whose real run would refuse to start
+	// must say so — but the removal does not.
+	if err := prepareOutputDir(ctx.outputDir, ctx.opts.Force, dryRun); err != nil {
 		return ScaffoldResult{}, err
 	}
 
@@ -295,10 +307,11 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 	// actual working directory where hooks execute (inside the wrapper when present).
 	ctx.hookEnv = hooks.BuildHookEnv(ctx.vars, ctx.templateDirAbs, ctx.projectRoot, os.Stderr)
 
-	// Render and run hooks only when allowed — avoid failing on invalid hook
-	// templates when the user has opted to skip hooks.
+	// Render and run hooks only when allowed and this is a real run. Rendering
+	// is skipped as well as execution: a hook template that fails to render
+	// must not abort a preview that would never have executed the hook.
 	var renderedHooks *types.HooksConfig
-	if ctx.hooksAllowed {
+	if ctx.hooksAllowed && !dryRun {
 		var err error
 		renderedHooks, err = renderHooksConfig(s.engine, ctx.config.Hooks, ctx.vars)
 		if err != nil {
@@ -309,23 +322,46 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		}
 	}
 
-	// Create output directory and write files
-	if err := os.MkdirAll(ctx.outputDir, types.DirMode); err != nil {
-		return ScaffoldResult{}, fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// Clean up output directory on failure
+	// Create the output directory and register the failure rollback. Both are
+	// real-run only: the rollback removes ctx.outputDir wholesale, so
+	// registering it during a preview would destroy a pre-existing directory
+	// TAG never created as soon as any later step failed.
 	success := false
-	defer func() {
-		if !success {
-			_ = os.RemoveAll(ctx.outputDir)
+	if !dryRun {
+		if err := os.MkdirAll(ctx.outputDir, types.DirMode); err != nil {
+			return ScaffoldResult{}, fmt.Errorf("failed to create output directory: %w", err)
 		}
-	}()
+		defer func() {
+			if !success {
+				_ = os.RemoveAll(ctx.outputDir)
+			}
+		}()
+	}
 
 	if err := s.writer.Write(ctx.effectiveTemplateDir, ctx.outputDir, ctx.vars); err != nil {
 		return ScaffoldResult{}, fmt.Errorf("failed to process template: %w", err)
 	}
 
+	if !dryRun {
+		if finalizeErr := s.finalizeRun(ctx, renderedHooks); finalizeErr != nil {
+			return ScaffoldResult{}, finalizeErr
+		}
+	}
+
+	success = true
+	return ScaffoldResult{
+		OutputDir:   ctx.outputDir,
+		ProjectRoot: ctx.projectRoot,
+		TemplateDir: ctx.templateDirAbs,
+		Vars:        ctx.vars,
+		Opts:        ctx.opts,
+	}, nil
+}
+
+// finalizeRun performs the real-run-only tail of a scaffold: the generated
+// config, generator copying, post hooks, replay data and the history manifest.
+// It is split out so executeScaffold's dry-run gating stays legible.
+func (s *Scaffold) finalizeRun(ctx *runContext, renderedHooks *types.HooksConfig) error {
 	// Generate config — filter out secret variables before writing to .tagconfig.json
 	configVars := replay.FilterSecrets(ctx.vars, secretKeys(ctx.config.Vars))
 	templateType := types.TemplateTypeLocal
@@ -340,7 +376,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		Variables:       configVars,
 	}
 	if err := GenerateTagConfig(ctx.projectRoot, tagConfigOpts); err != nil {
-		return ScaffoldResult{}, fmt.Errorf("failed to generate tagconfig: %w", err)
+		return fmt.Errorf("failed to generate tagconfig: %w", err)
 	}
 
 	// Copy generators, bundles, and shared templates into the output .tag/ dir
@@ -348,7 +384,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 	// are resolved from instead).
 	if !ctx.opts.SkipGeneratorCopy {
 		if err := copyGeneratorsToOutput(ctx.templateDirAbs, ctx.projectRoot); err != nil {
-			return ScaffoldResult{}, fmt.Errorf("failed to copy generators: %w", err)
+			return fmt.Errorf("failed to copy generators: %w", err)
 		}
 	}
 
@@ -377,14 +413,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		}
 	}
 
-	success = true
-	return ScaffoldResult{
-		OutputDir:   ctx.outputDir,
-		ProjectRoot: ctx.projectRoot,
-		TemplateDir: ctx.templateDirAbs,
-		Vars:        ctx.vars,
-		Opts:        ctx.opts,
-	}, nil
+	return nil
 }
 
 // resolveOutputDir determines and returns the absolute output directory path.
@@ -433,7 +462,13 @@ func resolveOutputDir(outputDir string, vars map[string]any, cwd string) (string
 
 // prepareOutputDir validates and prepares the output directory,
 // handling --force safety checks and existing directory removal.
-func prepareOutputDir(outputDir string, force bool) error {
+// prepareOutputDir validates and prepares the output directory,
+// handling --force safety checks and existing directory removal.
+//
+// Under dryRun the validation is unchanged — a preview whose real run would
+// refuse to start has to report that — but the removal is skipped: deleting
+// the user's existing directory to preview a scaffold is data loss (#383).
+func prepareOutputDir(outputDir string, force, dryRun bool) error {
 	if force {
 		if err := validateSafeOutputDir(outputDir); err != nil {
 			return fmt.Errorf("refusing to use --force with unsafe path: %w", err)
@@ -443,6 +478,9 @@ func prepareOutputDir(outputDir string, force bool) error {
 	if _, err := os.Stat(outputDir); err == nil {
 		if !force {
 			return fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, outputDir)
+		}
+		if dryRun {
+			return nil
 		}
 		if err := os.RemoveAll(outputDir); err != nil {
 			return fmt.Errorf("failed to remove existing output: %w", err)

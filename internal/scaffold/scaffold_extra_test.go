@@ -64,7 +64,7 @@ func TestUT_PrepareOutputDir_OutputNotExist(t *testing.T) {
 	t.Parallel()
 	dir := filepath.Join(t.TempDir(), "new-project")
 
-	err := prepareOutputDir(dir, false)
+	err := prepareOutputDir(dir, false, false)
 	assert.NoError(t, err)
 }
 
@@ -72,7 +72,7 @@ func TestUT_PrepareOutputDir_OutputExists_NoForce(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	err := prepareOutputDir(dir, false)
+	err := prepareOutputDir(dir, false, false)
 	assert.ErrorIs(t, err, ErrOutputExists)
 }
 
@@ -81,7 +81,7 @@ func TestUT_PrepareOutputDir_OutputExists_WithForce(t *testing.T) {
 	subDir := filepath.Join(dir, "sub", "project")
 	require.NoError(t, os.MkdirAll(subDir, 0o755))
 
-	err := prepareOutputDir(subDir, true)
+	err := prepareOutputDir(subDir, true, false)
 	assert.NoError(t, err)
 
 	// Directory should be removed
