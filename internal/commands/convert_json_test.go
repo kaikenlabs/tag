@@ -135,3 +135,55 @@ func TestUT_ConvertJSON_ExactlyOneDocumentAndNothingOnBypassedSinks(t *testing.T
 	_, eofErr := dec.Token()
 	require.ErrorIs(t, eofErr, io.EOF, "exactly one JSON document must be on the wire")
 }
+
+// TestUT_ConvertJSON_DryRunFileListMatchesRealRun covers #355's "--dry-run is
+// reflected in the JSON and produces the same file list as a real run".
+//
+// The two runs go through genuinely different branches of Convert and
+// processTemplateFiles — a dry run creates no directories, writes no files and
+// never writes tag.template.json — so "the preview tells you what the real run
+// will do" is a claim about two code paths agreeing, not a tautology. It is
+// asserted on the same fixture, comparing the whole files array (and the
+// counters that must accompany it), with only dry_run itself expected to
+// differ.
+func TestUT_ConvertJSON_DryRunFileListMatchesRealRun(t *testing.T) {
+	type convertDoc struct {
+		DryRun         bool                     `json:"dry_run"`
+		Files          []convert.PathConversion `json:"files"`
+		FilesProcessed int                      `json:"files_processed"`
+		FilesRenamed   int                      `json:"files_renamed"`
+		DirsRenamed    int                      `json:"dirs_renamed"`
+	}
+
+	run := func(t *testing.T, argv ...string) convertDoc {
+		t.Helper()
+		r := runCLICapturingAll(t, ConvertCommand(), argv...)
+		require.NoError(t, r.Err)
+		require.Empty(t, r.Stdout, "nothing may bypass the command writer")
+		var doc convertDoc
+		require.NoError(t, json.Unmarshal([]byte(r.Writer), &doc))
+		return doc
+	}
+
+	sourceDir := writeCookiecutterFixture(t)
+	realOut := filepath.Join(t.TempDir(), "real")
+	dryOut := filepath.Join(t.TempDir(), "dry")
+
+	dry := run(t, "convert", "cookiecutter", sourceDir, "-o", dryOut, "--dry-run", "--format", "json")
+	actual := run(t, "convert", "cookiecutter", sourceDir, "-o", realOut, "--format", "json")
+
+	assert.True(t, dry.DryRun)
+	assert.False(t, actual.DryRun)
+
+	assert.Equal(t, actual.Files, dry.Files, "the dry-run preview must list exactly the files a real run converts")
+	assert.Equal(t, actual.FilesProcessed, dry.FilesProcessed)
+	assert.Equal(t, actual.FilesRenamed, dry.FilesRenamed)
+	assert.Equal(t, actual.DirsRenamed, dry.DirsRenamed)
+	require.NotEmpty(t, actual.Files, "a fixture that converts nothing would make this vacuous")
+
+	// The dry run must genuinely not have written anything, or it was not a
+	// dry run and the comparison above proves nothing.
+	_, statErr := os.Stat(dryOut)
+	assert.True(t, os.IsNotExist(statErr), "dry run must not create the output directory")
+	require.DirExists(t, realOut)
+}
