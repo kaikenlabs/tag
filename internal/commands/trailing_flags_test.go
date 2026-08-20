@@ -481,6 +481,31 @@ func TestUT_TemplateRenameVar_DoubleDashOnlyEscapesAfterAPositional(t *testing.T
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown flag -weird")
 	})
+
+	// The escape is the only way to reach a root whose name begins with a dash,
+	// so it has to deliver a usable path rather than merely surviving the scan.
+	t.Run("escaped dash-prefixed root is used as the root", func(t *testing.T) {
+		parent := t.TempDir()
+		t.Chdir(parent)
+		root := filepath.Join(parent, "--odd-dir-name")
+		require.NoError(t, os.Mkdir(root, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "tag.template.json"),
+			[]byte(`{"vars": {"old": {"type": "string"}}}`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"),
+			[]byte("# {{ vars.old }}\n"), 0o644))
+
+		var buf bytes.Buffer
+		var runErr error
+		captureStdout(t, func() {
+			runErr = newTestApp(templateRenameVarCommand(), &buf).
+				Run([]string{"tag", "rename-var", "old", "new", "--", "--odd-dir-name"})
+		})
+		require.NoError(t, runErr)
+
+		data, readErr := os.ReadFile(filepath.Join(root, "README.md"))
+		require.NoError(t, readErr)
+		assert.Contains(t, string(data), "{{ vars.new }}", "the escaped path must be the directory that was rewritten")
+	})
 }
 
 func TestUT_LibAdd_ForceFlagBothOrders(t *testing.T) {
@@ -585,7 +610,7 @@ func TestUT_TrailingFlags_KnownGlobalIsNotRejectedAsUnknown(t *testing.T) {
 		var buf bytes.Buffer
 		err := newTestApp(libAddCommand(), &buf).
 			Run([]string{"tag", "add", srcDir, "--path", "ignored"})
-		require.NoError(t, err)
+		require.NoError(t, err, "a known global must not be rejected as an unknown flag")
 	})
 
 	t.Run("lib edit", func(t *testing.T) {
@@ -611,7 +636,7 @@ func TestUT_TrailingFlags_KnownGlobalIsNotRejectedAsUnknown(t *testing.T) {
 		var buf bytes.Buffer
 		err := newTestApp(templateNewBundleCommand(cfg), &buf).
 			Run([]string{"tag", "bundle", "b", "--path", "ignored"})
-		require.NoError(t, err)
+		require.NoError(t, err, "a known global must not be rejected as an unknown flag")
 		assert.FileExists(t, filepath.Join(tmpDir, "_bundles", "b", "b.json"))
 	})
 
@@ -622,7 +647,7 @@ func TestUT_TrailingFlags_KnownGlobalIsNotRejectedAsUnknown(t *testing.T) {
 		var buf bytes.Buffer
 		err := newTestApp(templateNewGeneratorCommand(cfg), &buf).
 			Run([]string{"tag", "generator", "g", "--path", "ignored"})
-		require.NoError(t, err)
+		require.NoError(t, err, "a known global must not be rejected as an unknown flag")
 		assert.FileExists(t, filepath.Join(tmpDir, "g", "g.go"))
 	})
 
@@ -637,7 +662,7 @@ func TestUT_TrailingFlags_KnownGlobalIsNotRejectedAsUnknown(t *testing.T) {
 			err = newTestApp(templateRenameVarCommand(), &buf).
 				Run([]string{"tag", "rename-var", "old", "new", root, "--path", "ignored"})
 		})
-		require.NoError(t, err)
+		require.NoError(t, err, "a known global must not be rejected as an unknown flag")
 	})
 
 	t.Run("generate agent-file", func(t *testing.T) {
@@ -648,7 +673,7 @@ func TestUT_TrailingFlags_KnownGlobalIsNotRejectedAsUnknown(t *testing.T) {
 		var buf bytes.Buffer
 		err := newTestApp(generateAgentFileCommand(cfg), &buf).
 			Run([]string{"tag", "agent-file", "claude", "--path", "ignored"})
-		require.NoError(t, err)
+		require.NoError(t, err, "a known global must not be rejected as an unknown flag")
 		assert.FileExists(t, filepath.Join(dir, "CLAUDE.md"))
 	})
 }

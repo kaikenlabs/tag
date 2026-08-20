@@ -37,12 +37,16 @@ Files excluded by .tagignore, the _dialects/ tree and binary files are skipped.
 Generator and bundle definitions under _generators/ and .tag/ are included,
 because they reference root-level variables.
 
-If [path] is omitted, the current directory is used.
+If [path] is omitted, the current directory is used. Flags may appear before or
+after the positional arguments. A [path] that begins with a dash would be read
+as a flag, so pass it after a "--" separator.
 
 Examples:
   tag template rename-var --dry-run project_name service_name
   tag template rename-var project_name service_name
-  tag template rename-var old_flag new_flag ./my-template`,
+  tag template rename-var old_flag new_flag ./my-template
+  tag template rename-var old_flag new_flag --dry-run
+  tag template rename-var old_flag new_flag -- --odd-dir-name`,
 		Flags: templateRenameVarFlags(),
 		Action: func(c *cli.Context) error {
 			return renameVarAction(c, os.Stdout)

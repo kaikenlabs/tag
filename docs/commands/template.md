@@ -353,7 +353,7 @@ Rename a template variable everywhere the template refers to it — the declarat
 tag template rename-var <old-name> <new-name> [path] [flags]
 ```
 
-If `[path]` is omitted, the current directory is used. Flags may appear before or after the positional arguments.
+If `[path]` is omitted, the current directory is used. Flags may appear before or after the positional arguments. A `[path]` beginning with a dash would be read as a flag, so pass it after a `--` separator (`tag template rename-var old new -- --odd-dir-name`).
 
 | Flag | Default | Description |
 |------|---------|-------------|
