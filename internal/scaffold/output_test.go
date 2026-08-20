@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
 )
@@ -113,7 +115,7 @@ func mustNewOutputWriter(t *testing.T) *DefaultOutputWriter {
 	t.Helper()
 	engine := mustNewEngine(t)
 	pathProcessor := NewPathProcessor(engine)
-	return NewOutputWriter(engine, pathProcessor)
+	return NewOutputWriter(engine, pathProcessor, io.Discard)
 }
 
 func TestUT_Write_TemplateRendering(t *testing.T) {
@@ -132,7 +134,7 @@ func TestUT_Write_TemplateRendering(t *testing.T) {
 	require.NoError(t, err)
 
 	vars := map[string]any{"name": "World"}
-	err = writer.Write(templateDir, outputDir, vars)
+	_, err = writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Verify rendered content
@@ -153,7 +155,7 @@ func TestUT_Write_BinaryFilePassthrough(t *testing.T) {
 	require.NoError(t, err)
 
 	vars := map[string]any{"x": "should_not_appear"}
-	err = writer.Write(templateDir, outputDir, vars)
+	_, err = writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Binary file should be copied as-is, not template-processed
@@ -174,7 +176,7 @@ func TestUT_Write_DirectoryCreation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(nestedDir, "file.txt"), []byte("content"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Verify directory was created and file exists
@@ -207,7 +209,7 @@ func TestUT_Write_SkipsTagTemplateJSON(t *testing.T) {
 	))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// tag.template.json should NOT exist in output
@@ -234,7 +236,7 @@ func TestUT_Write_SkipsGeneratorsDir(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// _generators should NOT exist in output
@@ -261,7 +263,7 @@ func TestUT_Write_SkipsTagTemplatesDir(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// .tag should NOT exist in output
@@ -297,7 +299,7 @@ func TestUT_Write_SkipsCacheMetaFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Root _meta.json should NOT exist in output
@@ -329,7 +331,7 @@ func TestUT_Write_PathPlaceholders(t *testing.T) {
 	))
 
 	vars := map[string]any{"project_name": "myapp"}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Verify placeholder was resolved in path and content
@@ -357,7 +359,7 @@ func TestUT_Write_SymlinkSkipping(t *testing.T) {
 	require.NoError(t, os.Symlink(targetFile, filepath.Join(templateDir, "link.txt")))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Real file should exist
@@ -385,7 +387,7 @@ func TestUT_Write_ConditionalFileExclusion(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "always.txt"), []byte("always"), 0o644))
 
 	vars := map[string]any{"include": "no"}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Conditional file should NOT exist
@@ -411,7 +413,7 @@ func TestUT_Write_PathTraversalViaPlaceholder(t *testing.T) {
 	))
 
 	vars := map[string]any{"out": "../escape.txt"}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.Error(t, err)
 
 	var pathErr *PathError
@@ -442,7 +444,7 @@ func TestUT_Write_SymlinkDirSkipping(t *testing.T) {
 	require.NoError(t, os.Symlink(externalDir, filepath.Join(templateDir, "linked_dir")))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Real file should exist
@@ -464,7 +466,7 @@ func TestUT_Write_EmptyTemplate(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "empty.txt"), []byte(""), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "empty.txt"))
@@ -510,7 +512,7 @@ func TestUT_ProcessFile_TextTemplate(t *testing.T) {
 	mock := &mockRenderer{
 		parseStringTemplate: &mockTemplate{result: "rendered output", err: nil},
 	}
-	writer := NewOutputWriter(mock, nil)
+	writer := NewOutputWriter(mock, nil, io.Discard)
 
 	templateDir := t.TempDir()
 	outputDir := t.TempDir()
@@ -537,7 +539,7 @@ func TestUT_ProcessFile_BinaryFile(t *testing.T) {
 	mock := &mockRenderer{
 		parseStringTemplate: &mockTemplate{result: "SHOULD NOT APPEAR", err: nil},
 	}
-	writer := NewOutputWriter(mock, nil)
+	writer := NewOutputWriter(mock, nil, io.Discard)
 
 	templateDir := t.TempDir()
 	outputDir := t.TempDir()
@@ -567,7 +569,7 @@ func TestUT_ProcessFile_SanitizesFileMode(t *testing.T) {
 	mock := &mockRenderer{
 		parseStringTemplate: &mockTemplate{result: "content", err: nil},
 	}
-	writer := NewOutputWriter(mock, nil)
+	writer := NewOutputWriter(mock, nil, io.Discard)
 
 	templateDir := t.TempDir()
 	outputDir := t.TempDir()
@@ -597,7 +599,7 @@ func TestUT_ProcessFile_TemplateParseError(t *testing.T) {
 	mock := &mockRenderer{
 		parseStringErr: errors.New("parse error: invalid syntax"),
 	}
-	writer := NewOutputWriter(mock, nil)
+	writer := NewOutputWriter(mock, nil, io.Discard)
 
 	templateDir := t.TempDir()
 	outputDir := t.TempDir()
@@ -621,7 +623,7 @@ func TestUT_ProcessFile_TemplateExecuteError(t *testing.T) {
 	mock := &mockRenderer{
 		parseStringTemplate: &mockTemplate{result: "", err: errors.New("execute failed")},
 	}
-	writer := NewOutputWriter(mock, nil)
+	writer := NewOutputWriter(mock, nil, io.Discard)
 
 	templateDir := t.TempDir()
 	outputDir := t.TempDir()
@@ -1087,7 +1089,7 @@ func TestUT_Write_LargeBinaryFileStreaming(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "large.bin"), binaryContent, 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// Verify content matches exactly
@@ -1311,7 +1313,7 @@ func TestUT_Write_SkipsTagIgnoreFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// .tagignore should NOT exist in output
@@ -1334,7 +1336,7 @@ func TestUT_Write_TagIgnoreExcludesFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
@@ -1357,7 +1359,7 @@ func TestUT_Write_TagIgnoreExcludesDirectory(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "temp"))
@@ -1383,7 +1385,7 @@ func TestUT_Write_TagIgnoreGlobPattern(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(nested, "file.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "sub", "deep", "file.tmp"))
@@ -1404,7 +1406,7 @@ func TestUT_Write_TagIgnoreNegation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.log"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
@@ -1426,7 +1428,7 @@ func TestUT_Write_TagIgnoreCommentsAndBlanks(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
@@ -1447,7 +1449,7 @@ func TestUT_Write_TagIgnoreMissing(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "file.log"), []byte("log"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "file.txt"))
@@ -1469,7 +1471,7 @@ func TestUT_Write_TagIgnoreEmpty(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "file.log"), []byte("log"), 0o644))
 
 	vars := map[string]any{}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	// .tagignore itself should not be in output
@@ -1500,7 +1502,7 @@ func TestUT_Write_SSTIBlocked_TemplateSyntaxInVarIsLiteral(t *testing.T) {
 
 	// User provides template syntax as variable value (SSTI attack)
 	vars := map[string]any{"name": "{{ range(999) }}x{{ endfor }}"}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "readme.txt"))
@@ -1522,7 +1524,7 @@ func TestUT_Write_SSTIBlocked_NormalVarsStillWork(t *testing.T) {
 	))
 
 	vars := map[string]any{"name": "World", "version": "1.0"}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
@@ -1544,7 +1546,7 @@ func TestUT_Write_SSTIBlocked_StmtAndCommentSyntax(t *testing.T) {
 
 	// User tries {% %} and {# #} injection
 	vars := map[string]any{"input": "{% if true %}pwned{% endif %}{# comment #}"}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
@@ -1555,7 +1557,7 @@ func TestUT_Write_SSTIBlocked_StmtAndCommentSyntax(t *testing.T) {
 func TestUT_Write_SSTIAllowRecursiveRender(t *testing.T) {
 	engine := mustNewEngine(t)
 	pathProcessor := NewPathProcessor(engine)
-	writer := NewOutputWriter(engine, pathProcessor)
+	writer := NewOutputWriter(engine, pathProcessor, io.Discard)
 	writer.SetAllowRecursiveRender(true)
 
 	templateDir := t.TempDir()
@@ -1572,7 +1574,7 @@ func TestUT_Write_SSTIAllowRecursiveRender(t *testing.T) {
 	// template syntax in the value is output literally — but without any
 	// escape/unescape round-trip.
 	vars := map[string]any{"expr": "{{ 1 + 1 }}"}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
@@ -1583,7 +1585,7 @@ func TestUT_Write_SSTIAllowRecursiveRender(t *testing.T) {
 func TestUT_Write_SSTIDerivedVarsNotEscaped(t *testing.T) {
 	engine := mustNewEngine(t)
 	pathProcessor := NewPathProcessor(engine)
-	writer := NewOutputWriter(engine, pathProcessor)
+	writer := NewOutputWriter(engine, pathProcessor, io.Discard)
 	// Mark "greeting" as a derived variable — its value should not be escaped
 	writer.SetDerivedVarNames(map[string]bool{"greeting": true})
 
@@ -1601,7 +1603,7 @@ func TestUT_Write_SSTIDerivedVarsNotEscaped(t *testing.T) {
 		"greeting": "Hello!",
 		"input":    "{{ malicious }}",
 	}
-	err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
@@ -1632,6 +1634,96 @@ func TestUT_UnescapeTemplateSyntax_RoundTrip(t *testing.T) {
 			assert.Equal(t, tt.input, unescaped, "round-trip should restore original")
 		})
 	}
+}
+
+// --- Write file list (FileEntry) ---
+
+func TestUT_OutputWriter_Write_ReturnsCreatedFiles(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "a.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(templateDir, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "sub", "b.txt"), []byte("b"), 0o644))
+
+	files, err := writer.Write(templateDir, outputDir, map[string]any{})
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []FileEntry{
+		{Path: "a.txt", Action: fileaction.ActionCreate},
+		{Path: "sub/b.txt", Action: fileaction.ActionCreate},
+	}, files)
+}
+
+func TestUT_OutputWriter_DryRunFileListMatchesRealRun(t *testing.T) {
+	templateDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "a.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(templateDir, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "sub", "b.bin"), []byte{0x00, 0x01, 0x02}, 0o644))
+
+	realWriter := mustNewOutputWriter(t)
+	realFiles, err := realWriter.Write(templateDir, t.TempDir(), map[string]any{})
+	require.NoError(t, err)
+
+	dryWriter := mustNewOutputWriter(t)
+	dryWriter.SetDryRun(true)
+	dryFiles, err := dryWriter.Write(templateDir, t.TempDir(), map[string]any{})
+	require.NoError(t, err)
+
+	assert.Equal(t, realFiles, dryFiles)
+}
+
+func TestUT_OutputWriter_ConditionalEmptyFilenameAbsentFromFiles(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templateDir, `{% if vars.include == "yes" %}optional.txt{% endif %}`),
+		[]byte("optional content"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "always.txt"), []byte("always"), 0o644))
+
+	files, err := writer.Write(templateDir, outputDir, map[string]any{"include": "no"})
+	require.NoError(t, err)
+
+	assert.Equal(t, []FileEntry{{Path: "always.txt", Action: fileaction.ActionCreate}}, files)
+}
+
+func TestUT_OutputWriter_SkippedEntriesAbsentFromFiles(t *testing.T) {
+	templateDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte("*.log\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "app.log"), []byte("log"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, types.TemplateConfigFile), []byte(`{"vars":{}}`), 0o644))
+
+	for _, dryRun := range []bool{false, true} {
+		writer := mustNewOutputWriter(t)
+		writer.SetDryRun(dryRun)
+		files, err := writer.Write(templateDir, t.TempDir(), map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, []FileEntry{{Path: "keep.txt", Action: fileaction.ActionCreate}}, files, "dryRun=%v", dryRun)
+	}
+}
+
+func TestUT_OutputWriter_DryRunLinesGoToInjectedWriter(t *testing.T) {
+	engine := mustNewEngine(t)
+	pathProcessor := NewPathProcessor(engine)
+	var buf bytes.Buffer
+	writer := NewOutputWriter(engine, pathProcessor, &buf)
+	writer.SetDryRun(true)
+
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "a.txt"), []byte("hello"), 0o644))
+
+	_, err := writer.Write(templateDir, outputDir, map[string]any{})
+	require.NoError(t, err)
+
+	assert.Contains(t, buf.String(), "(dry-run) would write:")
 }
 
 // --- test helpers ---

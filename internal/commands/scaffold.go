@@ -14,7 +14,9 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/convert"
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/history"
+	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/lockfile"
 	"github.com/kaikenlabs/tag/internal/parse"
@@ -25,6 +27,18 @@ import (
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
+
+// isTTY is a package var so tests can exercise the interactive branch; under
+// `go test` the real probe is always false, which would make any assertion
+// about JSON mode pass on a broken tree.
+var isTTY = scaffold.IsTTY
+
+// nonInteractive reports whether scaffold must run without prompting: the
+// caller asked for it explicitly, JSON output has no terminal to prompt on,
+// or stdin isn't a terminal to prompt through in the first place.
+func nonInteractive(c *cli.Context, format string) bool {
+	return c.Bool("no-input") || format == formatJSON || !isTTY()
+}
 
 // ScaffoldCommand returns the scaffold command definition.
 func ScaffoldCommand() *cli.Command {
@@ -87,14 +101,27 @@ func scaffoldAction(c *cli.Context) error {
 		return app.Errorf("invalid flags: %w", err)
 	}
 
+	// resolveFormat must run before the no-positional branch below, since that
+	// branch decides between an interactive picker and a usage error based on
+	// whether JSON mode is active — earlier than every other command needs it.
+	format, err := resolveFormat(c, formatText, formatJSON)
+	if err != nil {
+		return err
+	}
+	jsonMode := format == formatJSON
+
 	// No args → try library picker
 	if len(positional) < 1 {
+		if jsonMode {
+			return app.UsageErrorf("template argument required\n\nUsage: tag scaffold <template> [project-name]")
+		}
+
 		lib, err := newLocalLibrary()
 		if err != nil {
 			return app.Errorf("failed to initialize library: %w", err)
 		}
 
-		templateName, err := resolveTemplateName(c, lib, positional)
+		templateName, err := resolveTemplateName(c, lib, positional, format)
 		if err != nil {
 			return err
 		}
@@ -104,17 +131,17 @@ func scaffoldAction(c *cli.Context) error {
 			return asAppError(err)
 		}
 
-		return scaffoldFromLibrary(c, lib, entry, positional)
+		return scaffoldFromLibrary(c, lib, entry, positional, format)
 	}
 
-	return scaffoldFromRef(c, positional)
+	return scaffoldFromRef(c, positional, format)
 }
 
 // scaffoldFromLibrary scaffolds a project from an installed library template.
 // runScaffold initialises and runs a scaffold with the given options.
 // onCookiecutter handles the CookiecutterDetectedError case, allowing callers to
 // provide context-specific error messages or recovery logic.
-func runScaffold(c *cli.Context, opts scaffold.Options, onCookiecutter func(*scaffold.CookiecutterDetectedError) error) error {
+func runScaffold(c *cli.Context, opts scaffold.Options, jsonMode bool, onCookiecutter func(*scaffold.CookiecutterDetectedError) error) error {
 	// Load dialect registry (all 3 tiers: built-in + user-global + template-local).
 	reg, err := loadDialectRegistry(opts.TemplateDir)
 	if err != nil {
@@ -131,6 +158,14 @@ func runScaffold(c *cli.Context, opts scaffold.Options, onCookiecutter func(*sca
 		sopts = append(sopts, scaffold.WithEngine(tmplEngine))
 	}
 
+	// Human-facing text goes to c.App.ErrWriter under JSON mode, keeping
+	// c.App.Writer free for the single JSON document.
+	out := cmdOut(c)
+	if jsonMode {
+		out = cmdErr(c)
+	}
+	sopts = append(sopts, scaffold.WithOutput(out))
+
 	s, err := scaffold.NewScaffold(opts, sopts...)
 	if err != nil {
 		return app.Errorf("failed to initialize scaffold: %w", err)
@@ -144,11 +179,45 @@ func runScaffold(c *cli.Context, opts scaffold.Options, onCookiecutter func(*sca
 		}
 		return app.Errorf("scaffolding failed: %w", err)
 	}
+
+	if jsonMode {
+		return jsonout.Write(cmdOut(c), newScaffoldDoc(result))
+	}
 	displayScaffoldSummary(c.App.Writer, result)
 	return nil
 }
 
-func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.Entry, positional []string) error {
+// scaffoldFileJSON is one entry of a scaffoldDoc's "files" list.
+type scaffoldFileJSON struct {
+	Path   string            `json:"path"`
+	Action fileaction.Action `json:"action"`
+}
+
+// scaffoldDoc is the JSON shape for `scaffold --format json`.
+type scaffoldDoc struct {
+	OutputDir string             `json:"output_dir"`
+	Template  string             `json:"template"`
+	Files     []scaffoldFileJSON `json:"files"`
+	Created   int                `json:"created"`
+	DryRun    bool               `json:"dry_run"`
+}
+
+func newScaffoldDoc(result scaffold.ScaffoldResult) scaffoldDoc {
+	files := make([]scaffoldFileJSON, 0, len(result.Files))
+	for _, f := range result.Files {
+		files = append(files, scaffoldFileJSON{Path: f.Path, Action: f.Action})
+	}
+
+	return scaffoldDoc{
+		OutputDir: result.OutputDir,
+		Template:  result.Opts.TemplateRef,
+		Files:     files,
+		Created:   len(files),
+		DryRun:    result.Opts.DryRun,
+	}
+}
+
+func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.Entry, positional []string, format string) error {
 	projectName := ""
 	if len(positional) >= 2 {
 		projectName = positional[1]
@@ -164,19 +233,24 @@ func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.En
 		return app.Errorf("invalid meta flag: %w", err)
 	}
 
+	jsonMode := format == formatJSON
+
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
 	opts.TemplateRef = entry.Source
 	opts.TemplateName = entry.Name
 	opts.IsRemote = false
 	opts.SkipGeneratorCopy = true // generators resolve from library
+	if jsonMode {
+		opts.NoInput = true
+	}
 
-	return runScaffold(c, opts, func(*scaffold.CookiecutterDetectedError) error {
+	return runScaffold(c, opts, jsonMode, func(*scaffold.CookiecutterDetectedError) error {
 		return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", entry.Name, entry.Name)
 	})
 }
 
 // scaffoldFromRef handles the case where a template reference is provided.
-func scaffoldFromRef(c *cli.Context, positional []string) error {
+func scaffoldFromRef(c *cli.Context, positional []string, format string) error {
 	templateRef := positional[0]
 	projectName := ""
 	if len(positional) >= 2 {
@@ -189,7 +263,7 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 		lib, libErr := newLocalLibrary()
 		if libErr == nil {
 			if entry, getErr := lib.Get(templateRef); getErr == nil {
-				return scaffoldFromLibrary(c, lib, entry, positional)
+				return scaffoldFromLibrary(c, lib, entry, positional, format)
 			}
 		}
 	}
@@ -217,6 +291,8 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	// Determine if the template is remote
 	isRemote := !remote.IsLocal(templateRef)
 
+	jsonMode := format == formatJSON
+
 	// Build options
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
 	opts.TemplateRef = templateRef
@@ -224,13 +300,16 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	if isRemote {
 		opts.TemplateName = remote.DeriveName(templateRef)
 	}
+	if jsonMode {
+		opts.NoInput = true
+	}
 
 	// Decide whether to add the template to the library.
 	// Remote templates are always added; local templates are added when
 	// --add-to-lib is set or the user confirms interactively.
 	addToLib := isRemote
 	if !isRemote {
-		addToLib = resolveAddToLib(c, templateDir)
+		addToLib = resolveAddToLib(c, templateDir, format)
 	}
 	if addToLib {
 		opts.SkipGeneratorCopy = true
@@ -244,15 +323,15 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 	}
 
 	// Create and run scaffold
-	if err := runScaffold(c, opts, func(ccErr *scaffold.CookiecutterDetectedError) error {
-		return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts)
+	if err := runScaffold(c, opts, jsonMode, func(ccErr *scaffold.CookiecutterDetectedError) error {
+		return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts, format)
 	}); err != nil {
 		return err
 	}
 
 	// Add the template to the library for generator resolution.
 	if addToLib {
-		addToLibrary(c, templateRef, templateDir)
+		addToLibrary(c, templateRef, templateDir, jsonMode)
 	}
 
 	return nil
@@ -261,7 +340,7 @@ func scaffoldFromRef(c *cli.Context, positional []string) error {
 // resolveAddToLib determines whether a local template should be added to the
 // library after scaffolding. Returns true if --add-to-lib is set, or if the
 // template has generators and the user confirms interactively.
-func resolveAddToLib(c *cli.Context, templateDir string) bool {
+func resolveAddToLib(c *cli.Context, templateDir, format string) bool {
 	if c.Bool(flags.AddToLibFlag) {
 		return true
 	}
@@ -273,7 +352,7 @@ func resolveAddToLib(c *cli.Context, templateDir string) bool {
 	}
 
 	// Non-interactive mode: don't add (safe default, generators copied to .tag/).
-	if c.Bool("no-input") || !scaffold.IsTTY() {
+	if nonInteractive(c, format) {
 		return false
 	}
 
@@ -300,11 +379,11 @@ func looksLikeBareName(ref string) bool {
 }
 
 // resolveTemplateName determines the template name from positional args or interactive picker.
-func resolveTemplateName(c *cli.Context, lib *library.Library, positional []string) (string, error) {
+func resolveTemplateName(c *cli.Context, lib *library.Library, positional []string, format string) (string, error) {
 	switch {
 	case len(positional) >= 1:
 		return positional[0], nil
-	case scaffold.IsTTY() && !c.Bool("no-input"):
+	case !nonInteractive(c, format):
 		return pickTemplate(lib)
 	default:
 		return "", app.UsageErrorf("template argument required\n\nUsage: tag scaffold <template> [project-name]")
@@ -351,18 +430,21 @@ func pickTemplate(lib *library.Library) (string, error) {
 
 // scaffoldFlags returns the full set of flags for the scaffold command.
 func scaffoldFlags() []cli.Flag {
-	return append(commonScaffoldFlags(), &cli.BoolFlag{
-		Name:    "update",
-		Aliases: []string{"u"},
-		Usage:   "Force refresh of cached remote templates",
-	})
+	return append(commonScaffoldFlags(),
+		&cli.BoolFlag{
+			Name:    "update",
+			Aliases: []string{"u"},
+			Usage:   "Force refresh of cached remote templates",
+		},
+		formatFlag(formatText, formatJSON),
+	)
 }
 
 // handleCookiecutterDetection handles the case when a Cookiecutter template is detected.
 // Output convention: fmt for user-facing messages, slog for diagnostic messages.
-func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetectedError, templateRef, templateDir string, opts scaffold.Options) error {
+func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetectedError, templateRef, templateDir string, opts scaffold.Options, format string) error {
 	// In non-interactive mode, fail with helpful error
-	if c.Bool("no-input") || !scaffold.IsTTY() {
+	if nonInteractive(c, format) {
 		return app.Errorf("This appears to be a Cookiecutter template.\n"+
 			"Cannot convert in non-interactive mode.\n"+
 			"Run without --no-input to convert interactively, or use:\n"+
@@ -391,7 +473,7 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 
 	// Retry scaffolding with converted template — reuse runScaffold to
 	// ensure dialect loading and all other initialization happens correctly.
-	return runScaffold(c, opts, func(*scaffold.CookiecutterDetectedError) error {
+	return runScaffold(c, opts, format == formatJSON, func(*scaffold.CookiecutterDetectedError) error {
 		return app.Errorf("unexpected Cookiecutter detection after conversion")
 	})
 }
@@ -465,7 +547,12 @@ func promptForProjectDir(prompter scaffold.Prompter, opts *scaffold.Options) err
 
 // addToLibrary adds a scaffolded remote template to the library (non-fatal on error).
 // If an entry with the same name already exists, it is left unchanged.
-func addToLibrary(c *cli.Context, templateRef, templateDir string) {
+func addToLibrary(c *cli.Context, templateRef, templateDir string, jsonMode bool) {
+	w := c.App.Writer
+	if jsonMode {
+		w = io.Discard
+	}
+
 	lib, err := newLocalLibrary()
 	if err != nil {
 		slog.Warn("could not add template to library", "error", err)
@@ -476,7 +563,7 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 
 	// Skip if the template is already in the library.
 	if _, getErr := lib.Get(name); getErr == nil {
-		fmt.Fprintf(c.App.Writer, "\nTemplate %q already in library. Run with: tag scaffold %s\n", name, name)
+		fmt.Fprintf(w, "\nTemplate %q already in library. Run with: tag scaffold %s\n", name, name)
 		return
 	}
 
@@ -491,7 +578,7 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string) {
 		return
 	}
 
-	fmt.Fprintf(c.App.Writer, "\nTemplate added to library as %q. Run with: tag scaffold %s\n", result.Name, result.Name)
+	fmt.Fprintf(w, "\nTemplate added to library as %q. Run with: tag scaffold %s\n", result.Name, result.Name)
 }
 
 // suggestConvertedTemplateName generates a default name for converted template output.

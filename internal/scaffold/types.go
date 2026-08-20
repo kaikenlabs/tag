@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
 )
 
@@ -45,6 +46,13 @@ type Options struct {
 	SkipGeneratorCopy    bool              // Skip copying generators/bundles to output .tag/ directory
 }
 
+// FileEntry describes one file written (or, in dry-run, that would have been
+// written) during a scaffold run.
+type FileEntry struct {
+	Path   string            `json:"path"`
+	Action fileaction.Action `json:"action"`
+}
+
 // ScaffoldResult contains the output of a successful scaffold run.
 // It carries the information needed by the commands layer to render
 // a post-scaffold summary (output location, resolved variables, etc.).
@@ -54,4 +62,5 @@ type ScaffoldResult struct {
 	TemplateDir string         // Absolute path to the template directory (for README)
 	Vars        map[string]any // Resolved template variables
 	Opts        Options        // Options used for this scaffold run
+	Files       []FileEntry    // Files written (or would be written, in dry-run)
 }

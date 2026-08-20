@@ -109,7 +109,7 @@ func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
 	collector.WithEngine(s.engine)
 	processor := NewPathProcessor(s.engine)
 	processor.SetAllowRecursiveRender(opts.AllowRecursiveRender)
-	writer := NewOutputWriter(s.engine, processor)
+	writer := NewOutputWriter(s.engine, processor, s.output)
 	writer.SetAllowRecursiveRender(opts.AllowRecursiveRender)
 	writer.SetDryRun(opts.DryRun)
 
@@ -338,7 +338,8 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		}()
 	}
 
-	if err := s.writer.Write(ctx.effectiveTemplateDir, ctx.outputDir, ctx.vars); err != nil {
+	files, err := s.writer.Write(ctx.effectiveTemplateDir, ctx.outputDir, ctx.vars)
+	if err != nil {
 		return ScaffoldResult{}, fmt.Errorf("failed to process template: %w", err)
 	}
 
@@ -355,6 +356,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		TemplateDir: ctx.templateDirAbs,
 		Vars:        ctx.vars,
 		Opts:        ctx.opts,
+		Files:       files,
 	}, nil
 }
 

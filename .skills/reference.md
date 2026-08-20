@@ -843,6 +843,36 @@ written to stderr instead of stdout, and the `--verbose` text summary is not pri
 array of the paths that already existed — and the command still exits non-zero; any
 other failure exits non-zero with an empty stdout instead.
 
+**`tag scaffold --format json`**: bare object, no envelope.
+
+```bash
+tag scaffold ./tmpl my-project --format json
+tag scaffold ./tmpl my-project --dry-run --format json
+```
+
+```json
+{
+  "output_dir": "/abs/path/my-project",
+  "template": "./tmpl",
+  "files": [
+    { "path": "README.md", "action": "create" },
+    { "path": "src/main.go", "action": "create" }
+  ],
+  "created": 2,
+  "dry_run": false
+}
+```
+
+`action` is always `"create"` — scaffold writes a fresh project tree, so it has no
+inject/append/overwrite cases. `files` is identical whether `--dry-run` is set or not
+(same paths, same action), because both paths record an entry at the same point right
+after a file is processed; only whether the file actually lands on disk differs.
+`--format json` forces `--no-input` (defaults and `-m` overrides apply, prompts never
+fire) and turns the no-template-argument interactive picker into a usage error (exit 2)
+instead. Hook output, the "Add template to library?" prompt/messages, and the
+post-scaffold summary/README render are all suppressed or rerouted to stderr — stdout
+carries only the JSON document.
+
 **`tag extract --format json`**: bare object.
 
 ```bash

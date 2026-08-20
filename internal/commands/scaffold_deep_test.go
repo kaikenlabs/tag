@@ -31,7 +31,7 @@ func TestUT_AddToLibrary_DuplicateSkipped(t *testing.T) {
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	addToLibrary(ctx, "gh:test/existing-tmpl", t.TempDir())
+	addToLibrary(ctx, "gh:test/existing-tmpl", t.TempDir(), false)
 
 	out := buf.String()
 	assert.Contains(t, out, "already in library")
@@ -49,7 +49,7 @@ func TestUT_AddToLibrary_NewTemplate(t *testing.T) {
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	addToLibrary(ctx, "gh:test/new-template", templateDir)
+	addToLibrary(ctx, "gh:test/new-template", templateDir, false)
 
 	out := buf.String()
 	assert.Contains(t, out, "Template added to library")
@@ -220,7 +220,7 @@ func TestUT_ScaffoldFromRef_WithOutputDir(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{templateDir, "out-proj"})
+	err := scaffoldFromRef(ctx, []string{templateDir, "out-proj"}, formatText)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(outputPath)
@@ -264,7 +264,7 @@ func TestUT_ScaffoldFromRef_LibraryWithGenerators(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{"gen-tmpl", "gen-proj"})
+	err := scaffoldFromRef(ctx, []string{"gen-tmpl", "gen-proj"}, formatText)
 	require.NoError(t, err)
 }
 

@@ -263,7 +263,7 @@ my-project/
 
 | Command | Description |
 |---------|-------------|
-| `tag scaffold [template] [name]` | Create project (no args = picker). Alias: `tag s` |
+| `tag scaffold [template] [name]` | Create project (no args = picker; `--format json` forces `--no-input` and errors instead of picking). Alias: `tag s` |
 | `tag generate <gen-or-bundle> <name>` | Run generator or bundle (`--format json`). Alias: `tag g` |
 | `tag extract --name <n> --as <gen> <file>` | Extract a generator template from an existing source file (`--format json`, `-i` not supported with `--format json`) |
 | `tag generate list [--all]` | List generators and bundles (`--format json`). Alias: `tag g list` |
@@ -322,7 +322,7 @@ my-project/
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |
 | `--force` | scaffold | Overwrite existing output |
-| `--format text\|json` | doctor, version, check, diff, cache ls, lib ls, lib search, dialect list, dialect show, template info, template lint, template variables, template graph (also `dot`), generate list, template list, test, generate, extract, undo, undo --list, update, convert cookiecutter | Output format (default: `text`). Unknown value = usage error, exit 2 |
+| `--format text\|json` | doctor, version, check, diff, cache ls, lib ls, lib search, dialect list, dialect show, template info, template lint, template variables, template graph (also `dot`), generate list, template list, test, generate, extract, undo, undo --list, update, convert cookiecutter, scaffold | Output format (default: `text`). Unknown value = usage error, exit 2 |
 
 ## Pitfalls
 
