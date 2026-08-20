@@ -214,10 +214,9 @@ func TestUT_PrintGenerateSummary_VerboseMode(t *testing.T) {
 func TestUT_PrintUpdateSummary_NilApplied(t *testing.T) {
 	result := &templateupdate.UpdateResult{Applied: nil}
 	// Should not panic
-	output := captureStdout(t, func() {
-		printUpdateSummary(result)
-	})
-	assert.Empty(t, output)
+	var buf bytes.Buffer
+	printUpdateSummary(&buf, result)
+	assert.Empty(t, buf.String())
 }
 
 // ===========================================================================

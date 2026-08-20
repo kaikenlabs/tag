@@ -756,6 +756,30 @@ Generates a reference file for AI coding agents listing available generators and
 - Appending to existing file without markers preserves existing content
 - Creates parent directories if needed (e.g. `.github/` for copilot format)
 
+### Cookiecutter Conversion
+
+```bash
+tag convert cookiecutter ./cookiecutter-myproject -o ./myproject-tag
+tag convert cookiecutter ./cookiecutter-myproject --dry-run
+tag convert cookiecutter ./cookiecutter-myproject -o ./output --force
+tag convert cookiecutter ./cookiecutter-myproject --format json
+```
+
+Converts `cookiecutter.json` to `tag.template.json`, rewrites `{{ cookiecutter.var }}`
+path/content references to `{{ vars.var }}` (in place — there is no `__var__`
+double-underscore form), and reports any Jinja2 constructs with no Gonja equivalent as
+`incompatibilities` for manual review.
+
+**`--format json`**: bare `convert.Result`, no envelope. Beyond the existing counters
+(`variables_converted`, `dirs_renamed`, `files_renamed`, `files_processed`,
+`hooks_copied`), it adds two arrays: `files` (each converted file's `from`/`to` path) and
+`variables` (each variable's `name`, `original_type`, `tag_type`, and — for choice/private
+variables — `is_choice`/`is_private`). All array fields (`incompatibilities`, `warnings`,
+`files`, `variables`) are always present as `[]`, never omitted or `null`, even when
+empty. `severity` on an incompatibility is a plain string (`"info"`/`"warning"`/`"error"`).
+`internal/convert` performs no output of its own — the JSON is written by the command
+layer either way, so nothing needs redacting.
+
 ### Code Generation Flags
 
 | Flag | Description |
@@ -765,9 +789,14 @@ Generates a reference file for AI coding agents listing available generators and
 | `--dry-run` / `-d` | Preview what would be written without touching the filesystem. Behavior differs by command — see below. |
 | `-m key=value` | Set variable values inline |
 
-**`--dry-run` is a global flag** — it must appear *before* the subcommand:
-`tag --dry-run generate screen Settings`, not `tag generate --dry-run ...` (which fails
-with `flag provided but not defined: -dry-run`). Same for `-d`.
+**`--dry-run` is a global flag**, declared on the app rather than on `generate` itself, so
+it must appear *before* the subcommand (`tag --dry-run generate screen Settings`) or
+*after* the positional arguments (`tag generate screen Settings --dry-run`) — never
+between the subcommand name and the positionals (`tag generate --dry-run screen Settings`
+fails with `flag provided but not defined: -dry-run`, because that is still where
+urfave/cli's own parser looks for command-declared flags only). The trailing form works
+because `generate` rescans the tail of the argument list for recognised flags — the same
+mechanism that makes a trailing `--format json` work. Same rules apply to `-d`.
 
 **`--dry-run` behavior by command**:
 
@@ -779,6 +808,54 @@ with `flag provided but not defined: -dry-run`). Same for `-d`.
 - `fail` (default): Pre-scans all create-action targets before writing anything. If any conflict is found, the entire generation is aborted with no files written (atomic).
 - `skip`: Writes new files, silently skips files that already exist.
 - `overwrite`: Replaces existing files. Overwrites are recorded in generation history with a pre-modification backup, enabling `tag undo`.
+
+**`tag generate --format json`**: bare object, no envelope.
+
+```bash
+tag generate model User --format json
+tag generate --dry-run crud Product --format json
+```
+
+```json
+{
+  "files": [
+    { "path": "internal/model/widget.go", "action": "create" },
+    { "path": "internal/router.go", "action": "inject" }
+  ],
+  "created": 1,
+  "skipped": 0,
+  "overwritten": 0,
+  "modified": 1,
+  "dry_run": false
+}
+```
+
+`action` is the real per-file action — `inject` and `append` stay distinct, unlike the
+`--verbose` text summary's `modified` word which deliberately collapses both. `files` is
+`[]`, never `null`, on a run that touches nothing. In JSON mode, `--dry-run` never
+prompts on stdin regardless of terminal state (the interactive diff review is a
+text-mode-only feature), hook output and a failed post-generation hook's warning are
+written to stderr instead of stdout, and the `--verbose` text summary is not printed. On
+`--on-existing=fail` conflicts, the document still gets written — with a `conflicts`
+array of the paths that already existed — and the command still exits non-zero; any
+other failure exits non-zero with an empty stdout instead.
+
+**`tag extract --format json`**: bare object.
+
+```bash
+tag extract --name user --as handler internal/handler/user_handler.go --format json
+tag extract --name user --as handler --dry-run internal/handler/user_handler.go --format json
+```
+
+```json
+{ "template_path": ".tag/handler/user_handler.go", "to_path": "internal/handler/{{ name }}_handler.go", "replacements": 4 }
+```
+
+`content` (the generated template body) is included only in `--dry-run` — nothing is on
+disk yet, so it is the only way to see the result; a real run omits it, since the file is
+already on disk and the field would otherwise be an unbounded duplicate of it.
+`-i`/`--interactive` is rejected as a usage error under `--format json` rather than
+silently running non-interactively.
 
 ### Generation History & Undo
 
@@ -800,6 +877,34 @@ tag undo --partial                     # Revert unmodified files, skip conflicti
 **Manifest location**: `.tag/history.json` — generated automatically, do not edit manually.
 
 **Backup location**: `.tag/history/backups/<generation-id>/` — stores pre-modification copies for inject/append/overwrite/openapi-merge operations; `undo` restores from these for all four.
+
+**`tag undo --format json`**: requires `--yes` — JSON mode never implies consent for a
+destructive operation, so `tag undo --format json` alone is a usage error, not an
+auto-confirm. Bare object:
+
+```bash
+tag undo --yes --format json
+tag undo --yes --partial --format json
+```
+
+```json
+{
+  "gen_id": "gen_1741000000_a3f2bc",
+  "files": [
+    { "path": "internal/model/widget.go", "action": "create", "reverted": true }
+  ],
+  "reverted": 1,
+  "skipped": 0
+}
+```
+
+On a conflict (a file was modified after generation and neither `--force` nor
+`--partial` was passed), the document is still written — with `files` empty and
+`conflicts` populated — and the command still exits non-zero. Under `--partial`,
+skipped-but-conflicting files show up in both `conflicts` and as `"reverted": false`
+entries in `files`. `--list` also emits JSON, wrapped under a noun key:
+`tag undo --list --format json` → `{"generations":[{"id","template","command","files"}]}`
+(`files` here is the file *count*, not a per-file array).
 
 ### Environment Diagnostics
 
@@ -876,6 +981,39 @@ tag update --abort                     # Abort and restore from backup
 ```
 
 `files` is `[]`, never `null`, when the project is already up to date, and the JSON is written unconditionally in that case rather than the text "Already up to date." sentence. `op` is one of `add`/`delete`/`update`/`conflict`/`prompt`; files needing no change (`keep`, user-added) are omitted from the array. Binary files are flagged with `is_binary` and always report `0`/`0` for `added`/`deleted` rather than having their bytes counted or dumped — no file contents ever appear in the output. `added`/`deleted` count the same +/- lines the text diff prints for that file, so a file whose content ends in a newline counts a trailing empty line; this is one more than `git diff --numstat` would report for the same file and is expected, not a bug. `--stat` and `--no-color` are accepted but have no effect under `--format json`. Exit codes are unchanged from text: unaffected by whether the project is up to date, non-zero only on error (e.g. `2` for a rejected positional argument — `tag diff` takes none).
+
+**`tag update --format json`**: bare object. `mode` distinguishes `apply`/`continue`/`abort` — `--continue` and `--abort` never populate a file list, so `--abort` carries only `mode`/`dry_run` and `--continue` adds the SHAs.
+
+```bash
+tag update --format json
+tag update --dry-run --format json
+tag update --continue --format json
+tag update --abort --format json
+```
+
+```json
+{
+  "mode": "apply",
+  "dry_run": false,
+  "old_sha": "a1b2c3d",
+  "new_sha": "e4f5a6b",
+  "up_to_date": false,
+  "files": [
+    { "path": "main.go", "op": "update" },
+    { "path": "config.yaml", "op": "conflict" }
+  ],
+  "new_files": 0,
+  "updated_files": 1,
+  "deleted_files": 0,
+  "conflicts": {
+    "conflicted_files": ["config.yaml"],
+    "prompt_files": [],
+    "skipped": []
+  }
+}
+```
+
+`op` keeps `update`'s own vocabulary (`keep`/`add`/`delete`/`update`/`conflict`/`user-added`/`prompt`) rather than the `fileaction` vocabulary `generate`/`undo` use — a 3-way merge decision is a different concept from "what TAG wrote to this file". `conflicts` (reusing the `conflicted_files`/`prompt_files` names from `.tag/conflicts.json`, plus a new `skipped` list) is present only when there are real conflicts or prompts, and its presence is exactly when the command exits non-zero — the document is still written on that exit. No file body ever appears in the JSON: neither the merged content nor the base/ours/theirs content of a conflicted file, which are unbounded copies of your own source.
 
 #### CI Integration
 

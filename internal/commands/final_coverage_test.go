@@ -389,7 +389,7 @@ func TestUT_ParseSetFlags_ValueContainsEquals(t *testing.T) {
 }
 
 func TestUT_PrintUpdateSummary_AllOps(t *testing.T) {
-	// No t.Parallel() — captures os.Stdout via pipe.
+	t.Parallel()
 	result := &templateupdate.UpdateResult{
 		Applied: []templateupdate.MergeResult{
 			{Path: "added.go", Op: templateupdate.MergeAdd},
@@ -399,18 +399,8 @@ func TestUT_PrintUpdateSummary_AllOps(t *testing.T) {
 		},
 	}
 
-	// Capture os.Stdout output (printUpdateSummary writes to os.Stdout)
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	printUpdateSummary(result)
-
-	w.Close()
-	os.Stdout = old
-
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
+	printUpdateSummary(&buf, result)
 	out := buf.String()
 
 	assert.Contains(t, out, "added.go")

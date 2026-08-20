@@ -78,6 +78,19 @@ func cmdOut(c *cli.Context) io.Writer {
 	return os.Stdout
 }
 
+// cmdErr returns the sink a command should send human-facing text to when
+// stdout is reserved for a JSON document. It is the ErrWriter counterpart of
+// cmdOut, and exists for the same reason: urfave/cli only fills ErrWriter in
+// during App.Setup, so a hand-rolled context — which this package's tests are
+// full of — leaves it nil, and writing to a nil io.Writer panics rather than
+// failing politely.
+func cmdErr(c *cli.Context) io.Writer {
+	if c != nil && c.App != nil && c.App.ErrWriter != nil {
+		return c.App.ErrWriter
+	}
+	return os.Stderr
+}
+
 // reparseTrailingFlags rescans c.Args() for flag-like tokens that Go's flag
 // parser silently dropped (it stops at the first non-flag argument).
 // Recognised flags are applied via c.Set(); the remaining positional arguments

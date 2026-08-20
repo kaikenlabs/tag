@@ -34,9 +34,16 @@ func NewConverter() (*Converter, error) {
 
 // Convert performs the Cookiecutter to TAG template conversion.
 func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) {
+	// The slices are initialised empty rather than left nil so they serialise
+	// as [] and not null, per internal/jsonout's convention of building a
+	// slice at its assembly site instead of patching it up on the way out.
 	result := &Result{
-		Source: opts.Source,
-		DryRun: opts.DryRun,
+		Source:            opts.Source,
+		DryRun:            opts.DryRun,
+		Incompatibilities: []Incompatibility{},
+		Warnings:          []string{},
+		Files:             []PathConversion{},
+		Variables:         []VariableConversion{},
 	}
 
 	// 1. Resolve source template (handles local and remote)
@@ -96,6 +103,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 		return nil, err
 	}
 	result.VariablesConverted = len(conversions)
+	result.Variables = append(result.Variables, conversions...)
 	result.Warnings = append(result.Warnings, warnings...)
 
 	// 6. Process hooks
@@ -243,6 +251,7 @@ func (c *Converter) processTemplateFiles(srcDir, destDir string, result *Result,
 
 		// Process file
 		result.FilesProcessed++
+		result.Files = append(result.Files, PathConversion{From: relPath, To: convertedPath})
 
 		// Read source content
 		content, err := os.ReadFile(path)

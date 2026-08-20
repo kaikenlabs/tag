@@ -131,22 +131,23 @@ func TestUT_ActionTextGolden(t *testing.T) {
 		assertGolden(t, "convert-summary-dry-run", sb.String())
 	})
 
-	// printUpdateSummary writes to os.Stdout directly today; #354 moves it onto
-	// c.App.Writer. Capturing stdout here is what makes that move provably
-	// output-preserving.
+	// printUpdateSummary took an implicit os.Stdout before #354 gave it an
+	// explicit io.Writer parameter (P3) so JSON mode can route text
+	// elsewhere. Passing a plain buffer here is what makes that move
+	// provably output-preserving — only the call site changed, not the
+	// bytes it produces.
 	t.Run("update-summary", func(t *testing.T) {
-		got := captureStdout(t, func() {
-			printUpdateSummary(&templateupdate.UpdateResult{
-				Applied: []templateupdate.MergeResult{
-					{Path: "a.txt", Op: templateupdate.MergeAdd},
-					{Path: "b.txt", Op: templateupdate.MergeUpdate},
-					{Path: "c.txt", Op: templateupdate.MergeDelete},
-					{Path: "d.txt", Op: templateupdate.MergeConflict},
-					{Path: "e.txt", Op: templateupdate.MergeKeep},
-				},
-			})
+		var sb testWriter
+		printUpdateSummary(&sb, &templateupdate.UpdateResult{
+			Applied: []templateupdate.MergeResult{
+				{Path: "a.txt", Op: templateupdate.MergeAdd},
+				{Path: "b.txt", Op: templateupdate.MergeUpdate},
+				{Path: "c.txt", Op: templateupdate.MergeDelete},
+				{Path: "d.txt", Op: templateupdate.MergeConflict},
+				{Path: "e.txt", Op: templateupdate.MergeKeep},
+			},
 		})
-		assertGolden(t, "update-summary", got)
+		assertGolden(t, "update-summary", sb.String())
 	})
 
 	t.Run("extract-summary", func(t *testing.T) {
