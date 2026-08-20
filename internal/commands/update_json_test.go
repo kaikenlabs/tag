@@ -3,10 +3,12 @@ package commands
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -131,7 +133,17 @@ func TestUT_UpdateJSON_ConflictWritesDocumentAndExitCode(t *testing.T) {
 // UpdateResult.Applied[].Content and every ConflictedFile content field
 // (Base/Ours/Theirs/MergedContent) carry the user's own source code and must
 // never reach jsonout.Write. Sentinels are planted in all five places and the
-// raw document bytes are asserted not to contain any of them.
+// raw document bytes are asserted to contain none of them.
+//
+// It searches for BOTH the plaintext sentinel and its base64 encoding, because
+// all five fields are []byte and encoding/json emits []byte as base64. A
+// plaintext-only search is blind to precisely the leak this test exists to
+// catch: marshalling MergeResult directly would embed the body as
+// "U1VQRVJfU0VDUkVU..." and sail past assert.NotContains(doc, sentinel).
+//
+// assertNoLeak is therefore exercised against a deliberately leaky struct
+// first, so a future edit that weakens the detector fails here rather than
+// silently passing everything.
 func TestUT_UpdateJSON_NeverLeaksFileContent(t *testing.T) {
 	const sentinel = "SUPER_SECRET_FILE_BODY_MUST_NOT_LEAK"
 
@@ -160,7 +172,33 @@ func TestUT_UpdateJSON_NeverLeaksFileContent(t *testing.T) {
 	require.Error(t, run.Err) // conflict present -> non-zero exit, still wrote a document
 
 	require.NotEmpty(t, run.Writer)
-	assert.NotContains(t, run.Writer, sentinel)
+
+	// Self-check: the detector must actually fire on a document that DOES
+	// carry the bytes, or the assertion below proves nothing.
+	leaky, marshalErr := json.Marshal(struct {
+		Content []byte `json:"content"`
+	}{Content: []byte(sentinel + "-applied")})
+	require.NoError(t, marshalErr)
+	require.False(t, leakFree(string(leaky), sentinel),
+		"the leak detector must recognise a base64-encoded []byte body")
+
+	assert.True(t, leakFree(run.Writer, sentinel),
+		"the update document must contain no file body, in plaintext or base64")
+}
+
+// leakFree reports whether doc contains neither sentinel nor its base64
+// encoding. encoding/json renders []byte as base64, so checking only the
+// plaintext form would miss a leaked content field entirely.
+func leakFree(doc, sentinel string) bool {
+	if strings.Contains(doc, sentinel) {
+		return false
+	}
+	// Trim the tail: base64 encodes in 3-byte groups, so a sentinel that is a
+	// PREFIX of the leaked value shares only a whole-group prefix of the
+	// encoding. Comparing that prefix keeps the check independent of whatever
+	// suffix each planted value carries.
+	enc := base64.StdEncoding.EncodeToString([]byte(sentinel))
+	return !strings.Contains(doc, enc[:(len(sentinel)/3)*4])
 }
 
 // TestUT_UpdateJSON_AbortMode asserts abort emits the SAME key set as every
@@ -338,4 +376,35 @@ func TestUT_UpdateJSON_FileEntryCarriesConflictedAndBinary(t *testing.T) {
 	assert.True(t, doc.Files[2].Conflicted, "Conflicted must survive independently of op")
 	assert.Equal(t, "prompt", doc.Files[3].Op)
 	assert.Equal(t, "user deleted, template changed", doc.Files[3].PromptReason)
+}
+
+// TestUT_UpdateJSON_ConflictKeysStableWithoutPromptsOrSkips is the nested
+// counterpart of TestUT_UpdateJSON_ApplyKeysAreStableWhenNothingChanged.
+//
+// The ordinary conflict case — real conflicts, no prompts, nothing skipped —
+// is exactly the one the other conflict test never covers, because it plants
+// all three arrays non-empty. With omitempty on prompt_files and skipped, that
+// ordinary case dropped both keys, so doc.conflicts.prompt_files.length threw
+// for the most common shape of the document.
+func TestUT_UpdateJSON_ConflictKeysStableWithoutPromptsOrSkips(t *testing.T) {
+	stubTemplateUpdater(t, &templateupdate.UpdateResult{
+		OldSHA: "aaa1111",
+		NewSHA: "bbb2222",
+		Conflicts: &templateupdate.ConflictReport{
+			Conflicts: []templateupdate.ConflictedFile{{Path: "only.go"}},
+		},
+	}, nil)
+
+	run := runCLICapturingAll(t, UpdateTemplateCommand(), "update", "--format", "json")
+	require.Error(t, run.Err)
+
+	var doc struct {
+		Conflicts map[string]any `json:"conflicts"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(run.Writer), &doc))
+
+	got := slices.Sorted(maps.Keys(doc.Conflicts))
+	assert.Equal(t, []string{"conflicted_files", "prompt_files", "skipped"}, got)
+	assert.Equal(t, []any{}, doc.Conflicts["prompt_files"])
+	assert.Equal(t, []any{}, doc.Conflicts["skipped"])
 }

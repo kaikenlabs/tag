@@ -74,8 +74,18 @@ func undoFlags() []cli.Flag {
 }
 
 func undoAction(c *cli.Context) error {
-	if _, err := reparseTrailingFlags(c, undoFlags()); err != nil {
+	args, err := reparseTrailingFlags(c, undoFlags())
+	if err != nil {
 		return err
+	}
+
+	// undo selects a generation with --id and has never taken a positional,
+	// but it also never rejected one: `tag undo gen_1787_566c0e` silently
+	// discarded the token and reverted the LAST generation instead of the
+	// named one. On a destructive command that silent fallback touches the
+	// wrong files, so it is an error rather than a no-op.
+	if len(args) > 0 {
+		return app.UsageErrorf("tag undo does not accept positional arguments (got %q); select a generation with --id", args[0])
 	}
 
 	format, err := resolveFormat(c, formatText, formatJSON)

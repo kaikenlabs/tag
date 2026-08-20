@@ -64,6 +64,18 @@ type PathConversion struct {
 }
 
 // VariableConversion represents a converted variable.
+//
+// Field-set note (the repo has been bitten by this before: adding --format
+// json to `cache ls` would have printed a presigned URL's token that the text
+// table never showed). Diffing this document against the text output,
+// `default` is the one field that appears only in JSON — printConversionResult
+// never prints variable defaults. It is kept deliberately: the per-variable
+// mapping is the substance of what #355 asks for, and the values come from the
+// template's own cookiecutter.json (project names, licences, author
+// placeholders), which is checked-in template metadata rather than a secret
+// store. `original` and `suggestion` on Incompatibility are already shown in
+// the text output, truncated to 60 characters; JSON carries them in full
+// because truncation is a display concern, not a redaction.
 type VariableConversion struct {
 	Name         string `json:"name"`                 // Variable name
 	OriginalType string `json:"original_type"`        // Type in cookiecutter.json (inferred)

@@ -183,3 +183,28 @@ func TestUT_UndoJSON_ListEmptyIsEmptyArrayNotNull(t *testing.T) {
 	require.NoError(t, run.Err)
 	assert.Contains(t, run.Writer, `"generations": []`)
 }
+
+// TestUT_Undo_StrayPositionalIsUsageError closes a silent-and-destructive
+// footgun. `undo` selects a generation with --id and has never taken a
+// positional, but it also never rejected one: `tag undo gen_1787_566c0e`
+// discarded the token and undid the LAST generation instead of the named one.
+// Adding reparseTrailingFlags (needed for a trailing --format) does not change
+// that on its own, since the returned positionals were simply dropped.
+//
+// update got this guard in the same change; undo needs it more, because here
+// the silent fallback reverts the wrong files.
+func TestUT_Undo_StrayPositionalIsUsageError(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".tag"), 0o750))
+	t.Chdir(dir)
+
+	for _, argv := range [][]string{
+		{"undo", "gen_1_aaa", "--yes", "--format", "json"},
+		{"undo", "gen_1_aaa", "--yes"},
+	} {
+		run := runCLICapturingAll(t, UndoCommand(), argv...)
+		require.Error(t, run.Err, "argv %v", argv)
+		assert.Contains(t, run.Err.Error(), "does not accept positional arguments")
+		assert.Empty(t, run.Stdout)
+	}
+}

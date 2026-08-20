@@ -326,9 +326,14 @@ type updateFileJSON struct {
 // Deliberately excluded: every ConflictedFile content byte slice
 // (Base/Ours/Theirs/MergedContent) — the user's own source code, unbounded.
 type updateConflictJSON struct {
+	// No omitempty on any of the three: the ordinary conflict — real
+	// conflicts, no prompts, nothing skipped — is the most common shape of
+	// this object, and it is precisely the one that would drop two of its
+	// three keys. A consumer must be able to read
+	// conflicts.prompt_files.length without first testing for the key.
 	ConflictedFiles []string `json:"conflicted_files"`
-	PromptFiles     []string `json:"prompt_files,omitempty"`
-	Skipped         []string `json:"skipped,omitempty"`
+	PromptFiles     []string `json:"prompt_files"`
+	Skipped         []string `json:"skipped"`
 }
 
 // updateDoc is the JSON shape for `update --format json`. mode distinguishes
