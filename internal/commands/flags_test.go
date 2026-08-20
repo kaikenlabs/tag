@@ -215,3 +215,39 @@ func TestUT_ReparseTrailingFlags_UnknownFlagStillRejectedWithGlobals(t *testing.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown flag -nope")
 }
+
+// TestUT_ReparseTrailingFlags_CommandFlagAliasWinsOverAppFlagAlias pins the
+// Part 2 fix: when a command-local flag and an App-level global flag share an
+// alias but have different canonical names, the command's own flag must win.
+// register(c.App.Flags) must run BEFORE register(cliFlags), not after, or the
+// App's canonical mapping for the shared alias clobbers the command's.
+func TestUT_ReparseTrailingFlags_CommandFlagAliasWinsOverAppFlagAlias(t *testing.T) {
+	appFlags := []cli.Flag{
+		&cli.StringFlag{Name: "output", Aliases: []string{"x"}},
+	}
+	cmdFlags := []cli.Flag{
+		&cli.StringFlag{Name: "format", Aliases: []string{"x"}},
+	}
+
+	app := &cli.App{Flags: appFlags}
+	globalSet := flag.NewFlagSet("global", flag.ContinueOnError)
+	for _, f := range appFlags {
+		require.NoError(t, f.Apply(globalSet))
+	}
+	require.NoError(t, globalSet.Parse(nil))
+	parent := cli.NewContext(app, globalSet, nil)
+
+	cmdSet := flag.NewFlagSet("cmd", flag.ContinueOnError)
+	for _, f := range cmdFlags {
+		require.NoError(t, f.Apply(cmdSet))
+	}
+	require.NoError(t, cmdSet.Parse([]string{"model", "-x", "json"}))
+	c := cli.NewContext(app, cmdSet, parent)
+
+	positional, err := reparseTrailingFlags(c, cmdFlags)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"model"}, positional)
+	assert.Equal(t, "json", c.String("format"), "the command's own flag must win a shared alias")
+	assert.Empty(t, c.String("output"), "the App-level flag must not have been set via the shared alias")
+}

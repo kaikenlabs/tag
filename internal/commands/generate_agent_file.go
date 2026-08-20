@@ -25,24 +25,32 @@ const (
 	agentMarkerEnd   = "<!-- tag:generators:end -->"
 )
 
+func generateAgentFileFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "output",
+			Aliases: []string{"o"},
+			Usage:   "Output file path (overrides format default)",
+		},
+	}
+}
+
 func generateAgentFileCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:      "agent-file",
 		Usage:     "Generate an AI agent reference file listing available generators",
 		ArgsUsage: "<format>",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Usage:   "Output file path (overrides format default)",
-			},
-		},
+		Flags:     generateAgentFileFlags(),
 		Action: func(c *cli.Context) error {
-			if c.NArg() < 1 {
+			args, err := reparseTrailingFlags(c, generateAgentFileFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
+			}
+			if len(args) < 1 {
 				return app.UsageErrorf("please provide the format (%s)",
 					strings.Join(agentFileFormatNames(), ", "))
 			}
-			return generateAgentFile(cfg, c.Args().First(), c.String("output"), c.App.Writer)
+			return generateAgentFile(cfg, args[0], c.String("output"), c.App.Writer)
 		},
 		BashComplete: func(c *cli.Context) {
 			if c.NArg() > 0 {

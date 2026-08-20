@@ -60,6 +60,8 @@ tag template new generator <name> [flags]
 | `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
 | `--in-bundle` | `-B` | | Create generator inside a bundle directory (for self-contained bundles) |
 
+Flags may appear before or after `<name>`.
+
 **Examples:**
 
 ```bash
@@ -74,6 +76,9 @@ tag template new generator handler --lib
 
 # Create inside a self-contained bundle
 tag template new generator handler --in-bundle my-bundle
+
+# Flags may come before the name too
+tag template new generator -p api handler
 ```
 
 See [tag template new](new.md) for full details.
@@ -93,6 +98,8 @@ tag template new bundle <name> [flags]
 | `--lib` | `-l` | `false` | Create in the library template referenced by `.tagconfig.json` |
 | `--self-contained` | `-s` | `false` | Create bundle with `self_contained: true` (generators inside the bundle) |
 
+Flags may appear before or after `<name>`.
+
 **Examples:**
 
 ```bash
@@ -104,6 +111,9 @@ tag template new bundle examples --self-contained
 
 # Create in a library template
 tag template new bundle crud --lib
+
+# Flags may come before the name too
+tag template new bundle --self-contained examples
 ```
 
 See [tag template new](new.md) for full details.
@@ -340,10 +350,10 @@ Summary: 5 declared, 0 undeclared, 0 unused
 Rename a template variable everywhere the template refers to it — the declaration, every expression, and file or directory name placeholders (which are renamed on disk).
 
 ```bash
-tag template rename-var [flags] <old-name> <new-name> [path]
+tag template rename-var <old-name> <new-name> [path] [flags]
 ```
 
-If `[path]` is omitted, the current directory is used. Flags must precede the positional arguments.
+If `[path]` is omitted, the current directory is used. Flags may appear before or after the positional arguments.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -391,6 +401,9 @@ tag template rename-var project_name service_name
 
 # Rename in a specific template
 tag template rename-var old_flag new_flag ./my-template
+
+# Flags may come after the positional arguments too
+tag template rename-var project_name service_name --dry-run
 ```
 
 **Example dry-run output:**

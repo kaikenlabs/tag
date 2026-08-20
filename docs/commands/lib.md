@@ -31,6 +31,8 @@ tag lib add <ref> [flags]
 | `--as <name>` | | Override the template name in the library |
 | `--force` | `-f` | Overwrite existing template with same name |
 
+Flags may appear before or after `<ref>`.
+
 **Examples:**
 
 ```bash
@@ -48,6 +50,9 @@ tag lib add gl:org/service-template
 
 # Add from a local directory
 tag lib add ./my-template --as my-local
+
+# Flags may come before the ref too
+tag lib add --as django gh:user/cookiecutter-django
 ```
 
 When adding a Cookiecutter template, TAG auto-detects `cookiecutter.json` and converts it to TAG format automatically.
@@ -203,6 +208,8 @@ tag lib edit <name> [flags]
 | Flag | Description |
 |------|-------------|
 | `--editor <cmd>` | Editor command to use (e.g., `code`, `vim`) |
+
+Flags may appear before or after `<name>`.
 
 Editor resolution order:
 1. `--editor` flag

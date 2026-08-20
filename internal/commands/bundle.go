@@ -19,6 +19,21 @@ import (
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
+func templateNewBundleFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:    flags.LibFlag,
+			Usage:   "Create bundle in the library template referenced by .tagconfig.json",
+			Aliases: []string{"l"},
+		},
+		&cli.BoolFlag{
+			Name:    flags.SelfContainedFlag,
+			Usage:   "Create a self-contained bundle (generators resolved from bundle directory)",
+			Aliases: []string{"s"},
+		},
+	}
+}
+
 func templateNewBundleCommand(cfg *config.Config) *cli.Command {
 	return &cli.Command{
 		Name:      "bundle",
@@ -48,36 +63,30 @@ EXAMPLES:
 		Action: func(c *cli.Context) error {
 			return bundleAction(c, cfg)
 		},
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    flags.LibFlag,
-				Usage:   "Create bundle in the library template referenced by .tagconfig.json",
-				Aliases: []string{"l"},
-			},
-			&cli.BoolFlag{
-				Name:    flags.SelfContainedFlag,
-				Usage:   "Create a self-contained bundle (generators resolved from bundle directory)",
-				Aliases: []string{"s"},
-			},
-		},
+		Flags: templateNewBundleFlags(),
 	}
 }
 
 func bundleAction(c *cli.Context, cfg *config.Config) error {
-	if c.Args().Len() == 0 {
+	args, err := reparseTrailingFlags(c, templateNewBundleFlags())
+	if err != nil {
+		return app.UsageErrorf("%s", err)
+	}
+	if len(args) == 0 {
 		return app.UsageErrorf("please provide the bundle name")
 	}
-	bundleName := c.Args().Get(0)
+	bundleName := args[0]
 
-	if err := ValidateNameSafe(bundleName); err != nil {
+	if err = ValidateNameSafe(bundleName); err != nil {
 		return app.Errorf("invalid bundle name: %w", err)
 	}
 
-	if err := validate.GeneratorName(bundleName); err != nil {
+	if err = validate.GeneratorName(bundleName); err != nil {
 		return app.Errorf("invalid bundle name: %w", err)
 	}
 
-	if err := config.CheckConfig(cfg); err != nil {
+	err = config.CheckConfig(cfg)
+	if err != nil {
 		return err
 	}
 
@@ -121,7 +130,7 @@ func bundleAction(c *cli.Context, cfg *config.Config) error {
 		return err
 	}
 
-	if _, err := file.Write(bundleTemplate); err != nil {
+	if _, err = file.Write(bundleTemplate); err != nil {
 		return app.Errorf("error creating file %s: %w", file.Name(), err)
 	}
 

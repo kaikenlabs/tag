@@ -15,6 +15,8 @@ The `tag template new generator` command creates a new generator template file. 
 
 Generators are the building blocks of code generation in TAG. Each generator is a template file with YAML frontmatter that specifies where and how to write output. Bundles group multiple generators to run them together.
 
+Flags may appear before or after the generator/bundle name.
+
 ## Arguments
 
 | Argument | Required | Description |

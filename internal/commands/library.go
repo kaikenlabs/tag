@@ -80,24 +80,32 @@ func defaultNewLocalLibrary() (*library.Library, error) {
 	return library.NewLocal(dataDir), nil
 }
 
+func libAddFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:  "as",
+			Usage: "Override the template name in the library",
+		},
+		&cli.BoolFlag{
+			Name:    "force",
+			Aliases: []string{"f"},
+			Usage:   "Overwrite existing template with same name",
+		},
+	}
+}
+
 func libAddCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "add",
 		Usage:     "Add a template to the library",
 		ArgsUsage: "<ref>",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "as",
-				Usage: "Override the template name in the library",
-			},
-			&cli.BoolFlag{
-				Name:    "force",
-				Aliases: []string{"f"},
-				Usage:   "Overwrite existing template with same name",
-			},
-		},
+		Flags:     libAddFlags(),
 		Action: func(c *cli.Context) error {
-			if c.NArg() < 1 {
+			args, err := reparseTrailingFlags(c, libAddFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
+			}
+			if len(args) < 1 {
 				return app.UsageErrorf("template reference is required\n\nUsage: tag lib add <ref>")
 			}
 
@@ -107,7 +115,7 @@ func libAddCommand() *cli.Command {
 			}
 
 			result, err := lib.Add(c.Context, library.AddOptions{
-				Ref:   c.Args().Get(0),
+				Ref:   args[0],
 				Name:  c.String("as"),
 				Force: c.Bool("force"),
 			})
@@ -298,20 +306,28 @@ func asAppError(err error) error {
 	return app.Errorf("%w", err)
 }
 
+func libEditFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:  "editor",
+			Usage: "Editor command to use (e.g. 'code', 'vim')",
+		},
+	}
+}
+
 func libEditCommand() *cli.Command {
 	return &cli.Command{
 		Name:         "edit",
 		Usage:        "Open a template in your editor",
 		ArgsUsage:    "<name>",
 		BashComplete: completeLibraryTemplateNames,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "editor",
-				Usage: "Editor command to use (e.g. 'code', 'vim')",
-			},
-		},
+		Flags:        libEditFlags(),
 		Action: func(c *cli.Context) error {
-			if c.NArg() < 1 {
+			args, err := reparseTrailingFlags(c, libEditFlags())
+			if err != nil {
+				return app.UsageErrorf("%s", err)
+			}
+			if len(args) < 1 {
 				return app.UsageErrorf("template name is required\n\nUsage: tag lib edit <name>")
 			}
 
@@ -320,7 +336,7 @@ func libEditCommand() *cli.Command {
 				return app.Errorf("failed to initialize library: %w", err)
 			}
 
-			name := c.Args().Get(0)
+			name := args[0]
 			templatePath, err := lib.TemplatePath(name)
 			if err != nil {
 				return asAppError(err)
@@ -331,17 +347,17 @@ func libEditCommand() *cli.Command {
 				return err
 			}
 
-			args, err := splitEditorArgs(editor)
+			editorArgs, err := splitEditorArgs(editor)
 			if err != nil {
 				return app.Errorf("invalid editor command %q: %w", editor, err)
 			}
-			if len(args) == 0 {
+			if len(editorArgs) == 0 {
 				return app.Errorf("editor command is empty")
 			}
-			args = append(args, templatePath)
+			editorArgs = append(editorArgs, templatePath)
 
 			// #nosec G204 -- editor command comes from the user's own $EDITOR/config
-			cmd := exec.CommandContext(c.Context, args[0], args[1:]...)
+			cmd := exec.CommandContext(c.Context, editorArgs[0], editorArgs[1:]...)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
