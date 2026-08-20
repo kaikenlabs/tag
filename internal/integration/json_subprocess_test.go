@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -15,23 +14,6 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/history"
 )
-
-// tagBinaryPath resolves the ./tag binary built at the repo root (see
-// Makefile's `build` target). Callers must t.Skip when it is absent — these
-// tests guard against a HANG in the real binary and are not run as part of
-// `go test ./...` alone; `make build` (or `make test-integration`, which
-// depends on it) must run first.
-func tagBinaryPath(t *testing.T) string {
-	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	root := filepath.Join(filepath.Dir(thisFile), "..", "..")
-	bin := filepath.Join(root, "tag")
-	if _, statErr := os.Stat(bin); statErr != nil {
-		t.Skip("./tag binary not built — run `make build` first")
-	}
-	return bin
-}
 
 // runTagSubprocess runs the built binary in dir with stdin explicitly
 // CLOSED (not merely unset — exec.Cmd with a nil Stdin already reads from
@@ -41,7 +23,7 @@ func tagBinaryPath(t *testing.T) string {
 // process does not exit within ctx's deadline, which is what actually catches
 // a hang — a subprocess blocked on stdin does not get killed by a normal
 // require.NoError on a completed Wait, it just never completes.
-func runTagSubprocess(t *testing.T, ctx context.Context, dir, bin string, args ...string) (stdout, stderr []byte, err error) {
+func runTagSubprocess(t *testing.T, ctx context.Context, dir string, args ...string) (stdout, stderr []byte, err error) {
 	t.Helper()
 
 	closedR, closedW, pipeErr := os.Pipe()
@@ -49,7 +31,7 @@ func runTagSubprocess(t *testing.T, ctx context.Context, dir, bin string, args .
 	require.NoError(t, closedW.Close())
 	t.Cleanup(func() { _ = closedR.Close() })
 
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, tagBinary, args...)
 	cmd.Dir = dir
 	cmd.Stdin = closedR
 	var outBuf, errBuf bytes.Buffer
@@ -68,8 +50,6 @@ func runTagSubprocess(t *testing.T, ctx context.Context, dir, bin string, args .
 // diffPromptEnabled would be just as invisible here). The D1 evidence is
 // TestUT_DiffPromptEnabled_OnlyWhenSinkIsRealTerminal in internal/engine.
 func TestIT_GenerateDryRunJSON_TerminatesWithStdinClosed(t *testing.T) {
-	bin := tagBinaryPath(t)
-
 	// EvalSymlinks up front: on macOS, t.TempDir() lives under /var, which is
 	// itself a symlink to /private/var. The engine's own path-containment
 	// check resolves symlinks on both the cached cwd and the target path
@@ -91,7 +71,7 @@ func TestIT_GenerateDryRunJSON_TerminatesWithStdinClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	stdout, stderr, err := runTagSubprocess(t, ctx, dir, bin,
+	stdout, stderr, err := runTagSubprocess(t, ctx, dir,
 		"generate", "hello", "world", "--no-hooks", "--dry-run", "--format", "json")
 	require.NoError(t, ctx.Err(), "subprocess did not terminate before the deadline (hang)")
 	require.NoError(t, err, "stderr: %s", stderr)
@@ -113,8 +93,6 @@ func TestIT_GenerateDryRunJSON_TerminatesWithStdinClosed(t *testing.T) {
 // TestUT_UndoJSON_RequiresYes at the command level; this only proves the
 // process actually exits.
 func TestIT_UndoJSON_TerminatesWithStdinClosed(t *testing.T) {
-	bin := tagBinaryPath(t)
-
 	dir := t.TempDir()
 	tagDir := filepath.Join(dir, ".tag")
 	require.NoError(t, os.MkdirAll(tagDir, 0o750))
@@ -132,7 +110,7 @@ func TestIT_UndoJSON_TerminatesWithStdinClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	stdout, stderr, err := runTagSubprocess(t, ctx, dir, bin, "undo", "--yes", "--format", "json")
+	stdout, stderr, err := runTagSubprocess(t, ctx, dir, "undo", "--yes", "--format", "json")
 	require.NoError(t, ctx.Err(), "subprocess did not terminate before the deadline (hang)")
 	require.NoError(t, err, "stderr: %s", stderr)
 

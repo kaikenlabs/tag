@@ -2,7 +2,7 @@
 
 ## Mandatory Rules
 
-1. Before pushing: `make lint` then `make test`
+1. Before pushing: `make lint` then `make test`. Both require `mise install` once per clone — every tool and the Go toolchain are pinned in `mise.toml`, and the Make targets invoke them through `mise exec`. CI runs these same two targets, so a local verdict and a CI verdict cannot disagree.
 2. Prefer **Serena MCP** for symbol-level code operations:
    - `get_symbols_overview` / `find_symbol` over full file reads when navigating
    - `replace_symbol_body` / `insert_after_symbol` / `insert_before_symbol` for symbol edits
@@ -27,17 +27,17 @@ make build                              # Build binary to ./tag
 make install                            # Build and install to ~/.local/bin
 
 # Test
-go test ./...                           # All tests
+make test                               # All tests with coverage (what CI runs)
+make test-integration                   # Integration tests only
+go test ./...                           # All tests, ambient toolchain
 go test -v ./internal/scaffold/...      # Specific package
 go test -run TestUT_CommandError ./...   # Single test
-make test-unit                          # Unit tests with coverage
-make test-integration                   # Integration tests (needs make build)
 
 # Lint & Format
-make lint                               # Full lint (golangci-lint v2, all linters enabled)
+make lint                               # go vet + deadcode + golangci-lint (what CI runs)
 make fmt                                # Format (gofumpt + goimports)
 make scan                               # Security scan (gosec + govulncheck)
-make tools                              # Install dev tools
+make tools                              # Install the pinned toolchain (mise install)
 ```
 
 ## Architecture

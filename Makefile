@@ -2,60 +2,38 @@
 
 .DEFAULT_GOAL := help
 
-ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-GOBIN := ${ROOT_DIR}/bin
-
-PROJECT_ROOT:=$(shell git rev-parse --show-toplevel)
+PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 COMMIT := $(shell git rev-parse --short HEAD)
-BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
-REPO := $(shell basename `git rev-parse --show-toplevel`)
-DATE := $(shell date +%Y-%m-%d-%H-%M-%S)
 APP_NAME := $(shell basename `git rev-parse --show-toplevel`)
 
-export GOBIN
+MISE := mise exec --
 
-MAKE_LIB:=$(PROJECT_ROOT)/scripts
+export GOTOOLCHAIN := local
+
+MAKE_LIB := $(PROJECT_ROOT)/scripts
 -include $(MAKE_LIB)/tests.mk
 -include $(MAKE_LIB)/lints.mk
--include $(MAKE_LIB)/tools.mk
 -include $(MAKE_LIB)/generator.mk
-
 
 GO_BUILD_FLAGS=-ldflags="-X 'main.Version=dev-$(COMMIT)'"
 
 #####################
-##@ Main   
+##@ Main
 #####################
 
-ci: log lint scan test ## Run ci tasks
-
 build: ## build go files
-	go build $(GO_BUILD_FLAGS) -o $(APP_NAME)
+	@$(MISE) go build $(GO_BUILD_FLAGS) -o $(APP_NAME)
 
 install: build ## build and install to ~/.local/bin
 	@mkdir -p ~/.local/bin
 	@cp $(APP_NAME) ~/.local/bin/$(APP_NAME)
 	@echo "Installed $(APP_NAME) to ~/.local/bin/$(APP_NAME)"
 
+tools: ## Install the pinned toolchain from mise.toml
+	@GOTOOLCHAIN=auto mise install
+
 clean: ## Remove build artifacts and coverage reports
 	@rm -f $(APP_NAME) coverage.out coverage.html
 
-# HELP
-# This will output the help for each task
-# thanks to https://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help: ## This help.
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-
-
-
-#####################
-#  Private Targets  #
-#####################
-
-log: # log env vars
-	@echo "\n"
-	@echo "COMMIT               $(COMMIT)"
-	@echo "BRANCH               $(BRANCH)"
-	@echo "APP_NAME             $(APP_NAME)"
-	@echo "DATE                 $(DATE)"
-	@echo "\n"
