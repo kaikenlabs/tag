@@ -145,7 +145,8 @@ func runFixture(ctx context.Context, f Fixture, templateRoot string) CaseResult 
 		if mkdirErr := os.MkdirAll(filepath.Dir(dest), 0o750); mkdirErr != nil {
 			return caseError(f.Name, fmt.Sprintf("create setup dir for %s: %v", rel, mkdirErr))
 		}
-		if writeErr := os.WriteFile(dest, []byte(content), 0o644); writeErr != nil { //nolint:gosec // G306: test file, no sensitive content
+		// #nosec G306 -- fixture file for a template test run, no sensitive content
+		if writeErr := os.WriteFile(dest, []byte(content), 0o644); writeErr != nil {
 			return caseError(f.Name, fmt.Sprintf("write setup file %s: %v", rel, writeErr))
 		}
 	}

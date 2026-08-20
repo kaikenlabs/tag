@@ -282,7 +282,8 @@ func (f *ZipFetcher) extractFile(file *zip.File, destPath string, counter *count
 
 	// Copy through the counting writer to enforce cumulative size limit
 	counter.dst = dst
-	_, err = io.Copy(counter, src) //nolint:gosec // zip size is bounded by download limit and io.LimitReader earlier
+	// #nosec G110 -- zip size is bounded by the download limit and the io.LimitReader applied earlier
+	_, err = io.Copy(counter, src)
 	if err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}

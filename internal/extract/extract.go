@@ -77,11 +77,12 @@ func Run(opts Options, sourcePath string) (*Result, error) {
 	}
 
 	// Write the template file.
-	if err := os.MkdirAll(filepath.Dir(templatePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(templatePath), 0o750); err != nil {
 		return nil, app.Errorf("cannot create output directory: %w", err)
 	}
 
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil { //nolint:gosec // G306: template file, not executable
+	// #nosec G306 -- extracted template is a source artifact meant to be readable, not executable
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
 		return nil, app.Errorf("cannot write template: %w", err)
 	}
 

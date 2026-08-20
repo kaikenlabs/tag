@@ -1,6 +1,7 @@
 package templatetest
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -228,4 +229,19 @@ func TestUT_RunAssertion_ContentContains_FileMissing(t *testing.T) {
 	result := runAssertion(Assertion{Type: AssertContentContains, Path: "nope.txt", Value: "x"}, t.TempDir())
 	assert.False(t, result.Passed)
 	assert.Contains(t, result.Detail, "read file")
+}
+
+func TestUT_RunFixture_SetupFileWriteFails(t *testing.T) {
+	t.Parallel()
+
+	// "." resolves the setup-file destination to the fixture's own temp
+	// directory: MkdirAll on its parent succeeds, then WriteFile fails with
+	// EISDIR.
+	result := runFixture(context.Background(), Fixture{
+		Name:       "bad-setup",
+		SetupFiles: map[string]string{".": "content"},
+	}, t.TempDir())
+
+	assert.Equal(t, CaseErrored, result.Status)
+	assert.Contains(t, result.Error, "write setup file")
 }
