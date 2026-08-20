@@ -99,7 +99,7 @@ Errors bubble up via `*CommandError` to `main.go` for centralized logging and ex
 - Test files get relaxed rules (no `dupl`, `gosec`, `funlen`, `cyclop`, etc.)
 
 ### CI
-PR checks (`.github/workflows/ci.yml`): golangci-lint v2.10 + `go vet` + unit tests + integration tests. Go version read from `go.mod` (currently 1.25.6).
+PR checks (`.github/workflows/ci.yml`): two jobs, `lint` and `test`, which run `make lint` and `make test` — the same targets used locally. Tool and Go versions come from `mise.toml`, installed by `jdx/mise-action`; `go.mod`'s `go` directive must agree with the Go pin there or `GOTOOLCHAIN=local` fails the build.
 
 ## Lessons Learned
 
