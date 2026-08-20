@@ -7,36 +7,34 @@ on:
     branches: [main]
 
 jobs:
-  golangci:
-    name: lint
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: jdx/mise-action@v4
+      - uses: actions/cache@v4
         with:
-          go-version-file: go.mod
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.10
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: ${{ runner.os }}-lint-${{ hashFiles('go.sum') }}
+          restore-keys: ${{ runner.os }}-lint-
+      - run: make lint
+
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-
-      - uses: actions/setup-go@v6
+      - uses: jdx/mise-action@v4
+      - uses: actions/cache@v4
         with:
-          go-version-file: go.mod
-
-      - name: Run vet
-        run: go vet ./...
-
-      - name: Run unit tests
-        run: go test -coverprofile=coverage.out -failfast ./...
-
-      - name: Run integration tests
-        run: go test -v ./internal/integration/...
-
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-test-${{ hashFiles('go.sum') }}
+          restore-keys: ${{ runner.os }}-test-
+      - run: make test
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:

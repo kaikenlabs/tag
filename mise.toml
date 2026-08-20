@@ -1,6 +1,8 @@
 [tools]
-# TODO: upgrade to 1.26.0 when golangci-lint and deadcode support it
-go = "1.25.6"
+go = "1.25.7"
 golangci-lint = "2.10.1"
-"go:golang.org/x/tools/cmd/deadcode" = "latest"
-
+"go:golang.org/x/tools/cmd/deadcode" = "0.42.0"
+"go:golang.org/x/tools/cmd/goimports" = "0.42.0"
+"go:mvdan.cc/gofumpt" = "0.11.0"
+"go:github.com/securego/gosec/v2/cmd/gosec" = "2.28.0"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.7.0"

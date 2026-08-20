@@ -2,7 +2,7 @@
 
 ## Mandatory Rules
 
-1. Before pushing: `make lint` then `make test`
+1. Before pushing: `make lint` then `make test`. Both require `mise install` once per clone — every tool and the Go toolchain are pinned in `mise.toml`, and the Make targets invoke them through `mise exec`. CI runs these same two targets, so a local verdict and a CI verdict cannot disagree.
 2. Prefer **Serena MCP** for symbol-level code operations:
    - `get_symbols_overview` / `find_symbol` over full file reads when navigating
    - `replace_symbol_body` / `insert_after_symbol` / `insert_before_symbol` for symbol edits
@@ -27,17 +27,17 @@ make build                              # Build binary to ./tag
 make install                            # Build and install to ~/.local/bin
 
 # Test
-go test ./...                           # All tests
+make test                               # All tests with coverage (what CI runs)
+make test-integration                   # Integration tests only
+go test ./...                           # All tests, ambient toolchain
 go test -v ./internal/scaffold/...      # Specific package
 go test -run TestUT_CommandError ./...   # Single test
-make test-unit                          # Unit tests with coverage
-make test-integration                   # Integration tests (needs make build)
 
 # Lint & Format
-make lint                               # Full lint (golangci-lint v2, all linters enabled)
+make lint                               # go vet + deadcode + golangci-lint (what CI runs)
 make fmt                                # Format (gofumpt + goimports)
 make scan                               # Security scan (gosec + govulncheck)
-make tools                              # Install dev tools
+make tools                              # Install the pinned toolchain (mise install)
 ```
 
 ## Architecture
@@ -99,9 +99,15 @@ Errors bubble up via `*CommandError` to `main.go` for centralized logging and ex
 - Test files get relaxed rules (no `dupl`, `gosec`, `funlen`, `cyclop`, etc.)
 
 ### CI
-PR checks (`.github/workflows/ci.yml`): golangci-lint v2.10 + `go vet` + unit tests + integration tests. Go version read from `go.mod` (currently 1.25.6).
+PR checks (`.github/workflows/ci.yml`): two jobs, `lint` and `test`, which run `make lint` and `make test` — the same targets used locally. Tool and Go versions come from `mise.toml`, installed by `jdx/mise-action`; `go.mod`'s `go` directive must agree with the Go pin there or `GOTOOLCHAIN=local` fails the build.
 
 ## Lessons Learned
+
+- **`mise.toml` is the ONLY place a tool or Go version may appear — CI runs `make lint`/`make test`, not its own copy of them**: before #369, `ci.yml` re-implemented the gate and pinned golangci-lint separately from `mise.toml`, while `scripts/tools.mk` installed everything `@latest` into `bin/`. The three drifted until `make lint` reported 74 issues on a clean `main` and CI reported 0. `scripts/tools.mk` and `bin/`/`GOBIN` are gone; `make tools` is `mise install`. If you add a tool, pin it in `mise.toml` and call it through `$(MISE)` (`mise exec --`) — never bare `PATH`, which is exactly how the stale 2.12.2 binary shadowed the 2.10.1 pin. `grep -rn '2\.1[0-9]' .github/ scripts/ Makefile mise.toml .tool-versions` must return one hit.
+- **`go.mod`'s `go` directive and the `mise.toml` Go pin must match, and `GOTOOLCHAIN=local` in the Makefile enforces it**: they disagreed (1.25.7 vs 1.25.6) and that — not the `gotest` wrapper the ticket blamed — is why `make test` did not compile. mise exports `GOROOT` for its pinned Go while `GOTOOLCHAIN=auto` re-execs the driver into whatever `go.mod` demands, and the mismatch surfaces as `compile: version ... does not match go tool version ...` on every stdlib package. `GOTOOLCHAIN=local` converts a future mismatch into a one-line explanation. The `tools` target overrides it back to `auto` on purpose: third-party tools legitimately need their own toolchain (gosec 2.28.0 requires go >= 1.25.8), which is unrelated to this module's.
+- **`make test` must keep `-count=1`, and `internal/integration/main_test.go` must keep building the binary**: those two together are the only thing making the subprocess tests real. They used to `t.Skip` when `./tag` was absent, so CI — which never ran `go build` — skipped them silently for their entire life, and a stale `./tag` at the repo root would be tested instead of HEAD. `TestMain` now builds into a temp dir. Drop `-count=1` and it regresses invisibly: `internal/integration` does not import package `main`, so editing `main.go` leaves the cache key untouched, the package reports `(cached)`, and `TestMain` never runs. Verified both directions before merge.
+- **`deadcode` exits 0 on findings, so `scripts/lints.mk` checks its OUTPUT, not just its status**: the recipe fails on a non-zero exit *or* any stdout. Do not "simplify" it back to a bare `deadcode -test ./...` — that line was decorative from the day it was added, and `deadcode ./...` still reports 15 unreachable funcs on this repo (the `-test` flag counts test-only callers as roots, which is why the gate is clean).
+- **`make scan` fails on `main` and always has** (#372): 120 pre-existing gosec findings, identical before and after #369. It is not part of the gate and CI does not run it. Do not treat a red `make scan` as something you broke.
 
 - **The three variable-aware commands share ONE reference definition — keep it that way**: `tag template lint`, `tag template variables` and `tag template rename-var` must agree on what counts as a `vars.*` reference. Since #337 they do so structurally: `lint` and `variables` call `vars.ScanRefs`/`vars.ScanNames` (`internal/vars/scan.go`), and all of them are built on the same `scanBlock`/`skipQuoted`/`blockTag`/`isWholeReference` helpers in `internal/vars/rewrite.go`. Before that, two copy-pasted regexes drifted from the rewriter and produced four user-visible defects at once. Any change to what a reference is belongs in `scanBlockRefs` + `rewriteBlock`, never in a caller. `FuzzScanRefsAgreesWithRenameWalker` and `TestIT_TemplateVarScan_ThreeCommandsAgree` enforce the agreement — if you make them fail, fix the walker, don't relax the test.
 - **A line-by-line regex scan cannot see a Gonja block that spans lines**: the pre-#337 scanner ran `bufio.Scanner` then matched `\{\{...\}\}` per line, so `{{ vars.a\n ~ vars.b }}` was invisible entirely — not partially wrong, completely unseen. Greedy `[^}]*`/`[^%]*` also meant only the LAST `vars.X` in a block ever matched. If you reach for a regex over template source here, you are reintroducing both bugs; walk the blocks instead.
