@@ -2,6 +2,7 @@ package extract
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -171,4 +172,35 @@ func (m *extraMockConfirmer) Confirm(_ Occurrence) (Decision, error) {
 	d := m.decisions[m.idx]
 	m.idx++
 	return d, nil
+}
+
+func TestUT_Run_MkdirOutputDirFails(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "user.go")
+	require.NoError(t, os.WriteFile(src, []byte("type User struct{}\n"), 0o600))
+
+	// TagDir is a regular file, so creating <TagDir>/<As> fails with ENOTDIR.
+	tagDir := filepath.Join(dir, "tagfile")
+	require.NoError(t, os.WriteFile(tagDir, []byte("not a directory"), 0o600))
+
+	_, err := Run(Options{Name: "user", As: "handler", TagDir: tagDir, Writer: io.Discard}, src)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot create output directory")
+}
+
+func TestUT_Run_WriteTemplateFails(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "user.go")
+	require.NoError(t, os.WriteFile(src, []byte("type User struct{}\n"), 0o600))
+
+	// Occupy the destination template path with a directory, so WriteFile
+	// fails with EISDIR after MkdirAll has succeeded.
+	tagDir := filepath.Join(dir, ".tag")
+	require.NoError(t, os.MkdirAll(filepath.Join(tagDir, "handler", "user.go"), 0o750))
+
+	_, err := Run(Options{Name: "user", As: "handler", TagDir: tagDir, Writer: io.Discard}, src)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot write template")
 }

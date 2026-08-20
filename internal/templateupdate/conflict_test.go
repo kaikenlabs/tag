@@ -308,3 +308,16 @@ func TestUT_MergeOp_String(t *testing.T) {
 		assert.Equal(t, tc.want, tc.op.String())
 	}
 }
+
+func TestUT_ConflictStatusFile_WriteMkdirFails(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// Occupy <root>/.tag with a regular file so MkdirAll fails with ENOTDIR.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, types.TemplatesDir), []byte("x"), 0o600))
+
+	err := WriteConflictStatus(dir, NewConflictStatus(&ConflictReport{}, "abc123"))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create "+types.TemplatesDir+" directory")
+}
