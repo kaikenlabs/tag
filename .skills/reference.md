@@ -593,6 +593,19 @@ Comments (`{# ... #}`), `{% raw %}...{% endraw %}` bodies, and string literals i
 
 Exit codes: `0` = pass, `1` = lint errors, `2` = usage error.
 
+```json
+{
+  "issues": [
+    { "file": "bad.txt", "line": 1, "severity": "error", "message": "undefined variable \"undefined_thing\"", "rule": "undefined-variable" }
+  ]
+}
+```
+
+`{"issues":[...]}`, `[]` on a clean template. `line`/`column` are `omitempty` — a schema or
+config-parse issue has no line to point to, so they're absent rather than `0`. `severity` is
+always `"error"` or `"warning"`; `rule` is the machine-readable name shown in parentheses in the
+text output.
+
 ### Variable Auditing
 
 ```bash
@@ -611,6 +624,36 @@ Cross-references declared variables in `tag.template.json` with usage in templat
 - Comments, `{% raw %}...{% endraw %}` bodies, and string literals inside a `{{ }}` / `{% %}` block are never scanned — a variable referenced only inside one of them counts as unused, not used. Same reference rules as `lint` above and `rename-var` below.
 
 Exit codes: `0` = no issues (or non-strict), `1` = issues found (`--strict`), `2` = usage error.
+
+Bare object, no envelope, keyed by scope:
+
+```json
+{
+  "root": {
+    "scope": "root",
+    "declared": [
+      {
+        "name": "project_name",
+        "type": "string",
+        "default": "demo-proj",
+        "file_count": 2,
+        "reference_count": 2,
+        "references": [
+          { "file": "README.md", "line": 1, "expression": "hello {{ vars.project_name }}" }
+        ]
+      }
+    ],
+    "undeclared": [
+      { "name": "feature", "references": [{ "file": "cond/{% if vars.feature %}feat.txt{% endif %}", "line": 0, "expression": "" }] }
+    ],
+    "unused": [],
+    "summary": { "declared": 1, "undeclared": 1, "unused": 0 }
+  },
+  "generators": []
+}
+```
+
+`root` is a `ScopeResult`; `generators` is `[]ScopeResult`, one entry per generator-level config under `_generators/`, `[]` when none exist. `declared`/`undeclared`/`unused`/`generators` are always arrays, `[]` when empty, never `null`. An `undeclared` reference found in a path placeholder (rather than a template body) reports `line: 0` and an empty `expression`, as in the example above. `required`/`default`/`options`/`derived`/`private` on a `declared` entry are all `omitempty` — present only when true/non-zero. `summary` mirrors the array lengths so a script can gate on it without counting the arrays itself.
 
 ### Variable Renaming
 
@@ -669,7 +712,30 @@ tag cache clear                        # Clear expired entries
 tag cache clear --all                  # Clear entire cache
 ```
 
-`cache list --format json` redacts query strings from cached URLs (`original_ref`/`resolved_url` in `meta` become `...?[redacted]`) so presigned-URL credentials aren't printed; the text table never showed these URLs at all, so it is unaffected.
+```json
+{
+  "entries": [
+    {
+      "key": "gh_acme_go-api-template",
+      "meta": {
+        "original_ref": "gh:acme/go-api-template",
+        "resolved_url": "https://github.com/acme/go-api-template.git",
+        "version": "v1.2.0",
+        "commit_sha": "6d8a871b7e14d750a02830d4a3688d7a4b08c4b0",
+        "fetched_at": "2026-08-19T16:49:14.467828+02:00",
+        "expires_at": "2026-08-20T16:49:15.796465+02:00"
+      }
+    }
+  ]
+}
+```
+
+`entries` is `[]`, never `null`, on an empty cache. `meta` is `null` if the entry's metadata file is
+missing or corrupt, rather than the command erroring. `version`/`commit_sha` are `omitempty`
+(zip/local sources have no commit SHA); `expires_at` is `omitempty` — absent means the entry is
+pinned and never expires. `cache list --format json` redacts query strings from cached URLs
+(`original_ref`/`resolved_url` become `...?[redacted]`) so presigned-URL credentials aren't
+printed; the text table never showed these URLs at all, so it is unaffected.
 
 ### Bundle Prerequisites
 
@@ -1205,3 +1271,83 @@ Without `--check`, the JSON is just `{"version","dev_build"}` — `latest` and `
 A dev build (empty version, `"dev"`, or a `"dev-"` prefix) reports `dev_build:true`. Under `--check`, a dev build answers `update_available:false` without touching the network — there is no real "latest" to compare a dev build against — and `latest` stays omitted.
 
 If `--check` cannot reach the network, the command aborts: a text error on stderr, a non-zero exit, and no JSON at all. It does not downgrade to reporting the failure inline (e.g. a `check_error` field) — deliberately, so a JSON consumer never has to distinguish "checked, nothing found" from "the check itself failed" inside the document.
+
+## JSON Output Shapes
+
+22 commands support `--format json`: `cache ls`, `check`, `convert cookiecutter`, `dialect
+list`, `dialect show`, `diff`, `doctor`, `extract`, `generate`, `generate list`, `lib ls`, `lib
+search`, `scaffold`, `template graph` (also `--format dot`), `template info`, `template lint`,
+`template list`, `template variables`, `test`, `undo`, `update`, `version`. This list is the
+golden fixture in `TestUT_FormatCommands_SurfaceMatchesGolden`
+(`internal/commands/format_conformance_test.go`) — a command gaining or losing `--format` fails
+that test, so it can't drift from this section silently.
+
+### Conventions
+
+These decisions were made once, across the whole epic, rather than per command:
+
+- **No envelope, no `schema_version`.** A command that returns a list wraps it under a noun key
+  matching its content (`{"entries":[...]}`, `{"templates":[...]}`, `{"dialects":[...]}`,
+  `{"generations":[...]}`, `{"results":[...]}`, `{"generators":[...],"bundles":[...]}`). A command
+  that returns one object or report emits it bare — no `{"ok":...,"data":...}` wrapper.
+- **Empty arrays serialize as `[]`, never `null`.** `entries`, `templates`, `results`, `dialects`,
+  `generations`, `files`, `incompatibilities`, `warnings`, `variables` — every array field holds to
+  this, checked on the raw bytes in tests because `null` and `[]` both unmarshal to a nil Go slice.
+- **`--format` is recognised on either side of a command's positional arguments.** `tag template
+  info ./tpl --format json` and `tag template info --format json ./tpl` are equivalent — a
+  trailing flag used to be silently dropped, so a command that takes positionals reparses the
+  tail of the argument list for flags it didn't see the first time.
+- **`--format json` implies non-interactive.** It selects the noop prompter: a command that would
+  otherwise prompt errors instead. `scaffold --format json` forces `--no-input` semantics, never
+  shows the interactive template picker (no template argument is a usage error instead), never
+  prompts to convert a detected Cookiecutter template, and a required variable with no value is an
+  error rather than a blocked prompt. `undo --format json` requires `--yes` outright — JSON mode
+  is never read as implicit consent for a destructive operation.
+- **Stdout carries exactly one JSON document.** Progress lines, hook output, and confirmation
+  previews go to `c.App.ErrWriter` (stderr) in JSON mode, never to the real `os.Stdout`. A failing
+  command still writes its document before returning the exit-code-carrying error where there is
+  a meaningful partial result to report (a conflict, a warning list); a command that fails before
+  producing one writes nothing.
+- **Errors stay text on stderr; exit codes don't change with `--format`.** `--format json` never
+  turns an error into a JSON error object, and the process exit code for a given failure is the
+  same in both formats.
+- **An unknown `--format` value is a usage error, exit `2`, and it is validated first.**
+  `resolveFormat` runs before a command validates its own arguments, so `tag template lint
+  ./does-not-exist --format bogus` reports the format error, not "template not found" — a command
+  never needs its own fixture set up correctly just to reject a bad `--format`.
+- **Two file-action vocabularies, deliberately not unified.** `generate`, `scaffold`, and `undo`
+  share `fileaction`'s outcome vocabulary (`create`/`inject`/`append`/`overwrite`/`openapi-merge`/`skip`)
+  because all three report "what TAG wrote to a file". `update` reports its own `MergeOp`
+  vocabulary (`keep`/`add`/`delete`/`update`/`conflict`/`prompt`/`user-added`) instead, because a
+  3-way merge decision is a different kind of fact — which side won, or whether the two sides
+  disagreed — not a write outcome.
+
+### Shape index
+
+Every command below emits a bare object/report unless noted as wrapped under a key. See the
+linked section for the full field list and worked example.
+
+| Command | Shape | Documented in |
+|---------|-------|----------------|
+| `cache ls` | `{"entries":[{"key","meta"}]}` | [Cache Management](#cache-management) |
+| `check` | bare `{"up_to_date","current_sha","latest_sha","source"}` | [Template Lifecycle (Check, Diff, Update)](#template-lifecycle-check-diff-update) |
+| `convert cookiecutter` | bare `convert.Result` | [Cookiecutter Conversion](#cookiecutter-conversion) |
+| `dialect list` | `{"dialects":[{"name","description"}]}` | [Dialect Type-Mapping](#dialect-type-mapping) |
+| `dialect show` | bare `{"name","description","types"}` | [Dialect Type-Mapping](#dialect-type-mapping) |
+| `diff` | bare `{"old_sha","new_sha","source","files":[...]}` | [Template Lifecycle (Check, Diff, Update)](#template-lifecycle-check-diff-update) |
+| `doctor` | bare `{"status","sections":[...]}` | [Environment Diagnostics](#environment-diagnostics) |
+| `extract` | bare `{"template_path","to_path","replacements"}` (+ `content` under `--dry-run`) | [Code Generation Flags](#code-generation-flags) |
+| `generate` | bare `{"files":[...],"created","skipped","overwritten","modified","dry_run"}` | [Code Generation Flags](#code-generation-flags) |
+| `generate list` | `{"generators":[...],"bundles":[...]}` (identical to `template list`) | [Bundle Prerequisites](#bundle-prerequisites) |
+| `lib ls` | `{"templates":[{"name","source","version","added_at","updated_at"}]}` | [Library Management](#library-management) |
+| `lib search` | `{"results":[{"name","full_name","description","url","stars","updated_at","language"}]}` | [Template Search](#template-search) |
+| `scaffold` | bare `{"output_dir","template","files":[...],"created","dry_run"}` | [Code Generation Flags](#code-generation-flags) |
+| `template graph` | `{"generators":[...],"bundles":[...],"markers":[...],"warnings":[...]}` (also `--format dot`) | [Dependency Graph](#dependency-graph) |
+| `template info` | bare `{"name","description","version","variables":[...],"hooks","has_readme","has_howto"}` | [Template Info](#template-info) |
+| `template lint` | `{"issues":[{"file","severity","message","rule"}]}` | [Template Linting](#template-linting) |
+| `template list` | `{"generators":[...],"bundles":[...]}` (identical to `generate list`) | [Bundle Prerequisites](#bundle-prerequisites) |
+| `template variables` | bare `{"root":{...},"generators":[{...}]}` — one `ScopeResult` per scope | [Variable Auditing](#variable-auditing) |
+| `test` | bare `{"cases":[...],"passed","failed","errored","total_cases","duration","template_dir"}` | [Matrix Testing](#matrix-testing) |
+| `undo` | bare `{"gen_id","files":[...],"reverted","skipped"}` (`--list` → `{"generations":[...]}`) | [Generation History & Undo](#generation-history--undo) |
+| `update` | bare `{"mode","dry_run","old_sha","new_sha","up_to_date","files":[...],"new_files","updated_files","deleted_files","conflicts"}` | [Template Lifecycle (Check, Diff, Update)](#template-lifecycle-check-diff-update) |
+| `version` | bare `{"version","dev_build"}` (+ `"latest"`/`"update_available"` under `--check`) | [Version](#version) |

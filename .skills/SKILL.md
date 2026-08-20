@@ -276,6 +276,7 @@ my-project/
 | `tag template lint [path]` | Validate template (schema, syntax, vars) (`--format json`) |
 | `tag template variables [path]` | Audit variable declarations vs usage (`--format json`, `--strict`) |
 | `tag template rename-var <old> <new> [path]` | Rename a variable across config and templates (`--dry-run`) |
+| `tag template list [--all]` | List generators and bundles — identical output to `tag generate list` (`--format json`) |
 | `tag template graph [path]` | Visualize generator dependencies (`--format text\|json\|dot`) |
 | `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template (`--format json`) |
 | `tag dialect list` | List available type-mapping dialects (`--format json`) |
@@ -285,6 +286,8 @@ my-project/
 | `tag lib search [query]` | Search GitHub for templates (`--format json`, `--limit`, `--sort`, `--order`) |
 | `tag lib rm <name>` | Remove template |
 | `tag lib update [name]` | Update from source |
+| `tag cache ls` | List cached remote templates — alias `tag cache list` (`--format json`) |
+| `tag cache clear [--all]` | Clear cached templates (expired only by default) |
 | `tag test [template-dir]` | Matrix-test all boolean variable combinations (`--format json`) |
 | `tag undo` | Revert the last generation (`--format json` requires `--yes`) |
 | `tag undo --list` | Show generation history (`--format json` → `{"generations":[...]}`) |

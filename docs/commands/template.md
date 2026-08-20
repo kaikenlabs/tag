@@ -23,6 +23,7 @@ The `tag template` command group provides tools for managing templates, generato
 | `tag template lint [path]` | Validate template syntax, schema, and variable references |
 | `tag template variables [path]` | Audit variable declarations and usage across template files |
 | `tag template rename-var <old> <new> [path]` | Rename a variable across the config and all template files |
+| `tag template graph [path]` | Visualize the generator dependency graph |
 | `tag template list` | List available generators and bundles |
 
 ---
@@ -270,6 +271,28 @@ tag template lint ./path/to/template --format json
 - **`.tagignore` patterns** — Ignored files are excluded from linting.
 - **Comments, raw blocks, and string literals** — Template comments (`{# ... #}`), the body of `{% raw %}...{% endraw %}` blocks, and string literals inside a `{{ }}` / `{% %}` block are never scanned for references, so `{{ replace("{{ vars.ghost }}") }}` does not reference `ghost`. A `{% raw %}` tag's own opening tag is scanned like any other block — only its body is skipped. `tag template lint`, `tag template variables`, and `tag template rename-var` share this exact definition of a reference. Both dot access (`vars.name`) and literal subscript access (`vars["name"]` / `vars['name']`, whitespace-tolerant) count as references; a non-literal subscript (`vars[expr]`) does not, because the key is not statically known. `vars.0` is read as index access, not a variable named `0`.
 
+**Example JSON output** (`--format json`):
+
+```json
+{
+  "issues": [
+    {
+      "file": "bad.txt",
+      "line": 1,
+      "severity": "error",
+      "message": "undefined variable \"undefined_thing\"",
+      "rule": "undefined-variable"
+    }
+  ]
+}
+```
+
+`{"issues":[...]}`, `[]` when the template is clean. `line` and `column` are `omitempty` — a
+schema or config-parse issue has no line to point to, so they are absent rather than `0` (a path
+placeholder issue omits them the same way `template variables`' `undeclared` entries do). `severity`
+is always `"error"` or `"warning"`; `rule` is the machine-readable rule name shown in parentheses
+in the text output (e.g. `undefined-variable`, `config-parse`).
+
 ---
 
 ### `tag template variables`
@@ -342,6 +365,40 @@ Summary: 5 declared, 0 undeclared, 0 unused
 - Generator-level `tag.template.json` configs
 - Template comments (`{# ... #}`), the body of `{% raw %}...{% endraw %}` blocks, and string literals inside a `{{ }}` / `{% %}` block are never scanned — a variable referenced only inside one of them counts as unused, not used. A `{% raw %}` tag's own opening tag is scanned like any other block — only its body is skipped. `tag template variables` shares this exact definition of a reference with `tag template lint` and `tag template rename-var`: dot access (`vars.name`) and literal subscript access (`vars["name"]` / `vars['name']`) both count, a non-literal subscript (`vars[expr]`) does not, and `vars.0` is read as index access, not a variable named `0`.
 - Binary files and `.tagignore` patterns are honored
+
+**Example JSON output** (`--format json`):
+
+```json
+{
+  "root": {
+    "scope": "root",
+    "declared": [
+      {
+        "name": "project_name",
+        "type": "string",
+        "default": "demo-proj",
+        "file_count": 2,
+        "reference_count": 2,
+        "references": [
+          { "file": "README.md", "line": 1, "expression": "hello {{ vars.project_name }}" }
+        ]
+      }
+    ],
+    "undeclared": [
+      { "name": "feature", "references": [{ "file": "cond/{% if vars.feature %}feat.txt{% endif %}", "line": 0, "expression": "" }] }
+    ],
+    "unused": [],
+    "summary": { "declared": 1, "undeclared": 1, "unused": 0 }
+  },
+  "generators": []
+}
+```
+
+Bare object, no envelope, keyed by scope. `root` covers the top-level template; `generators` is one
+entry per generator-level config under `_generators/`. `declared`, `undeclared`, `unused`, and
+`generators` are always arrays — `[]` when empty, never `null`. An `undeclared` reference found in
+a path placeholder (rather than a template body) reports `line: 0` and an empty `expression`.
+`summary` mirrors the array lengths.
 
 ---
 
@@ -442,6 +499,105 @@ Changes:
 
 - Dot access (`vars.old_name`) and literal subscript access (`vars["old_name"]` / `vars['old_name']`, whitespace-tolerant) are both rewritten — the same references `tag template lint` and `tag template variables` recognise. A non-literal subscript (`vars[expr]`) is left alone, because its key is not statically known.
 - A name must start with a letter or underscore. `vars.0` is read as index access, not a variable named `0`, and is never renamed.
+
+---
+
+### `tag template graph`
+
+Visualize the dependency graph between generators — which files they create, inject into, or
+append to, and in what order bundles run them.
+
+```bash
+tag template graph [path] [flags]
+```
+
+If `[path]` is omitted, the current directory is used.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--format` | `text` | Output format: `text`, `json`, or `dot` |
+
+`tag template graph` takes at most one path argument; a second positional is a usage error (exit `2`).
+
+**Examples:**
+
+```bash
+tag template graph
+tag template graph ./my-template
+tag template graph --format json
+tag template graph --format dot | dot -Tpng -o graph.png
+```
+
+**What is analyzed**, reading each generator's frontmatter:
+
+- **Generators** — every generator with its actions (`create`, `inject`, `append`) and target paths.
+- **Bundles** — each bundle's generator execution order, flagged valid or invalid (a bundle is invalid when a generator injects into a file that a *later* generator in the same bundle creates).
+- **Injection markers** — marker strings found in the project's source files, with line numbers and the generators that reference them. Skips `.tag/`, `_generators/`, dotfiles, and binary files.
+
+**Example JSON output** (`--format json`):
+
+```json
+{
+  "generators": [
+    {
+      "name": "model",
+      "actions": [
+        { "type": "create", "target": "models/{{ name }}.go" }
+      ]
+    }
+  ],
+  "bundles": [],
+  "markers": [],
+  "warnings": [
+    { "code": "malformed_metadata", "generator": "route", "message": "cannot parse metadata in routes.go.tmpl: inject action requires before or after clause" }
+  ]
+}
+```
+
+`generators`, `bundles`, `markers`, and `warnings` are always arrays — `[]` when there is nothing
+to report. `generators[].actions[].marker`/`position` are present only on inject actions.
+`bundles[].order` lists generator names in execution order with a `valid_order` boolean.
+`markers[].used_by` lists the generator names that inject at that marker.
+
+**Warning codes** (`warnings[].code`):
+
+| Code | Meaning |
+|------|---------|
+| `file_conflict` | Two or more generators create the same target file |
+| `missing_target` | A generator injects into a file no generator creates (may come from the scaffold itself) |
+| `order_violation` | A bundle injects into a file before the generator that creates it |
+| `malformed_metadata` | A template's frontmatter could not be extracted or parsed |
+
+Targets containing `{{ ... }}` are skipped by `missing_target`, since they cannot be resolved statically.
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| `0` | Analysis completed — even with warnings present. `graph` reports; it does not gate. |
+| `2` | Usage error (unknown `--format`, more than one path argument) |
+
+**`--format dot`:**
+
+```bash
+tag template graph --format dot
+```
+
+```dot
+digraph generators {
+  rankdir=LR;
+  node [fontname="Helvetica"];
+  edge [fontname="Helvetica" fontsize=10];
+
+  "model" [shape=box];
+
+  "models/{{ name }}.go" [shape=ellipse];
+
+  "model" -> "models/{{ name }}.go" [label="creates"];
+}
+```
+
+Pipe directly into Graphviz's `dot` to render an image: `tag template graph --format dot | dot -Tpng -o graph.png`.
 
 ---
 

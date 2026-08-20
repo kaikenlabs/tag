@@ -35,11 +35,11 @@ Flags may appear before or after `template-dir`: `tag test ./my-template --forma
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--parallel <n>` | `-p` | Max concurrent test runs (default: number of CPUs) |
+| `--parallel <n>` | `-p` | Max concurrent test runs (default: `4`) |
 | `--fail-fast` | | Stop on first failure |
 | `--dry-run` | `-d` | List combinations without running |
 | `--keep-failed` | | Preserve scaffolded directories on failure |
-| `--timeout <duration>` | | Per-command timeout (default: `30s`) |
+| `--timeout <duration>` | | Per-command timeout (default: `5m`) |
 | `--max-cases <n>` | | Safety limit for total combinations (default: `64`, `0` = unlimited) |
 | `--run <cmd>` | | Validation command (repeatable, overrides template config) |
 | `--skip <var>` | | Boolean var to exclude from permutation (repeatable) |
@@ -187,6 +187,7 @@ When `--format json` is used, the report is written to stdout:
 {
   "cases": [
     {
+      "case_name": "default",
       "combination": {
         "index": 0,
         "vars": {"use_docker": "true", "use_grpc": "true"}
@@ -195,6 +196,7 @@ When `--format json` is used, the report is written to stdout:
       "duration": 1200000000
     },
     {
+      "case_name": "default",
       "combination": {
         "index": 1,
         "vars": {"use_docker": "true", "use_grpc": "false"}
@@ -214,7 +216,7 @@ When `--format json` is used, the report is written to stdout:
 }
 ```
 
-The `status` field is a string (`"passed"`, `"failed"`, or `"errored"`), not an integer.
+The `status` field is a string (`"passed"`, `"failed"`, or `"errored"`), not an integer. `case_name` is the matching `test.cases[].name` entry from `tag.template.json`, or `"default"` when the template defines no named cases.
 
 ## Error Handling
 
