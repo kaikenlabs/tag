@@ -340,7 +340,8 @@ func libEditCommand() *cli.Command {
 			}
 			args = append(args, templatePath)
 
-			cmd := exec.CommandContext(c.Context, args[0], args[1:]...) //nolint:gosec // editor command is user-configured
+			// #nosec G204 -- editor command comes from the user's own $EDITOR/config
+			cmd := exec.CommandContext(c.Context, args[0], args[1:]...)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

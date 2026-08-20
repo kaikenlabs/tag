@@ -192,7 +192,7 @@ func NewConflictStatus(report *ConflictReport, updateCommit string) *ConflictSta
 // <projectRoot>/.tag/conflicts.json.
 func WriteConflictStatus(projectRoot string, status *ConflictStatus) error {
 	tagDir := filepath.Join(projectRoot, types.TemplatesDir)
-	if err := os.MkdirAll(tagDir, 0o755); err != nil {
+	if err := os.MkdirAll(tagDir, types.DirModeRestricted); err != nil {
 		return fmt.Errorf("create %s directory: %w", types.TemplatesDir, err)
 	}
 

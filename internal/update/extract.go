@@ -50,6 +50,7 @@ func extractFromTarGz(archivePath, binaryName, destDir string) (string, error) {
 
 		destPath := filepath.Join(destDir, binaryName)
 
+		// #nosec G302 -- destPath is the extracted tag binary and must stay executable
 		out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
 			return "", fmt.Errorf("create output file: %w", err)

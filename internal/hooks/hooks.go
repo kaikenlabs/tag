@@ -83,7 +83,8 @@ func execWithTimeout(cmdDisplay string, cmdArgs []string, workDir string, env []
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultHookTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...) //nolint:gosec // G204: hook commands are user-approved via --accept-hooks or interactive prompt
+	// #nosec G204 -- hook commands are user-approved via --accept-hooks or an interactive prompt
+	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
 	cmd.Dir = workDir
 
 	// Set environment - ensure we always have a valid environment with PATH
