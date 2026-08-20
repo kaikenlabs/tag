@@ -1,0 +1,6 @@
+  created      a.go
+  skipped      b.go
+  overwritten  c.go
+  modified     d.go
+  merged       e.yaml
+Generated: 1 created, 1 skipped, 1 overwritten, 2 modified

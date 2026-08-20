@@ -500,6 +500,43 @@ func TestIT_GenerateRecordsManifest(t *testing.T) {
 	assert.NotEmpty(t, g.Files[0].HashAfter)
 }
 
+// TestIT_GenerateAppend_RecordsAppendAction verifies that a generation whose
+// template uses an append action records history.ActionAppend (not just
+// ActionCreate, the only action TestIT_GenerateRecordsManifest exercises),
+// and that undoing it restores the target file from backup.
+func TestIT_GenerateAppend_RecordsAppendAction(t *testing.T) {
+	testdataDir := getTestdataDir()
+	generatorDir := filepath.Join(testdataDir, "generators", "appender")
+	preExistingDir := filepath.Join(testdataDir, "pre-existing", "append")
+
+	workDir := setupWorkDir(t, preExistingDir)
+	tagDir := setupTagDir(t, workDir)
+
+	targetPath := filepath.Join(workDir, "app", "handlers.go")
+	originalContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+
+	runGenWithRecorder(t, tagDir, generatorDir, "signup")
+
+	m, err := history.Load(tagDir)
+	require.NoError(t, err)
+	require.Len(t, m.Generations, 1)
+
+	g := m.Generations[0]
+	require.Len(t, g.Files, 1)
+	assert.Equal(t, history.ActionAppend, g.Files[0].Action)
+
+	afterContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.NotEqual(t, string(originalContent), string(afterContent), "file should differ after append")
+
+	require.NoError(t, history.Undo(tagDir, history.UndoOptions{}))
+
+	restoredContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(originalContent), string(restoredContent), "file should be restored from backup after undo")
+}
+
 // TestIT_UndoCreate_DeletesFile verifies that undoing a "create" generation
 // removes the created file from disk.
 func TestIT_UndoCreate_DeletesFile(t *testing.T) {

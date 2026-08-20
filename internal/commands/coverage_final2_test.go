@@ -17,6 +17,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/library"
@@ -95,7 +96,7 @@ func TestUT_GenerateWithHooks_VerbosePrintsDetails(t *testing.T) {
 		return engine.GenerateResult{
 			Created: 1,
 			Details: []engine.FileOpDetail{
-				{Op: "created", Path: "model.go"},
+				{Action: fileaction.ActionCreate, Path: "model.go"},
 			},
 		}, nil
 	})

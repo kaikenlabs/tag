@@ -4,6 +4,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/writer"
 )
 
@@ -55,8 +56,33 @@ func (r *GenerateResult) Add(other GenerateResult) {
 
 // FileOpDetail records the outcome for a single file.
 type FileOpDetail struct {
-	Path string // destination path
-	Op   string // "created", "skipped", "overwritten", "modified"
+	Path   string            // destination path
+	Action fileaction.Action // what TAG did to this file
+}
+
+// DisplayOp returns the legacy display word for the action, exactly as
+// printed by `tag generate --verbose` before #352 introduced the typed
+// Action vocabulary. It exists solely to preserve that pre-#352 wording —
+// do not "simplify" it away by printing the raw Action value instead, since
+// the wording intentionally diverges from the Action's own string value
+// (e.g. both ActionAppend and ActionInject display as "modified").
+func (d FileOpDetail) DisplayOp() string {
+	switch d.Action {
+	case fileaction.ActionCreate:
+		return "created"
+	case fileaction.ActionSkip:
+		return "skipped"
+	case fileaction.ActionOverwrite:
+		return "overwritten"
+	case fileaction.ActionAppend, fileaction.ActionInject:
+		return "modified"
+	case fileaction.ActionOpenAPIMerge:
+		return "merged"
+	default:
+		// Deliberate fallback for any future action value: display the raw
+		// string rather than an empty/placeholder word.
+		return string(d.Action)
+	}
 }
 
 // ConflictError is returned by Generate when OnExistingFail (the default) is in

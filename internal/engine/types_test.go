@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/fileaction"
 )
 
 func TestUT_OnExistingPolicy_IsValid(t *testing.T) {
@@ -61,7 +63,7 @@ func TestUT_GenerateResult_Add(t *testing.T) {
 		Overwritten: 0,
 		Modified:    1,
 		Details: []FileOpDetail{
-			{Path: "a.go", Op: "created"},
+			{Path: "a.go", Action: fileaction.ActionAppend},
 		},
 	}
 
@@ -71,8 +73,8 @@ func TestUT_GenerateResult_Add(t *testing.T) {
 		Overwritten: 2,
 		Modified:    0,
 		Details: []FileOpDetail{
-			{Path: "b.go", Op: "created"},
-			{Path: "c.go", Op: "overwritten"},
+			{Path: "b.go", Action: fileaction.ActionCreate},
+			{Path: "c.go", Action: fileaction.ActionInject},
 		},
 	}
 
@@ -86,6 +88,38 @@ func TestUT_GenerateResult_Add(t *testing.T) {
 	assert.Equal(t, "a.go", r.Details[0].Path)
 	assert.Equal(t, "b.go", r.Details[1].Path)
 	assert.Equal(t, "c.go", r.Details[2].Path)
+	// The aggregated Details must preserve the distinct append/inject
+	// actions from each operand, not just their paths.
+	assert.Equal(t, fileaction.ActionAppend, r.Details[0].Action)
+	assert.Equal(t, fileaction.ActionCreate, r.Details[1].Action)
+	assert.Equal(t, fileaction.ActionInject, r.Details[2].Action)
+}
+
+func TestUT_FileOpDetail_DisplayOp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		action fileaction.Action
+		want   string
+	}{
+		{name: "create", action: fileaction.ActionCreate, want: "created"},
+		{name: "skip", action: fileaction.ActionSkip, want: "skipped"},
+		{name: "overwrite", action: fileaction.ActionOverwrite, want: "overwritten"},
+		{name: "append", action: fileaction.ActionAppend, want: "modified"},
+		{name: "inject", action: fileaction.ActionInject, want: "modified"},
+		{name: "openapi-merge", action: fileaction.ActionOpenAPIMerge, want: "merged"},
+		{name: "zero value", action: fileaction.Action(""), want: ""},
+		{name: "unknown value", action: fileaction.Action("future-op"), want: "future-op"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := FileOpDetail{Path: "x.go", Action: tt.action}
+			assert.Equal(t, tt.want, d.DisplayOp())
+		})
+	}
 }
 
 func TestUT_GenerateResult_Add_Empty(t *testing.T) {

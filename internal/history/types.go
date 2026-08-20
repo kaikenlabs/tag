@@ -1,6 +1,10 @@
 package history
 
-import "time"
+import (
+	"time"
+
+	"github.com/kaikenlabs/tag/internal/fileaction"
+)
 
 // Manifest is the root of .tag/history.json.
 type Manifest struct {
@@ -17,19 +21,29 @@ type Generation struct {
 	Files     []FileEntry `json:"files"`
 }
 
+// Action is an alias for fileaction.Action, the shared vocabulary for
+// describing what TAG did to a file. It is kept as a type alias (rather
+// than a new defined type) so existing call sites that reference
+// history.Action keep compiling unchanged.
+type Action = fileaction.Action
+
 // FileEntry records a single file operation within a generation.
 type FileEntry struct {
 	Path       string  `json:"path"`
-	Action     string  `json:"action"` // "create", "inject", "append"
+	Action     Action  `json:"action"` // one of the five persisted Action values below
 	HashBefore *string `json:"hash_before"`
 	HashAfter  string  `json:"hash_after"`
 }
 
-// Action constants for FileEntry.
+// Action constants for FileEntry. These are the five actions that are ever
+// persisted to .tag/history.json (fileaction.ActionSkip is report-only and
+// deliberately not re-exported here — it never appears on disk). Unknown
+// action values written by other TAG versions are preserved verbatim when
+// loading a manifest.
 const (
-	ActionCreate       = "create"
-	ActionInject       = "inject"
-	ActionAppend       = "append"
-	ActionOverwrite    = "overwrite"
-	ActionOpenAPIMerge = "openapi-merge"
+	ActionCreate       = fileaction.ActionCreate
+	ActionInject       = fileaction.ActionInject
+	ActionAppend       = fileaction.ActionAppend
+	ActionOverwrite    = fileaction.ActionOverwrite
+	ActionOpenAPIMerge = fileaction.ActionOpenAPIMerge
 )

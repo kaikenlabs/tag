@@ -148,8 +148,11 @@ func revertFile(entry FileEntry, backupDir string) error {
 		}
 		return os.Remove(entry.Path)
 
-	case ActionInject, ActionAppend:
-		// Restore from backup.
+	case ActionInject, ActionAppend, ActionOverwrite, ActionOpenAPIMerge:
+		// Restore from backup. RecordingFileWriter.snapshotBefore backs up any
+		// pre-existing file before WriteFile (overwrite) and before
+		// MergeOpenAPIFile (openapi-merge), same as it does for inject/append,
+		// so restore-from-backup is correct for all four.
 		backupPath := filepath.Join(backupDir, entry.Path)
 		data, err := os.ReadFile(backupPath)
 		if err != nil {
@@ -164,6 +167,9 @@ func revertFile(entry FileEntry, backupDir string) error {
 		}
 		return os.WriteFile(entry.Path, data, info.Mode())
 	}
+	// An unrecognised action (e.g. written by a future TAG version) is
+	// intentionally a no-op rather than an error, so undoing a manifest
+	// produced by a newer TAG version does not hard-fail.
 	return nil
 }
 

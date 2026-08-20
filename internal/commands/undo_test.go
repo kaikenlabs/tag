@@ -124,3 +124,28 @@ func TestUT_UndoCommand_UnknownTagDir_StillWorks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "No generations recorded")
 }
+
+// TestUT_UndoAction_Preview_ActionLabelUnchanged pins the undo preview line
+// format ("  [%s] %s\n" with f.Action, undo.go:148) — a second text surface
+// the ticket never listed alongside printGenerateSummary. It must keep
+// working (via %s) now that history.Action is a named string type rather
+// than a bare string.
+func TestUT_UndoAction_Preview_ActionLabelUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	tagDir := filepath.Join(dir, ".tag")
+	require.NoError(t, os.MkdirAll(tagDir, 0o755))
+
+	g := history.Generation{
+		ID:       "gen_1_aaa",
+		Command:  "generate",
+		Template: "model",
+		Files:    []history.FileEntry{{Path: "handler.go", Action: history.ActionCreate, HashAfter: "sha256:abc"}},
+	}
+	require.NoError(t, history.Append(tagDir, g))
+
+	// No --yes: the preview prints before the (non-interactive) confirmation
+	// prompt cancels the undo.
+	out, err := runUndoApp(t, dir)
+	require.NoError(t, err)
+	assert.Contains(t, out, "  [create] handler.go")
+}

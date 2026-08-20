@@ -17,6 +17,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/hooks"
 	"github.com/kaikenlabs/tag/internal/template"
@@ -953,9 +954,9 @@ func TestUT_PrintGenerateSummary_NoVerbose(t *testing.T) {
 		Overwritten: 3,
 		Modified:    0,
 		Details: []engine.FileOpDetail{
-			{Path: "a.go", Op: "created"},
-			{Path: "b.go", Op: "created"},
-			{Path: "c.go", Op: "skipped"},
+			{Path: "a.go", Action: fileaction.ActionCreate},
+			{Path: "b.go", Action: fileaction.ActionCreate},
+			{Path: "c.go", Action: fileaction.ActionSkip},
 		},
 	}
 
@@ -972,8 +973,8 @@ func TestUT_PrintGenerateSummary_Verbose(t *testing.T) {
 		Created:  1,
 		Modified: 1,
 		Details: []engine.FileOpDetail{
-			{Path: "a.go", Op: "created"},
-			{Path: "b.go", Op: "modified"},
+			{Path: "a.go", Action: fileaction.ActionCreate},
+			{Path: "b.go", Action: fileaction.ActionAppend},
 		},
 	}
 

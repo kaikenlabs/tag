@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -32,6 +33,10 @@ type mockFileWriter struct {
 	appendErr error
 	injectErr error
 	mergeErr  error
+
+	// mergeUnchanged makes MergeOpenAPIFile report Changed: false, simulating
+	// a merge that found nothing new to add.
+	mergeUnchanged bool
 }
 
 type mergeCall struct {
@@ -76,6 +81,9 @@ func (m *mockFileWriter) MergeOpenAPIFile(name string, fragment []byte, opts wri
 	m.mergeCalls = append(m.mergeCalls, mergeCall{Name: name, Fragment: fragment, Opts: opts})
 	if m.mergeErr != nil {
 		return writer.OpenAPIMergeResult{}, m.mergeErr
+	}
+	if m.mergeUnchanged {
+		return writer.OpenAPIMergeResult{Changed: false}, nil
 	}
 	return writer.OpenAPIMergeResult{Changed: true, AddedPaths: []string{"/test"}}, nil
 }
@@ -174,6 +182,120 @@ func TestUT_Generate_MixedActions_Ordering(t *testing.T) {
 	require.Len(t, fw.writeCalls, 1, "expected 1 create call")
 	require.Len(t, fw.injectCalls, 1, "expected 1 inject call")
 	require.Len(t, fw.appendCalls, 1, "expected 1 append call")
+}
+
+// TestUT_Generate_Details_AppendAndInjectAreDistinct is the only test that
+// catches a re-collapse of append and inject into a single Action value.
+// DisplayOp deliberately maps both to "modified", so the golden text test
+// (internal/commands/golden_text_test.go) cannot see a re-collapse. The
+// compiler cannot see it either, because an untyped string constant
+// converts implicitly to Action. And the `exhaustive` linter — which would
+// otherwise force every switch over Action to list both cases — is
+// disabled in .golangci.yaml. Only this assert.Equal over the full Details
+// slice pins the two actions as distinct.
+func TestUT_Generate_Details_AppendAndInjectAreDistinct(t *testing.T) {
+	fw := &mockFileWriter{}
+
+	te := newTestParser(t)
+	te.templates = map[string]string{
+		"append.tmpl": "---\nto: append.go\nappend: true\n---\nappended\n",
+		"inject.tmpl": "---\nto: inject.go\ninject: true\nafter: marker\n---\ninjected\n",
+	}
+	core := NewCore(te, fw, io.Discard)
+
+	result, err := core.Generate(Data{Name: "test"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []FileOpDetail{
+		{Path: "inject.go", Action: fileaction.ActionInject},
+		{Path: "append.go", Action: fileaction.ActionAppend},
+	}, result.Details)
+}
+
+// TestUT_Generate_Details_ActionPerBranch exercises every branch that
+// appends a FileOpDetail and asserts the recorded Action, one row per
+// branch.
+func TestUT_Generate_Details_ActionPerBranch(t *testing.T) {
+	tests := []struct {
+		name           string
+		action         template.Action
+		onExisting     OnExistingPolicy
+		preExisting    bool
+		mergeUnchanged bool
+		wantAction     fileaction.Action
+	}{
+		{
+			name:       "create",
+			action:     template.ActionCreate,
+			wantAction: fileaction.ActionCreate,
+		},
+		{
+			name:        "on-existing-skip",
+			action:      template.ActionCreate,
+			onExisting:  OnExistingSkip,
+			preExisting: true,
+			wantAction:  fileaction.ActionSkip,
+		},
+		{
+			name:        "on-existing-overwrite",
+			action:      template.ActionCreate,
+			onExisting:  OnExistingOverwrite,
+			preExisting: true,
+			wantAction:  fileaction.ActionOverwrite,
+		},
+		{
+			name:       "append",
+			action:     template.ActionAppend,
+			wantAction: fileaction.ActionAppend,
+		},
+		{
+			name:       "inject",
+			action:     template.ActionInject,
+			wantAction: fileaction.ActionInject,
+		},
+		{
+			name:       "openapi-merged",
+			action:     template.ActionOpenAPI,
+			wantAction: fileaction.ActionOpenAPIMerge,
+		},
+		{
+			name:           "openapi-unchanged",
+			action:         template.ActionOpenAPI,
+			mergeUnchanged: true,
+			wantAction:     fileaction.ActionSkip,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			target := filepath.Join(tmpDir, "out.txt")
+			if tt.preExisting {
+				require.NoError(t, os.WriteFile(target, []byte("original"), 0o600))
+			}
+
+			fw := &mockFileWriter{mergeUnchanged: tt.mergeUnchanged}
+			mock := &mockExecutor{
+				renderMetadataResult: &template.Metadata{
+					To:            target,
+					Action:        tt.action,
+					InjectMatcher: "marker",
+					InjectClause:  types.InjectAfter,
+					Extra:         map[string]string{},
+				},
+				parseStringTemplate: &mockTemplate{result: "content"},
+			}
+			parser := NewParserWithExecutor(mock, map[string]string{"t.tmpl": "---\nto: x\n---\ncontent\n"}, nil)
+			core := NewCore(parser, fw, io.Discard)
+
+			result, err := core.Generate(Data{Name: "test", OnExisting: tt.onExisting})
+
+			require.NoError(t, err)
+			require.Len(t, result.Details, 1)
+			assert.Equal(t, target, result.Details[0].Path)
+			assert.Equal(t, tt.wantAction, result.Details[0].Action)
+		})
+	}
 }
 
 func TestUT_Generate_ParserError_Propagates(t *testing.T) {

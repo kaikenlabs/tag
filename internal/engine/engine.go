@@ -10,6 +10,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/parse"
 	"github.com/kaikenlabs/tag/internal/template"
@@ -175,11 +176,11 @@ func (c *Core) Generate(data Data) (GenerateResult, error) {
 					"paths", len(mergeResult.AddedPaths),
 					"schemas", len(mergeResult.AddedSchemas))
 				result.Modified++
-				result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "merged"})
+				result.Details = append(result.Details, FileOpDetail{Path: item.To, Action: fileaction.ActionOpenAPIMerge})
 			} else {
 				slog.Info(chalk.Yellow("unchanged"), "file", item.To)
 				result.Skipped++
-				result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "skipped"})
+				result.Details = append(result.Details, FileOpDetail{Path: item.To, Action: fileaction.ActionSkip})
 			}
 
 		case template.ActionAppend:
@@ -189,7 +190,7 @@ func (c *Core) Generate(data Data) (GenerateResult, error) {
 			}
 			slog.Info(chalk.Yellow("modified"), "file", item.To)
 			result.Modified++
-			result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "modified"})
+			result.Details = append(result.Details, FileOpDetail{Path: item.To, Action: fileaction.ActionAppend})
 
 		case template.ActionInject:
 			if err := c.fwr.InjectIntoFile(item.To, item.Output, writer.Inject{
@@ -201,7 +202,7 @@ func (c *Core) Generate(data Data) (GenerateResult, error) {
 			}
 			slog.Info(chalk.Yellow("modified"), "file", item.To)
 			result.Modified++
-			result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "modified"})
+			result.Details = append(result.Details, FileOpDetail{Path: item.To, Action: fileaction.ActionInject})
 
 		default: // create
 			if err := c.applyCreatePolicy(item, data.OnExisting, &result); err != nil {
@@ -247,7 +248,7 @@ func (c *Core) applyCreatePolicy(item TemplateData, policy OnExistingPolicy, res
 		}
 		slog.Info(chalk.Blue("created"), "file", item.To)
 		result.Created++
-		result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "created"})
+		result.Details = append(result.Details, FileOpDetail{Path: item.To, Action: fileaction.ActionCreate})
 		if item.Notes != "" {
 			fmt.Fprintf(c.out, "%s\n%s: %s\n", chalk.Red("IMPORTANT"), chalk.Yellow(item.To), chalk.Green(item.Notes))
 		}
@@ -258,7 +259,7 @@ func (c *Core) applyCreatePolicy(item TemplateData, policy OnExistingPolicy, res
 	case OnExistingSkip:
 		slog.Info(chalk.Yellow("skipped"), "file", item.To)
 		result.Skipped++
-		result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "skipped"})
+		result.Details = append(result.Details, FileOpDetail{Path: item.To, Action: fileaction.ActionSkip})
 		return nil
 	case OnExistingOverwrite:
 		if writeErr := c.fwr.WriteFile(item.To, item.Output, types.FileMode); writeErr != nil {
@@ -267,7 +268,7 @@ func (c *Core) applyCreatePolicy(item TemplateData, policy OnExistingPolicy, res
 		}
 		slog.Info(chalk.Yellow("overwritten"), "file", item.To)
 		result.Overwritten++
-		result.Details = append(result.Details, FileOpDetail{Path: item.To, Op: "overwritten"})
+		result.Details = append(result.Details, FileOpDetail{Path: item.To, Action: fileaction.ActionOverwrite})
 		return nil
 	default:
 		// isFail() pre-scan should have caught this; guard for safety.

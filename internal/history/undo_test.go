@@ -77,6 +77,62 @@ func TestUT_UndoEngine_LastGeneration_RestoresModifiedFiles(t *testing.T) {
 	assert.Equal(t, original, restored)
 }
 
+// TestUT_RevertFile_RestoresOverwriteAndOpenAPIMerge is the regression test
+// for the user-approved revertFile fix: before the fix, revertFile's second
+// case only matched ActionInject and ActionAppend, so undoing a generation
+// recorded as "overwrite" or "openapi-merge" fell through to the trailing
+// `return nil` — Undo silently did nothing to the file while still counting
+// it as reverted and reporting success. Both actions have a backup (see
+// RecordingFileWriter.snapshotBefore, which backs up any pre-existing file
+// before WriteFile and before MergeOpenAPIFile), so restore-from-backup is
+// the correct behaviour for both, exactly as it already is for inject/append.
+func TestUT_RevertFile_RestoresOverwriteAndOpenAPIMerge(t *testing.T) {
+	tests := []struct {
+		name        string
+		action      Action
+		wantRestore bool
+	}{
+		{name: "overwrite restores from backup", action: ActionOverwrite, wantRestore: true},
+		{name: "openapi-merge restores from backup", action: ActionOpenAPIMerge, wantRestore: true},
+		{name: "unknown action is a silent no-op, not an error", action: Action("future-op"), wantRestore: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tagDir, projectDir := setupUndoEnv(t)
+			target := filepath.Join(projectDir, "config.go")
+			original := []byte("original content")
+			current := []byte("current content")
+
+			require.NoError(t, os.WriteFile(target, current, 0o644))
+			hashAfter, err := HashFile(target)
+			require.NoError(t, err)
+
+			backupDir := filepath.Join(tagDir, "history", "backups", "gen_1_ccc")
+			backupPath := filepath.Join(backupDir, target)
+			require.NoError(t, os.MkdirAll(filepath.Dir(backupPath), 0o755))
+			require.NoError(t, os.WriteFile(backupPath, original, 0o644))
+
+			hashBefore := HashBytes(original)
+			gen := Generation{
+				ID: "gen_1_ccc", Timestamp: time.Now(), Template: "config", Command: "generate",
+				Files: []FileEntry{{Path: target, Action: tt.action, HashBefore: &hashBefore, HashAfter: hashAfter}},
+			}
+			require.NoError(t, Append(tagDir, gen))
+
+			require.NoError(t, Undo(tagDir, UndoOptions{Out: &bytes.Buffer{}}))
+
+			after, err := os.ReadFile(target)
+			require.NoError(t, err)
+			if tt.wantRestore {
+				assert.Equal(t, original, after, "%s should restore from backup", tt.action)
+			} else {
+				assert.Equal(t, current, after, "unknown action must leave the file untouched")
+			}
+		})
+	}
+}
+
 func TestUT_UndoEngine_SpecificID_ByID(t *testing.T) {
 	tagDir, projectDir := setupUndoEnv(t)
 	target := filepath.Join(projectDir, "service.go")

@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,9 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -183,9 +186,9 @@ func TestUT_PrintGenerateSummary_NonVerbose(t *testing.T) {
 	result := engine.GenerateResult{
 		Created: 3,
 		Details: []engine.FileOpDetail{
-			{Op: "created", Path: "a.go"},
-			{Op: "created", Path: "b.go"},
-			{Op: "created", Path: "c.go"},
+			{Action: fileaction.ActionCreate, Path: "a.go"},
+			{Action: fileaction.ActionCreate, Path: "b.go"},
+			{Action: fileaction.ActionCreate, Path: "c.go"},
 		},
 	}
 
@@ -282,4 +285,74 @@ func TestUT_GenerateAction_LibraryGenerator(t *testing.T) {
 	err := generateAction(ctx, cfg, fac)
 	require.NoError(t, err)
 	assert.Equal(t, "User", capturedData.Name)
+}
+
+// TestUT_GenerateBundle_Verbose_ListsAllGeneratorFiles exercises the bundle
+// aggregation wiring at generate.go's `total.Add(genResult)` call and
+// confirms every generator's files appear under --verbose — i.e. Details is
+// "always populated" for bundles, not just for a single generator run.
+func TestUT_GenerateBundle_Verbose_ListsAllGeneratorFiles(t *testing.T) {
+	tmpDir := setupTempDir(t)
+	createSharedDir(t, tmpDir)
+	createGenerator(t, tmpDir, "first", "---\nto: {{ name }}.txt\n---\nhi")
+	createGenerator(t, tmpDir, "second", "---\nto: {{ name }}.txt\n---\nhi")
+
+	bundleJSON := `{"generators": [{"name": "first"}, {"name": "second"}]}`
+	createBundle(t, tmpDir, "multi", bundleJSON)
+
+	cfg := createTestConfig(t, tmpDir)
+	cfg.Hooks = config.Hooks{Pre: [][]string{}, Post: [][]string{}}
+
+	var buf bytes.Buffer
+	cliApp := &cli.App{
+		Writer: &buf,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: flags.DryRunFlag},
+			&cli.StringFlag{Name: flags.PathFlag, Value: ".tag"},
+			&cli.StringFlag{Name: flags.SharedPathFlag, Value: "_shared"},
+			&cli.StringFlag{Name: flags.BundlePathFlag, Value: "_bundles"},
+			&cli.StringSliceFlag{Name: flags.MetaFlag},
+			&cli.BoolFlag{Name: flags.NoHooksFlag},
+			&cli.BoolFlag{Name: flags.VerboseFlag},
+			&cli.StringFlag{Name: flags.OnExistingFlag, Value: ""},
+		},
+	}
+	set := flag.NewFlagSet("test", flag.ContinueOnError)
+	for _, f := range cliApp.Flags {
+		require.NoError(t, f.Apply(set))
+	}
+	require.NoError(t, set.Set(flags.PathFlag, tmpDir))
+	require.NoError(t, set.Set(flags.VerboseFlag, "true"))
+	require.NoError(t, set.Set(flags.NoHooksFlag, "true"))
+	require.NoError(t, set.Parse([]string{"multi", "Product"}))
+	ctx := cli.NewContext(cliApp, set, nil)
+
+	callCount := 0
+	fac := generatorFactories{
+		newBundleEngine: func(_ *template.Engine, _ bool, _, _ string, _ *history.Recorder, _ io.Writer) (engine.Generator, error) {
+			callCount++
+			idx := callCount
+			return &mockGenerator{
+				GenerateFunc: func(_ engine.Data) (engine.GenerateResult, error) {
+					if idx == 1 {
+						return engine.GenerateResult{
+							Created: 1,
+							Details: []engine.FileOpDetail{{Path: "first.go", Action: fileaction.ActionCreate}},
+						}, nil
+					}
+					return engine.GenerateResult{
+						Modified: 1,
+						Details:  []engine.FileOpDetail{{Path: "second.go", Action: fileaction.ActionAppend}},
+					}, nil
+				},
+			}, nil
+		},
+	}
+
+	err := generateAction(ctx, cfg, fac)
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "first.go", "first generator's file should be listed under --verbose")
+	assert.Contains(t, out, "second.go", "second generator's file should be listed under --verbose")
 }

@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 
+	"github.com/kaikenlabs/tag/internal/engine"
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/remote"
 )
@@ -38,6 +40,10 @@ import (
 //     against a `main` worktree build (binary for version/doctor, a probe test
 //     calling generateList and versionCheckAction for the rest). Every one
 //     matched byte-for-byte.
+//   - The #352 generate-summary-verbose fixture was captured by calling
+//     printGenerateSummary directly against the unmodified (pre-#352) code on
+//     this branch, before FileOpDetail.Op was renamed to FileOpDetail.Action —
+//     i.e. before the source change this fixture exists to police.
 //
 // A later commit that changes a fixture is visible as a testdata diff in
 // review — that is the whole point of the "text output stays byte-identical"
@@ -442,5 +448,27 @@ func TestUT_TextGolden(t *testing.T) {
 		run := runCLICapturingStdout(t, DiffCommand(), "diff", "--dir", dir)
 		require.NoError(t, run.Err)
 		assertGolden(t, "diff-up-to-date", run.All())
+	})
+
+	// generate-summary-verbose pins printGenerateSummary's --verbose output
+	// across the #352 FileOpDetail.Op -> Action rename: the op column must
+	// stay byte-identical even though the field feeding it is now typed.
+	t.Run("generate-summary-verbose", func(t *testing.T) {
+		result := engine.GenerateResult{
+			Created:     1,
+			Skipped:     1,
+			Overwritten: 1,
+			Modified:    2,
+			Details: []engine.FileOpDetail{
+				{Path: "a.go", Action: fileaction.ActionCreate},
+				{Path: "b.go", Action: fileaction.ActionSkip},
+				{Path: "c.go", Action: fileaction.ActionOverwrite},
+				{Path: "d.go", Action: fileaction.ActionAppend},
+				{Path: "e.yaml", Action: fileaction.ActionOpenAPIMerge},
+			},
+		}
+		var buf bytes.Buffer
+		printGenerateSummary(&buf, result, true)
+		assertGolden(t, "generate-summary-verbose", buf.String())
 	})
 }

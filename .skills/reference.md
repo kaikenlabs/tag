@@ -799,7 +799,7 @@ tag undo --partial                     # Revert unmodified files, skip conflicti
 
 **Manifest location**: `.tag/history.json` — generated automatically, do not edit manually.
 
-**Backup location**: `.tag/history/backups/<generation-id>/` — stores pre-modification copies for inject/append operations.
+**Backup location**: `.tag/history/backups/<generation-id>/` — stores pre-modification copies for inject/append/overwrite/openapi-merge operations; `undo` restores from these for all four.
 
 ### Environment Diagnostics
 
