@@ -15,18 +15,21 @@ var (
 	matchSymbol   = regexp.MustCompile(`[\s_-]`)
 )
 
-var titleCase = cases.Title(language.English)
-
 // CaseSnake transforms string to `snake_case`
 func CaseSnake(str string) string {
 	tmp := parseAgainstMatchers(str, "_")
 	return strings.ToLower(tmp)
 }
 
+// CaseTitle transforms string to `Title Case`
+func CaseTitle(str string) string {
+	return cases.Title(language.English).String(str)
+}
+
 // CasePascal transforms string to `PascalCase`
 func CasePascal(str string) string {
 	tmp := parseAgainstMatchers(str, " ")
-	tmp = titleCase.String(tmp)
+	tmp = CaseTitle(tmp)
 	return strings.ReplaceAll(tmp, " ", "")
 }
 

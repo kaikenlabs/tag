@@ -1,6 +1,7 @@
 package template
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -595,4 +596,34 @@ func TestUT_FilterAliases(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "users", result)
 	})
+}
+
+func TestUT_Filters_ConcurrentUse(t *testing.T) {
+	t.Parallel()
+
+	const (
+		goroutines = 32
+		iterations = 200
+	)
+
+	engine := MustNewEngine()
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			for range iterations {
+				ctx := NewContext("blood orange tree", nil)
+				got, err := engine.ExecuteToString(`{{ name|title }}/{{ name|pascal }}/{{ name|camel }}`, ctx)
+				if err != nil {
+					t.Errorf("render failed: %v", err)
+					return
+				}
+				if want := "Blood Orange Tree/BloodOrangeTree/bloodOrangeTree"; got != want {
+					t.Errorf("got %q, want %q", got, want)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
 }

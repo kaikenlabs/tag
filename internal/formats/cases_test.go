@@ -1,6 +1,7 @@
 package formats
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -201,6 +202,35 @@ func TestUT_CaseSnake_SymbolEdgeCases(t *testing.T) {
 	}
 }
 
+func TestUT_CaseTitle(t *testing.T) {
+	tests := []struct {
+		name string
+		str  string
+		want string
+	}{
+		{
+			name: "sentence",
+			str:  "blood orange tree",
+			want: "Blood Orange Tree",
+		},
+		{
+			name: "all-caps token is flattened",
+			str:  "HTTP server",
+			want: "Http Server",
+		},
+		{
+			name: "empty",
+			str:  "",
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, CaseTitle(tt.str))
+		})
+	}
+}
+
 func TestUT_CasePascal_SymbolEdgeCases(t *testing.T) {
 	tests := []struct {
 		name string
@@ -216,6 +246,11 @@ func TestUT_CasePascal_SymbolEdgeCases(t *testing.T) {
 			name: "mixed hyphens and spaces",
 			str:  "hello-world foo",
 			want: "HelloWorldFoo",
+		},
+		{
+			name: "all-caps token is flattened by cases.Title",
+			str:  "HTTP server",
+			want: "HttpServer",
 		},
 	}
 	for _, tt := range tests {
@@ -335,4 +370,30 @@ func TestUT_CaseKebab_SymbolEdgeCases(t *testing.T) {
 			assert.Equal(t, tt.want, CaseKebab(tt.str))
 		})
 	}
+}
+
+func TestUT_CasePascalCamel_ConcurrentUse(t *testing.T) {
+	t.Parallel()
+
+	const (
+		goroutines = 64
+		iterations = 500
+	)
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			for range iterations {
+				if got := CasePascal("blood orange tree"); got != "BloodOrangeTree" {
+					t.Errorf("CasePascal = %q", got)
+					return
+				}
+				if got := CaseCamel("user account handler"); got != "userAccountHandler" {
+					t.Errorf("CaseCamel = %q", got)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
 }

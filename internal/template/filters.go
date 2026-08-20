@@ -6,14 +6,9 @@ import (
 
 	"github.com/gobuffalo/flect"
 	"github.com/nikolalohinski/gonja/v2/exec"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 
 	"github.com/kaikenlabs/tag/internal/formats"
 )
-
-// titleCaser is a cached English title caser to avoid allocation per filter call.
-var titleCaser = cases.Title(language.English)
 
 // RegisterFilters registers all custom filters with the given filter set.
 // Returns an error if any filter fails to register.
@@ -100,7 +95,7 @@ var (
 	filterKebab  = makeSimpleFilter("kebab", formats.CaseKebab)
 	filterLower  = makeSimpleFilter("lower", strings.ToLower)
 	filterUpper  = makeSimpleFilter("upper", strings.ToUpper)
-	filterTitle  = makeSimpleFilter("title", titleCaser.String)
+	filterTitle  = makeSimpleFilter("title", formats.CaseTitle)
 )
 
 // Inflection filters
