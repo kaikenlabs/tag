@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -55,11 +56,25 @@ func parseAgainstMatchers(str, sep string) string {
 }
 
 // lowercaseFirst converts the first letter to lower case
+// lowercaseFirst converts the first letter to lower case
 func lowercaseFirst(str string) string {
-	for i, v := range str {
-		return string(unicode.ToLower(v)) + str[i+1:]
+	return mapFirstRune(str, unicode.ToLower)
+}
+
+// uppercaseFirst converts the first letter to upper case
+func uppercaseFirst(str string) string {
+	return mapFirstRune(str, unicode.ToUpper)
+}
+
+// mapFirstRune applies f to the first rune of str, leaving the rest untouched.
+// It decodes rather than slicing at byte 1, which would split a multibyte rune
+// and emit invalid UTF-8.
+func mapFirstRune(str string, f func(rune) rune) string {
+	r, size := utf8.DecodeRuneInString(str)
+	if size == 0 {
+		return ""
 	}
-	return ""
+	return string(f(r)) + str[size:]
 }
 
 // irregularVerbs maps base forms to past tense for common software-domain verbs.
@@ -218,7 +233,8 @@ func CasePast(str string) string {
 	}
 
 	// PascalCase or camelCase.
-	isCamel := str != "" && unicode.IsLower(rune(str[0]))
+	firstRune, _ := utf8.DecodeRuneInString(str)
+	isCamel := unicode.IsLower(firstRune)
 
 	var b strings.Builder
 	for i, w := range words {
@@ -227,17 +243,16 @@ func CasePast(str string) string {
 		}
 
 		// Detect if the original word was all-uppercase (acronym like "HTTP").
+		// A caseless script (CJK, Arabic) also lands here and is left unchanged.
 		isAcronym := len(w) > 1 && w == strings.ToUpper(w)
 
 		switch {
 		case isAcronym:
 			b.WriteString(w)
 		case i == 0 && isCamel:
-			b.WriteString(strings.ToLower(w[:1]))
-			b.WriteString(w[1:])
+			b.WriteString(lowercaseFirst(w))
 		default:
-			b.WriteString(strings.ToUpper(w[:1]))
-			b.WriteString(w[1:])
+			b.WriteString(uppercaseFirst(w))
 		}
 	}
 	return b.String()
