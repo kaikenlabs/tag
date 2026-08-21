@@ -456,8 +456,8 @@ func TestUT_FSCache_ConcurrentSet_NoDurableCorruption(t *testing.T) {
 }
 
 func TestUT_FSCache_ConcurrentReader_EntryNeverMutatedInPlace(t *testing.T) {
-	const numFiles = 6
-	const writerRounds = 20
+	const numFiles = 24
+	const writerRounds = 40
 
 	cacheDir := t.TempDir()
 	cache, err := NewFSCache(cacheDir)
@@ -477,18 +477,26 @@ func TestUT_FSCache_ConcurrentReader_EntryNeverMutatedInPlace(t *testing.T) {
 	var wg sync.WaitGroup
 	writerDone := make(chan struct{})
 
+	// Two writers, not one: a single writer's RemoveAll+MkdirAll allocates a
+	// fresh inode each round, so a pinned reader only ever sees a retired
+	// entry. Interleaving two writers is what produces the mixed tree that a
+	// pinned reader can actually observe being mutated in place.
+	var writers sync.WaitGroup
+	for w := range 2 {
+		writers.Go(func() {
+			for i := range writerRounds {
+				src, version := srcA, "vA"
+				if (i+w)%2 == 1 {
+					src, version = srcB, "vB"
+				}
+				_, _ = cache.Set("rw-key", src, &CacheMeta{Version: version})
+				time.Sleep(time.Millisecond)
+			}
+		})
+	}
 	wg.Go(func() {
 		defer close(writerDone)
-		for i := range writerRounds {
-			src := srcA
-			version := "vA"
-			if i%2 == 1 {
-				src = srcB
-				version = "vB"
-			}
-			_, _ = cache.Set("rw-key", src, &CacheMeta{Version: version})
-			time.Sleep(time.Millisecond)
-		}
+		writers.Wait()
 	})
 
 	failures := 0
