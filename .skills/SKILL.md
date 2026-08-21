@@ -263,7 +263,7 @@ my-project/
 
 | Command | Description |
 |---------|-------------|
-| `tag scaffold [template] [name]` | Create project (no args = picker). Alias: `tag s` |
+| `tag scaffold [template] [name]` | Create project (no args = picker; `--format json` forces `--no-input` and errors instead of picking). Alias: `tag s` |
 | `tag generate <gen-or-bundle> <name>` | Run generator or bundle (`--format json`). Alias: `tag g` |
 | `tag extract --name <n> --as <gen> <file>` | Extract a generator template from an existing source file (`--format json`, `-i` not supported with `--format json`) |
 | `tag generate list [--all]` | List generators and bundles (`--format json`). Alias: `tag g list` |
@@ -276,6 +276,7 @@ my-project/
 | `tag template lint [path]` | Validate template (schema, syntax, vars) (`--format json`) |
 | `tag template variables [path]` | Audit variable declarations vs usage (`--format json`, `--strict`) |
 | `tag template rename-var <old> <new> [path]` | Rename a variable across config and templates (`--dry-run`) |
+| `tag template list [--all]` | List generators and bundles — identical output to `tag generate list` (`--format json`) |
 | `tag template graph [path]` | Visualize generator dependencies (`--format text\|json\|dot`) |
 | `tag convert cookiecutter <src> -o <dst>` | Convert Cookiecutter template (`--format json`) |
 | `tag dialect list` | List available type-mapping dialects (`--format json`) |
@@ -285,6 +286,8 @@ my-project/
 | `tag lib search [query]` | Search GitHub for templates (`--format json`, `--limit`, `--sort`, `--order`) |
 | `tag lib rm <name>` | Remove template |
 | `tag lib update [name]` | Update from source |
+| `tag cache ls` | List cached remote templates — alias `tag cache list` (`--format json`) |
+| `tag cache clear [--all]` | Clear cached templates (expired only by default) |
 | `tag test [template-dir]` | Matrix-test all boolean variable combinations (`--format json`) |
 | `tag undo` | Revert the last generation (`--format json` requires `--yes`) |
 | `tag undo --list` | Show generation history (`--format json` → `{"generations":[...]}`) |
@@ -322,7 +325,7 @@ my-project/
 | `--on-existing` | generate | Existing file policy: `fail` (default), `skip`, `overwrite` |
 | `-v` / `--verbose` | generate | Print per-file operation details in summary |
 | `--force` | scaffold | Overwrite existing output |
-| `--format text\|json` | doctor, version, check, diff, cache ls, lib ls, lib search, dialect list, dialect show, template info, template lint, template variables, template graph (also `dot`), generate list, template list, test, generate, extract, undo, undo --list, update, convert cookiecutter | Output format (default: `text`). Unknown value = usage error, exit 2 |
+| `--format text\|json` | doctor, version, check, diff, cache ls, lib ls, lib search, dialect list, dialect show, template info, template lint, template variables, template graph (also `dot`), generate list, template list, test, generate, extract, undo, undo --list, update, convert cookiecutter, scaffold | Output format (default: `text`). Unknown value = usage error, exit 2 |
 
 ## Pitfalls
 

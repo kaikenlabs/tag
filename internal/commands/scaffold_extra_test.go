@@ -37,7 +37,7 @@ func TestUT_ResolveTemplateName_PositionalArg(t *testing.T) {
 	t.Parallel()
 	ctx := createTestCLIContext(t, []string{"my-template"}, nil)
 
-	name, err := resolveTemplateName(ctx, nil, []string{"my-template"})
+	name, err := resolveTemplateName(ctx, nil, []string{"my-template"}, false)
 	require.NoError(t, err)
 	assert.Equal(t, "my-template", name)
 }
@@ -48,7 +48,7 @@ func TestUT_ResolveTemplateName_NoArgs(t *testing.T) {
 	// (IsTTY returns false in test environment, so it hits the default case)
 	ctx := createTestCLIContext(t, nil, nil)
 
-	_, err := resolveTemplateName(ctx, nil, nil)
+	_, err := resolveTemplateName(ctx, nil, nil, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "template argument required")
 }

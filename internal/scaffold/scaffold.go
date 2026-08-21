@@ -109,7 +109,7 @@ func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
 	collector.WithEngine(s.engine)
 	processor := NewPathProcessor(s.engine)
 	processor.SetAllowRecursiveRender(opts.AllowRecursiveRender)
-	writer := NewOutputWriter(s.engine, processor)
+	writer := NewOutputWriter(s.engine, processor, s.output)
 	writer.SetAllowRecursiveRender(opts.AllowRecursiveRender)
 	writer.SetDryRun(opts.DryRun)
 
@@ -138,6 +138,14 @@ type runContext struct {
 // Run executes the scaffolding process.
 func (s *Scaffold) Run(opts Options) (ScaffoldResult, error) {
 	ctx := &runContext{opts: opts}
+
+	// Run's Options are independent of the ones NewScaffold was built with, and
+	// DryRun has two readers: the writer's flag and executeScaffold's gating
+	// below. Left unsynced they can disagree, and building dry then running for
+	// real reports success while producing a project with no files in it.
+	if w, ok := s.writer.(*DefaultOutputWriter); ok {
+		w.SetDryRun(opts.DryRun)
+	}
 
 	if err := s.loadConfig(ctx); err != nil {
 		return ScaffoldResult{}, err
@@ -285,7 +293,6 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 }
 
 // executeScaffold prepares the output directory, runs hooks, writes files, and finalizes.
-// executeScaffold prepares the output directory, runs hooks, writes files, and finalizes.
 //
 // Every step that mutates the filesystem is gated on !opts.DryRun. A dry run is
 // documented (docs/commands/scaffold.md:46,185) as a preview that creates no
@@ -338,7 +345,8 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		}()
 	}
 
-	if err := s.writer.Write(ctx.effectiveTemplateDir, ctx.outputDir, ctx.vars); err != nil {
+	files, err := s.writer.Write(ctx.effectiveTemplateDir, ctx.outputDir, ctx.vars)
+	if err != nil {
 		return ScaffoldResult{}, fmt.Errorf("failed to process template: %w", err)
 	}
 
@@ -355,6 +363,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		TemplateDir: ctx.templateDirAbs,
 		Vars:        ctx.vars,
 		Opts:        ctx.opts,
+		Files:       files,
 	}, nil
 }
 

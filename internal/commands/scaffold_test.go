@@ -183,7 +183,7 @@ func TestUT_ScaffoldFromRef_LibraryNameResolvesToLibrary(t *testing.T) {
 	// attempt to scaffold from the library. It will fail because the
 	// library template directory has no tag.template.json, but the error
 	// should come from scaffolding (not from the remote resolver).
-	err := scaffoldFromRef(ctx, []string{"my-template"})
+	err := scaffoldFromRef(ctx, []string{"my-template"}, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "scaffolding failed")
 	assert.NotContains(t, err.Error(), "failed to resolve template")
@@ -198,7 +198,7 @@ func TestUT_ScaffoldFromRef_RemoteRefSkipsLibrary(t *testing.T) {
 	// A remote shorthand should NOT match the library, even if a library
 	// entry with the same base name exists. It should go to the remote
 	// resolver and fail with a resolver error (not a scaffold init error).
-	err := scaffoldFromRef(ctx, []string{"gh:user/my-template"})
+	err := scaffoldFromRef(ctx, []string{"gh:user/my-template"}, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve template")
 }
@@ -211,7 +211,7 @@ func TestUT_ScaffoldFromRef_LocalPathSkipsLibrary(t *testing.T) {
 
 	// A local path should NOT match the library. It should go to the
 	// remote/local resolver.
-	err := scaffoldFromRef(ctx, []string{"./my-template"})
+	err := scaffoldFromRef(ctx, []string{"./my-template"}, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve template")
 }

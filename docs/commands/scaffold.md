@@ -46,6 +46,7 @@ When a template name is given without a path prefix or remote shorthand, TAG fir
 | `--dry-run` | `-d` | Preview which files would be written without creating the output directory |
 | `--update-lock` | | Update the lockfile with the current template version |
 | `--ignore-lock` | | Ignore the lockfile and scaffold from the current template state |
+| `--format <fmt>` | | Output format: `text` (default) or `json`. Recognised before or after the `template`/`project-name` positionals |
 
 ## Template Formats
 
@@ -199,6 +200,42 @@ tag scaffold gh:user/template my-project --dry-run
 # Useful before scaffolding from an unfamiliar remote template
 tag scaffold gh:user/template --dry-run --no-input
 ```
+
+## Machine-Readable Output
+
+```bash
+tag scaffold ./my-template my-project --format json
+tag scaffold ./my-template my-project --dry-run --format json
+tag scaffold --format json ./my-template my-project   # --format works on either side of the positionals
+```
+
+```json
+{
+  "output_dir": "/abs/path/my-project",
+  "template": "./my-template",
+  "files": [
+    { "path": "README.md", "action": "create" },
+    { "path": "src/main.go", "action": "create" }
+  ],
+  "created": 2,
+  "dry_run": false
+}
+```
+
+Bare object, no envelope. `output_dir` is always an absolute path. `action` is always
+`"create"` — scaffold writes a fresh project tree, so it never reports inject/append/overwrite.
+`files` is the same list, in the same order, whether `--dry-run` is set or not: both paths record
+an entry at the same point right after a file is processed, and only whether the file actually
+lands on disk differs.
+
+`--format json` forces non-interactive behavior: it implies `--no-input` (defaults and `-m`
+overrides still apply; prompts never fire), never shows the interactive template picker — running
+`tag scaffold --format json` with no template argument is a usage error (exit `2`) instead — and
+never prompts to convert a detected Cookiecutter template. A required variable with no default and
+no `-m` override is an error rather than a blocked prompt. Hook output, the "Add template to
+library?" prompt, and the post-scaffold summary/README render are all suppressed or rerouted to
+stderr — stdout carries only the JSON document. `--dry-run --format json` does not create the
+output directory, same as `--dry-run` in text mode.
 
 ## Variable Input Priority
 

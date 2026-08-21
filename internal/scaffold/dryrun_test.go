@@ -321,3 +321,30 @@ func TestUT_Scaffold_DryRun_StillReportsExistingOutputWithoutForce(t *testing.T)
 	assert.ErrorIs(t, err, ErrOutputExists)
 	assertOutputDirIntact(t, outputDir, before)
 }
+
+func TestUT_Scaffold_RunOptsDriveTheWriterDryRunFlag(t *testing.T) {
+	// Run takes its own Options, independent of the ones NewScaffold was built
+	// with, so DryRun has two readers: the writer's flag (set at construction)
+	// and executeScaffold's gating (read from Run). If they disagree the run
+	// still reports success — building dry and running real yields a project
+	// containing .tagconfig.json and no files at all.
+	templateDir := dryRunTemplate(t, nil)
+	outputDir := filepath.Join(t.TempDir(), "output")
+
+	construct := dryRunOpts(templateDir, outputDir)
+	construct.DryRun = true
+
+	run := construct
+	run.DryRun = false
+
+	var buf strings.Builder
+	s, err := NewScaffold(construct, WithOutput(&buf), WithIsTTY(false))
+	require.NoError(t, err)
+
+	_, err = s.Run(run)
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(outputDir, "README.md"),
+		"Run's DryRun must drive the writer, not the value NewScaffold was built with")
+	assert.FileExists(t, filepath.Join(outputDir, "src", "main.go"))
+}

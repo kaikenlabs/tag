@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 
+	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/history"
 	"github.com/kaikenlabs/tag/internal/template"
@@ -22,8 +23,9 @@ import (
 
 // OutputWriter handles file generation and copying during scaffolding.
 type OutputWriter interface {
-	// Write processes a template directory and writes output.
-	Write(templateRoot, outputDir string, vars map[string]any) error
+	// Write processes a template directory and writes output, returning the
+	// files it wrote (or, in dry-run, would have written).
+	Write(templateRoot, outputDir string, vars map[string]any) ([]FileEntry, error)
 }
 
 // DefaultOutputWriter implements OutputWriter.
@@ -35,6 +37,7 @@ type DefaultOutputWriter struct {
 	out                  io.Writer
 	recorder             *history.Recorder // optional; nil = no recording
 	dryRun               bool              // when true, log file paths instead of writing
+	files                []FileEntry
 }
 
 // SetRecorder attaches a history recorder to this writer. When set, every
@@ -44,11 +47,11 @@ func (w *DefaultOutputWriter) SetRecorder(r *history.Recorder) {
 }
 
 // NewOutputWriter creates a new output writer.
-func NewOutputWriter(engine template.TemplateRenderer, pathProcessor PathProcessor) *DefaultOutputWriter {
+func NewOutputWriter(engine template.TemplateRenderer, pathProcessor PathProcessor, out io.Writer) *DefaultOutputWriter {
 	return &DefaultOutputWriter{
 		engine:        engine,
 		pathProcessor: pathProcessor,
-		out:           os.Stdout,
+		out:           out,
 	}
 }
 
@@ -78,9 +81,13 @@ func (w *DefaultOutputWriter) escapeNonDerivedVars(vars map[string]any) map[stri
 var _ OutputWriter = (*DefaultOutputWriter)(nil)
 
 // Write processes the template directory and writes to the output directory.
+// The returned []FileEntry is identical whether dryRun is set or not: both
+// paths append at the same point below, right after processFile succeeds.
 //
 //nolint:gocognit // file processing with multiple format-dependent branches
-func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[string]any) error {
+func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[string]any) ([]FileEntry, error) {
+	w.files = make([]FileEntry, 0)
+
 	// Escape non-derived variable values to prevent SSTI in file content.
 	// When allowRecursiveRender is false (default), template delimiters in
 	// user-provided values are replaced with sentinel tokens before rendering.
@@ -95,11 +102,11 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 	// Load .tagignore patterns (nil matcher if file absent or empty)
 	ignoreMatcher, err := loadIgnorePatterns(templateRoot)
 	if err != nil {
-		return fmt.Errorf("load ignore patterns: %w", err)
+		return nil, fmt.Errorf("load ignore patterns: %w", err)
 	}
 
 	// Walk the template directory
-	return filepath.WalkDir(templateRoot, func(srcPath string, d fs.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(templateRoot, func(srcPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -180,8 +187,20 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 		}
 
 		// Process file
-		return w.processFile(srcPath, destPath, ctx, d)
+		return w.processAndRecordFile(srcPath, destPath, processedPath, ctx, d)
 	})
+	return w.files, walkErr
+}
+
+// processAndRecordFile processes one file and, on success, records it in
+// w.files. Split out of Write's WalkDir closure to keep that closure's own
+// cyclomatic complexity under the repo's cyclop limit.
+func (w *DefaultOutputWriter) processAndRecordFile(srcPath, destPath, processedPath string, ctx template.Context, d fs.DirEntry) error {
+	if err := w.processFile(srcPath, destPath, ctx, d); err != nil {
+		return err
+	}
+	w.files = append(w.files, FileEntry{Path: filepath.ToSlash(processedPath), Action: fileaction.ActionCreate})
+	return nil
 }
 
 // processFile processes a single file from the template.

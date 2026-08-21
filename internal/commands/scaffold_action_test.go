@@ -85,7 +85,7 @@ func TestUT_ScaffoldFromRef_LocalTemplateDir(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{templateDir, "test-project"})
+	err := scaffoldFromRef(ctx, []string{templateDir, "test-project"}, false)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(outputPath)
@@ -104,7 +104,7 @@ func TestUT_ScaffoldFromRef_LocalTemplateDir_NoInput(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{templateDir})
+	err := scaffoldFromRef(ctx, []string{templateDir}, false)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(outputPath)
@@ -124,7 +124,7 @@ func TestUT_ScaffoldFromRef_LibraryTemplate_WithOutput(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{"my-go-api", "test-api"})
+	err := scaffoldFromRef(ctx, []string{"my-go-api", "test-api"}, false)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(outputPath)
@@ -138,7 +138,7 @@ func TestUT_ScaffoldFromRef_InvalidLocalPath(t *testing.T) {
 		"no-input": "true",
 	})
 
-	err := scaffoldFromRef(ctx, []string{"./nonexistent-template-dir"})
+	err := scaffoldFromRef(ctx, []string{"./nonexistent-template-dir"}, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve template")
 }
