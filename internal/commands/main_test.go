@@ -23,11 +23,23 @@ import (
 // reintroduces it silently, because writing to a real directory succeeds. This
 // makes the safe default binary-wide. Individual tests may still t.Setenv these
 // to something more specific; that continues to work and takes precedence.
+//
+// TAG_CACHE_DIR and TAG_REPLAY_DIR are cleared for the same reason in reverse:
+// they outrank HOME in remote.NewFSCache and replay.getReplayDir, so a developer
+// who exports them — which a multi-tenant deployment asks operators to do —
+// would otherwise see the HOME-seeded cache tests fail on a clean tree.
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "tag-commands-home-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot create isolated HOME for tests: %v\n", err)
 		os.Exit(1)
+	}
+
+	for _, k := range []string{"TAG_CACHE_DIR", "TAG_REPLAY_DIR"} {
+		if unsetErr := os.Unsetenv(k); unsetErr != nil {
+			fmt.Fprintf(os.Stderr, "cannot unset %s: %v\n", k, unsetErr)
+			os.Exit(1)
+		}
 	}
 
 	for k, v := range map[string]string{

@@ -249,7 +249,7 @@ Variables are resolved in this order (highest priority first):
 
 ## Replay System
 
-TAG automatically saves your inputs after a successful scaffold (unless `--no-save` is used). Replay files are stored in `~/.tag/replay/`.
+TAG automatically saves your inputs after a successful scaffold (unless `--no-save` is used). Replay files are stored in `~/.tag/replay/`, or under the directory named by the `TAG_REPLAY_DIR` environment variable if set (must be an absolute path). `TAG_REPLAY_DIR` is checked before `$HOME` is resolved, so it also works when `$HOME` is unset or unwritable (containers/sandboxes).
 
 The replay system is useful for:
 - Creating multiple projects with similar configuration

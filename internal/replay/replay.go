@@ -26,3 +26,8 @@ type ReplayData struct {
 
 // DefaultReplayDir is the default directory name within ~/.tag for replay files.
 const DefaultReplayDir = "replay"
+
+// EnvReplayDir overrides the replay directory when set to a non-empty
+// absolute path. It is consulted before os.UserHomeDir, so it works in
+// sandboxes/containers where HOME is unset.
+const EnvReplayDir = "TAG_REPLAY_DIR"

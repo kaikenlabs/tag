@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,14 +26,46 @@ import (
 // require.NoError on a completed Wait, it just never completes.
 func runTagSubprocess(t *testing.T, ctx context.Context, dir string, args ...string) (stdout, stderr []byte, err error) {
 	t.Helper()
+	return runTagSubprocessEnv(t, ctx, dir, nil, args...)
+}
+
+// runTagSubprocessEnv is runTagSubprocess with environment overrides. Each
+// entry in env is either "KEY=VALUE" (set) or bare "KEY" (force-unset). The
+// named keys are filtered out of the inherited os.Environ() first and the
+// "KEY=VALUE" entries appended after, rather than just appending overrides
+// and relying on os/exec's last-wins duplicate handling — that would leave a
+// force-unset key's parent-process value still present in the slice, and
+// nothing in exec.Cmd's contract guarantees a later duplicate wins.
+func runTagSubprocessEnv(t *testing.T, ctx context.Context, dir string, env []string, args ...string) (stdout, stderr []byte, err error) {
+	t.Helper()
 
 	closedR, closedW, pipeErr := os.Pipe()
 	require.NoError(t, pipeErr)
 	require.NoError(t, closedW.Close())
 	t.Cleanup(func() { _ = closedR.Close() })
 
+	names := make(map[string]bool, len(env))
+	for _, kv := range env {
+		key, _, _ := strings.Cut(kv, "=")
+		names[key] = true
+	}
+
+	cmdEnv := make([]string, 0, len(os.Environ())+len(env))
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if !names[key] {
+			cmdEnv = append(cmdEnv, kv)
+		}
+	}
+	for _, kv := range env {
+		if _, _, hasValue := strings.Cut(kv, "="); hasValue {
+			cmdEnv = append(cmdEnv, kv)
+		}
+	}
+
 	cmd := exec.CommandContext(ctx, tagBinary, args...)
 	cmd.Dir = dir
+	cmd.Env = cmdEnv
 	cmd.Stdin = closedR
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf

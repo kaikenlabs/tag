@@ -737,6 +737,10 @@ pinned and never expires. `cache list --format json` redacts query strings from 
 (`original_ref`/`resolved_url` become `...?[redacted]`) so presigned-URL credentials aren't
 printed; the text table never showed these URLs at all, so it is unaffected.
 
+The cache directory defaults to `~/.tag/cache` and can be overridden with the
+`TAG_CACHE_DIR` environment variable (must be an absolute path). It is checked before `$HOME`
+is resolved, so it also works when `$HOME` is unset or unwritable (containers/sandboxes).
+
 ### Bundle Prerequisites
 
 Bundles and generators can declare a `requires` field — an array of `.tagconfig.json` variable names that must be present and truthy for the generator/bundle to run.
