@@ -153,7 +153,7 @@ Initial codes from existing sentinels: `template_not_found`, `auth_required`, `v
 
 | Item | Trigger |
 |---|---|
-| Cache locking (flock) | Item 6 proves insufficient under real load |
+| Cache locking (flock) | Item 6 proves insufficient under real load. Note #397 removed the *corruption* case: `FSCache.Set` now stages and renames, so concurrent cache writes are last-writer-wins with complete entries. Locking the cache now buys efficiency (avoiding duplicate fetches), not correctness. The library registry's load-modify-save cycle is a separate, still-open correctness gap — tracked as #401. |
 | Credential-aware cache keys | Per-tenant directories (§0) prove insufficient — e.g. one tenant serving several credential scopes |
 | TAG-side `--allow-ref` enforcement | A second, non-Backstage caller appears, or the action-layer allowlist is bypassed |
 | npm packaging (`@kaikenlabs/tag-cli`) | Node users outside this integration ask for it — 3–5 days, six packages, and needs the `tag upgrade` conflict resolved |
