@@ -1,8 +1,11 @@
 package library
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,7 +106,7 @@ func TestUT_SaveLoad_RoundTrip(t *testing.T) {
 }
 
 func TestUT_SaveRegistry_AtomicWrite(t *testing.T) {
-	// Verify no .tmp file is left behind after successful save
+	// Verify no .tmp* file is left behind after successful save
 	dataDir := t.TempDir()
 	reg := &Registry{Entries: map[string]*Entry{
 		"test": {Name: "test", Source: "local"},
@@ -112,9 +115,9 @@ func TestUT_SaveRegistry_AtomicWrite(t *testing.T) {
 	err := newStore(dataDir).save(reg)
 	require.NoError(t, err)
 
-	tmpPath := filepath.Join(dataDir, registryFile+".tmp")
-	_, err = os.Stat(tmpPath)
-	assert.True(t, os.IsNotExist(err), "temp file should not exist after successful save")
+	matches, err := filepath.Glob(filepath.Join(dataDir, registryFile+".tmp*"))
+	require.NoError(t, err)
+	assert.Empty(t, matches, "no temp file should exist after successful save")
 }
 
 func TestUT_SaveRegistry_FilePermissions(t *testing.T) {
@@ -128,4 +131,36 @@ func TestUT_SaveRegistry_FilePermissions(t *testing.T) {
 	require.NoError(t, err)
 	// File should be owner-only readable (0600)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
+func TestUT_SaveRegistry_ConcurrentWrites(t *testing.T) {
+	dataDir := t.TempDir()
+	store := newStore(dataDir)
+
+	const numWriters = 4
+	const rounds = 5
+
+	for round := range rounds {
+		var wg sync.WaitGroup
+		errs := make([]error, numWriters)
+		for w := range numWriters {
+			wg.Go(func() {
+				reg := &Registry{Entries: map[string]*Entry{
+					fmt.Sprintf("entry-%d-%d", round, w): {Name: fmt.Sprintf("entry-%d-%d", round, w), Source: "local"},
+				}}
+				errs[w] = store.save(reg)
+			})
+		}
+		wg.Wait()
+
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+
+		data, err := os.ReadFile(filepath.Join(dataDir, registryFile))
+		require.NoError(t, err)
+
+		var parsed Registry
+		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final registry file must be valid JSON", round)
+	}
 }

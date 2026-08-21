@@ -1,8 +1,14 @@
 package remote
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -312,4 +318,322 @@ func TestUT_FSCache_OverwritesExisting(t *testing.T) {
 	content, err = os.ReadFile(filepath.Join(cachedPath, "file.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "version2", string(content))
+}
+
+func TestUT_FSCache_FailedSetPreservesPreviousEntry(t *testing.T) {
+	cacheDir := t.TempDir()
+	cache, err := NewFSCache(cacheDir)
+	require.NoError(t, err)
+
+	goodSrc := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(goodSrc, "file.txt"), []byte("v1-content"), 0o644))
+
+	cachedPath, err := cache.Set("some-key", goodSrc, &CacheMeta{})
+	require.NoError(t, err)
+
+	path, found, err := cache.Get("some-key")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, cachedPath, path)
+	content, err := os.ReadFile(filepath.Join(path, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "v1-content", string(content))
+
+	_, err = cache.Set("some-key", "/nonexistent/path/xyz", &CacheMeta{})
+	assert.Error(t, err)
+
+	path, found, err = cache.Get("some-key")
+	require.NoError(t, err)
+	assert.True(t, found, "previous entry must survive a failed Set")
+	content, err = os.ReadFile(filepath.Join(path, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "v1-content", string(content), "previous entry content must be unchanged after a failed Set")
+}
+
+func TestUT_FSCache_FailedSetMidCopyLeavesNoNewFiles(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("chmod-based permission denial is not meaningful on Windows or as root")
+	}
+
+	cacheDir := t.TempDir()
+	cache, err := NewFSCache(cacheDir)
+	require.NoError(t, err)
+
+	v1Src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(v1Src, "file.txt"), []byte("v1-content"), 0o644))
+
+	_, err = cache.Set("some-key", v1Src, &CacheMeta{})
+	require.NoError(t, err)
+
+	v2Src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(v2Src, "a_readable.txt"), []byte("v2-a"), 0o644))
+	blocked := filepath.Join(v2Src, "b_blocked.txt")
+	require.NoError(t, os.WriteFile(blocked, []byte("v2-b"), 0o644))
+	require.NoError(t, os.Chmod(blocked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0o644) })
+	require.NoError(t, os.WriteFile(filepath.Join(v2Src, "c_readable.txt"), []byte("v2-c"), 0o644))
+
+	_, err = cache.Set("some-key", v2Src, &CacheMeta{})
+	assert.Error(t, err)
+
+	entryPath := cache.Path("some-key")
+	entries, err := os.ReadDir(entryPath)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.NotEqual(t, "a_readable.txt", e.Name(), "no v2-only file should have leaked into the entry")
+		assert.NotEqual(t, "b_blocked.txt", e.Name(), "no v2-only file should have leaked into the entry")
+		assert.NotEqual(t, "c_readable.txt", e.Name(), "no v2-only file should have leaked into the entry")
+	}
+
+	content, err := os.ReadFile(filepath.Join(entryPath, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "v1-content", string(content), "v1 content must be intact after a mid-copy failure")
+}
+
+func TestUT_FSCache_ConcurrentSet_NoDurableCorruption(t *testing.T) {
+	const rounds = 8
+	const numFiles = 8
+
+	for round := range rounds {
+		cacheDir := t.TempDir()
+		cache, err := NewFSCache(cacheDir)
+		require.NoError(t, err)
+
+		srcA := t.TempDir()
+		srcB := t.TempDir()
+		for i := range numFiles {
+			name := fmt.Sprintf("content_%02d.txt", i)
+			require.NoError(t, os.WriteFile(filepath.Join(srcA, name), []byte("A"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(srcB, name), []byte("B"), 0o644))
+		}
+		require.NoError(t, os.WriteFile(filepath.Join(srcA, "only_A.txt"), []byte("A"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(srcB, "only_B.txt"), []byte("B"), 0o644))
+
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			_, _ = cache.Set("concurrent-key", srcA, &CacheMeta{Version: "vA"})
+		})
+		wg.Go(func() {
+			_, _ = cache.Set("concurrent-key", srcB, &CacheMeta{Version: "vB"})
+		})
+		wg.Wait()
+
+		entryPath := cache.Path("concurrent-key")
+		entries, err := os.ReadDir(entryPath)
+		require.NoError(t, err)
+
+		hasOnlyA := false
+		hasOnlyB := false
+		for _, e := range entries {
+			if e.Name() == "only_A.txt" {
+				hasOnlyA = true
+			}
+			if e.Name() == "only_B.txt" {
+				hasOnlyB = true
+			}
+		}
+		require.NotEqual(t, hasOnlyA, hasOnlyB, "round %d: exactly one marker file must be present, got only_A=%v only_B=%v", round, hasOnlyA, hasOnlyB)
+		winner := "A"
+		if hasOnlyB {
+			winner = "B"
+		}
+
+		for i := range numFiles {
+			name := fmt.Sprintf("content_%02d.txt", i)
+			content, readErr := os.ReadFile(filepath.Join(entryPath, name))
+			require.NoError(t, readErr, "round %d: %s must exist", round, name)
+			assert.Equal(t, winner, string(content), "round %d: %s must belong entirely to the winning source", round, name)
+		}
+
+		meta, err := cache.readMeta("concurrent-key")
+		require.NoError(t, err)
+		expectedVersion := "vA"
+		if winner == "B" {
+			expectedVersion = "vB"
+		}
+		assert.Equal(t, expectedVersion, meta.Version, "round %d: _meta.json must agree with the winning source", round)
+	}
+}
+
+func TestUT_FSCache_ConcurrentReader_EntryNeverMutatedInPlace(t *testing.T) {
+	const numFiles = 6
+	const writerRounds = 20
+
+	cacheDir := t.TempDir()
+	cache, err := NewFSCache(cacheDir)
+	require.NoError(t, err)
+
+	srcA := t.TempDir()
+	srcB := t.TempDir()
+	for i := range numFiles {
+		name := fmt.Sprintf("content_%02d.txt", i)
+		require.NoError(t, os.WriteFile(filepath.Join(srcA, name), []byte("A"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(srcB, name), []byte("B"), 0o644))
+	}
+
+	_, err = cache.Set("rw-key", srcA, &CacheMeta{Version: "vA"})
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	writerDone := make(chan struct{})
+
+	wg.Go(func() {
+		defer close(writerDone)
+		for i := range writerRounds {
+			src := srcA
+			version := "vA"
+			if i%2 == 1 {
+				src = srcB
+				version = "vB"
+			}
+			_, _ = cache.Set("rw-key", src, &CacheMeta{Version: version})
+			time.Sleep(time.Millisecond)
+		}
+	})
+
+	failures := 0
+	retired := 0
+	snapshots := 0
+
+readLoop:
+	for {
+		select {
+		case <-writerDone:
+			break readLoop
+		default:
+		}
+
+		path := cache.Path("rw-key")
+		root, openErr := os.OpenRoot(path)
+		if openErr != nil {
+			retired++
+			continue
+		}
+
+		var contents [numFiles]string
+		mismatched := false
+		for i := range numFiles {
+			name := fmt.Sprintf("content_%02d.txt", i)
+			f, ferr := root.Open(name)
+			if ferr != nil {
+				if os.IsNotExist(ferr) {
+					retired++
+					mismatched = true
+					break
+				}
+				require.NoError(t, ferr)
+			}
+			data, rerr := io.ReadAll(f)
+			f.Close()
+			require.NoError(t, rerr)
+			contents[i] = string(data)
+		}
+		if mismatched {
+			root.Close()
+			continue
+		}
+
+		metaFile, merr := root.Open(metaFileName)
+		if merr != nil {
+			if os.IsNotExist(merr) {
+				retired++
+				root.Close()
+				continue
+			}
+			require.NoError(t, merr)
+		}
+		metaData, rerr := io.ReadAll(metaFile)
+		metaFile.Close()
+		require.NoError(t, rerr)
+		root.Close()
+
+		var meta CacheMeta
+		require.NoError(t, json.Unmarshal(metaData, &meta))
+
+		snapshots++
+		for i := range numFiles {
+			expected := "A"
+			if meta.Version == "vB" {
+				expected = "B"
+			}
+			if contents[i] != expected {
+				failures++
+				t.Errorf("snapshot inconsistency: meta.Version=%s but content_%02d.txt=%q (expected %q) - entry mutated in place", meta.Version, i, contents[i], expected)
+			}
+		}
+	}
+
+	wg.Wait()
+
+	t.Logf("snapshots=%d retired=%d failures=%d", snapshots, retired, failures)
+	assert.Zero(t, failures, "a pinned-root reader must never observe a mixed snapshot")
+	assert.Positive(t, snapshots, "the reader must have observed at least one consistent snapshot")
+}
+
+func TestUT_FSCache_SetLeavesNoStagingDir(t *testing.T) {
+	cacheDir := t.TempDir()
+	cache, err := NewFSCache(cacheDir)
+	require.NoError(t, err)
+
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("content"), 0o644))
+
+	_, err = cache.Set("some-key", srcDir, &CacheMeta{})
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(cacheDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.False(t, strings.HasPrefix(e.Name(), stagingPrefix), "no staging dir should remain after a successful Set, found %q", e.Name())
+	}
+}
+
+func TestUT_FSCache_StagingDirsAreNotCacheEntries(t *testing.T) {
+	cacheDir := t.TempDir()
+	cache, err := NewFSCache(cacheDir)
+	require.NoError(t, err)
+
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("content"), 0o644))
+
+	_, err = cache.Set("real-key", srcDir, &CacheMeta{FetchedAt: time.Now(), Version: "v1"})
+	require.NoError(t, err)
+
+	plantStagingDir := func(t *testing.T, name string) string {
+		t.Helper()
+		dir := filepath.Join(cacheDir, name)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		data, marshalErr := json.MarshalIndent(&CacheMeta{FetchedAt: time.Now(), Version: "staged"}, "", "  ")
+		require.NoError(t, marshalErr)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, metaFileName), data, 0o600))
+		return dir
+	}
+
+	stagingDir := plantStagingDir(t, stagingPrefix+"planted")
+
+	entries, err := cache.List()
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "real-key", entries[0].Key)
+
+	removed, err := cache.ClearAll()
+	require.NoError(t, err)
+	assert.Equal(t, 1, removed, "ClearAll must count only the real entry, not the staging dir")
+	assert.NoDirExists(t, stagingDir, "ClearAll must still remove staging dirs from disk")
+	assert.NoDirExists(t, cache.Path("real-key"))
+
+	_, err = cache.Set("real-key-2", srcDir, &CacheMeta{FetchedAt: time.Now(), Version: "v1"})
+	require.NoError(t, err)
+
+	staleDir := plantStagingDir(t, stagingPrefix+"stale")
+	require.NoError(t, os.Chtimes(staleDir, time.Now().Add(-2*time.Hour), time.Now().Add(-2*time.Hour)))
+
+	freshDir := plantStagingDir(t, stagingPrefix+"fresh")
+
+	removedCount, err := cache.Cleanup()
+	require.NoError(t, err)
+	assert.Zero(t, removedCount, "Cleanup must not count reaped staging dirs as removed cache entries")
+	assert.NoDirExists(t, staleDir, "Cleanup must reap a stale staging dir")
+	assert.DirExists(t, freshDir, "Cleanup must leave a fresh staging dir alone")
+	assert.DirExists(t, cache.Path("real-key-2"), "Cleanup must not touch a live, non-expired entry")
 }

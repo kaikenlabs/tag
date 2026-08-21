@@ -1,9 +1,16 @@
 package replay
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUT_FilterSecrets_NoSecrets(t *testing.T) {
@@ -72,4 +79,40 @@ func TestUT_FilterSecrets_ReturnsCopy(t *testing.T) {
 func TestUT_Save_WhitespaceSource(t *testing.T) {
 	err := Save("   ", "", nil, nil)
 	assert.ErrorIs(t, err, ErrEmptyTemplateSource)
+}
+
+func TestUT_Save_ConcurrentSameTemplate(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvReplayDir, dir)
+
+	const numWriters = 4
+	const rounds = 5
+
+	payload := make(map[string]any, 200)
+	for i := range 200 {
+		payload[fmt.Sprintf("key_%03d", i)] = strings.Repeat("x", 20)
+	}
+
+	for round := range rounds {
+		var wg sync.WaitGroup
+		errs := make([]error, numWriters)
+		for w := range numWriters {
+			wg.Go(func() {
+				errs[w] = Save("same-template-source", fmt.Sprintf("v%d.%d", round, w), payload, nil)
+			})
+		}
+		wg.Wait()
+
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+
+		templateID := GenerateTemplateID("same-template-source")
+		filePath := filepath.Join(dir, templateID+".json")
+		data, err := os.ReadFile(filePath)
+		require.NoError(t, err)
+
+		var parsed ReplayData
+		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final replay file must be valid JSON", round)
+	}
 }

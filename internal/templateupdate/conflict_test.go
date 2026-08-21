@@ -2,8 +2,11 @@ package templateupdate
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -320,4 +323,36 @@ func TestUT_ConflictStatusFile_WriteMkdirFails(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create "+types.TemplatesDir+" directory")
+}
+
+func TestUT_WriteConflictStatus_ConcurrentWrites(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, types.TemplatesDir), 0o755))
+
+	const numWriters = 4
+	const rounds = 5
+
+	for round := range rounds {
+		var wg sync.WaitGroup
+		errs := make([]error, numWriters)
+		for w := range numWriters {
+			wg.Go(func() {
+				status := NewConflictStatus(&ConflictReport{
+					Conflicts: []ConflictedFile{{Path: fmt.Sprintf("f_%d_%d.go", round, w)}},
+				}, fmt.Sprintf("commit-%d-%d", round, w))
+				errs[w] = WriteConflictStatus(dir, status)
+			})
+		}
+		wg.Wait()
+
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+
+		data, err := os.ReadFile(filepath.Join(dir, types.TemplatesDir, "conflicts.json"))
+		require.NoError(t, err)
+
+		var parsed ConflictStatus
+		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final conflicts.json must be valid JSON", round)
+	}
 }

@@ -203,28 +203,28 @@ func WriteConflictStatus(projectRoot string, status *ConflictStatus) error {
 	data = append(data, '\n')
 
 	target := filepath.Join(tagDir, "conflicts.json")
-	tmp := target + ".tmp"
 
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.CreateTemp(tagDir, "conflicts.json.tmp-*")
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
+	tmp := f.Name()
 
 	if _, err := f.Write(data); err != nil {
 		f.Close()
-		_ = os.Remove(tmp)
+		_ = os.Remove(tmp) //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
 		return fmt.Errorf("write temp file: %w", err)
 	}
 
 	if err := f.Sync(); err != nil {
 		f.Close()
-		_ = os.Remove(tmp)
+		_ = os.Remove(tmp) //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
 		return fmt.Errorf("sync temp file: %w", err)
 	}
 	f.Close()
 
-	if err := os.Rename(tmp, target); err != nil {
-		_ = os.Remove(tmp)
+	if err := os.Rename(tmp, target); err != nil { //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
+		_ = os.Remove(tmp) //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 

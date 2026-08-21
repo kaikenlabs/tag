@@ -43,13 +43,33 @@ func Save(tagDir string, m Manifest) error {
 	}
 
 	target := manifestPath(tagDir)
-	tmp := target + ".tmp"
-	if err := os.WriteFile(tmp, data, types.FileMode); err != nil {
+
+	tmpFile, err := os.CreateTemp(tagDir, filepath.Base(target)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp manifest: %w", err)
+	}
+	tmp := tmpFile.Name()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		_ = os.Remove(tmp) //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
 		return fmt.Errorf("write temp manifest: %w", err)
 	}
 
-	if err := os.Rename(tmp, target); err != nil {
-		_ = os.Remove(tmp)
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmp) //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
+		return fmt.Errorf("write temp manifest: %w", err)
+	}
+
+	// os.CreateTemp creates 0600, but the manifest has always been
+	// world-readable (types.FileMode, 0644) - restore it before publishing.
+	if err := os.Chmod(tmp, types.FileMode); err != nil { //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
+		_ = os.Remove(tmp) //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
+		return fmt.Errorf("chmod temp manifest: %w", err)
+	}
+
+	if err := os.Rename(tmp, target); err != nil { //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
+		_ = os.Remove(tmp) //nolint:gosec // G703: tmp is from os.CreateTemp, not user-controlled
 		return fmt.Errorf("rename manifest: %w", err)
 	}
 	return nil

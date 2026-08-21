@@ -1,8 +1,11 @@
 package history
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,6 +65,39 @@ func TestUT_Manifest_AtomicWrite_OverwritesExisting(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, loaded.Generations, 1)
 	assert.Equal(t, "gen_2_bbb", loaded.Generations[0].ID)
+}
+
+func TestUT_SaveManifest_ConcurrentWrites(t *testing.T) {
+	dir := t.TempDir()
+
+	const numWriters = 4
+	const rounds = 5
+
+	for round := range rounds {
+		var wg sync.WaitGroup
+		errs := make([]error, numWriters)
+		for w := range numWriters {
+			wg.Go(func() {
+				m := Manifest{Generations: []Generation{{ID: fmt.Sprintf("gen_%d_%d", round, w), Command: "generate"}}}
+				errs[w] = Save(dir, m)
+			})
+		}
+		wg.Wait()
+
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+
+		data, err := os.ReadFile(manifestPath(dir))
+		require.NoError(t, err)
+
+		var parsed Manifest
+		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final manifest file must be valid JSON", round)
+	}
+
+	info, err := os.Stat(manifestPath(dir))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "history manifest must remain world-readable, owner-writable")
 }
 
 func TestUT_Manifest_CorruptJSON_ReturnsError(t *testing.T) {
