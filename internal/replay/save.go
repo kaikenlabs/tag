@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -60,31 +61,8 @@ func Save(templateSource, version string, values map[string]any, secrets map[str
 	// Write to file with secure permissions
 	filePath := filepath.Join(replayDir, templateID+".json")
 
-	// Write atomically: write to a uniquely-named temp file then rename, so
-	// concurrent Save calls for the same template never race on one shared
-	// temp path.
-	tmpFile, err := os.CreateTemp(replayDir, templateID+".json.tmp-*")
-	if err != nil {
-		return NewReplayError(templateID, "save", fmt.Errorf("failed to create replay temp file: %w", err))
-	}
-	tempPath := tmpFile.Name()
-
-	if _, err := tmpFile.Write(jsonData); err != nil {
-		tmpFile.Close()
-		_ = os.Remove(tempPath) //nolint:gosec // G703: tempPath is from os.CreateTemp, not user-controlled
+	if err := fileutil.WriteFileAtomic(filePath, jsonData, types.FileModePrivate); err != nil {
 		return NewReplayError(templateID, "save", fmt.Errorf("failed to write replay file: %w", err))
-	}
-
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tempPath) //nolint:gosec // G703: tempPath is from os.CreateTemp, not user-controlled
-		return NewReplayError(templateID, "save", fmt.Errorf("failed to write replay file: %w", err))
-	}
-
-	// Rename temp file to final path (atomic on most systems)
-	if err := os.Rename(tempPath, filePath); err != nil { //nolint:gosec // G703: tempPath is from os.CreateTemp, not user-controlled
-		// Clean up temp file on error
-		_ = os.Remove(tempPath) //nolint:gosec // G703: tempPath is from os.CreateTemp, not user-controlled
-		return NewReplayError(templateID, "save", fmt.Errorf("failed to finalize replay file: %w", err))
 	}
 
 	return nil

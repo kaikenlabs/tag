@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -76,9 +77,11 @@ func TestUT_SaveManifest_ConcurrentWrites(t *testing.T) {
 	for round := range rounds {
 		var wg sync.WaitGroup
 		errs := make([]error, numWriters)
+		candidates := make([]Manifest, numWriters)
 		for w := range numWriters {
+			m := Manifest{Generations: []Generation{{ID: fmt.Sprintf("gen_%d_%d", round, w), Command: "generate"}}}
+			candidates[w] = m
 			wg.Go(func() {
-				m := Manifest{Generations: []Generation{{ID: fmt.Sprintf("gen_%d_%d", round, w), Command: "generate"}}}
 				errs[w] = Save(dir, m)
 			})
 		}
@@ -93,6 +96,15 @@ func TestUT_SaveManifest_ConcurrentWrites(t *testing.T) {
 
 		var parsed Manifest
 		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final manifest file must be valid JSON", round)
+
+		matched := false
+		for _, c := range candidates {
+			if reflect.DeepEqual(parsed, c) {
+				matched = true
+				break
+			}
+		}
+		assert.True(t, matched, "round %d: surviving manifest content must equal exactly one writer's payload, not a mix", round)
 	}
 
 	info, err := os.Stat(manifestPath(dir))

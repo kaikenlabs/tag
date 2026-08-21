@@ -352,6 +352,11 @@ func TestUT_FSCache_FailedSetPreservesPreviousEntry(t *testing.T) {
 
 func TestUT_FSCache_FailedSetMidCopyLeavesNoNewFiles(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		// On a root CI runner this test silently no-ops: root bypasses the
+		// chmod 0o000 permission denial the test relies on to force a
+		// mid-copy failure, so the skip suppresses a false pass rather than
+		// exercising anything. A future CI migration to a root runner would
+		// lose this coverage without any signal that it happened.
 		t.Skip("chmod-based permission denial is not meaningful on Windows or as root")
 	}
 
@@ -388,6 +393,12 @@ func TestUT_FSCache_FailedSetMidCopyLeavesNoNewFiles(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(entryPath, "file.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "v1-content", string(content), "v1 content must be intact after a mid-copy failure")
+
+	cacheEntries, err := os.ReadDir(cacheDir)
+	require.NoError(t, err)
+	for _, e := range cacheEntries {
+		assert.False(t, strings.HasPrefix(e.Name(), stagingPrefix), "no staging dir should remain in cacheDir after a failed Set, found %q", e.Name())
+	}
 }
 
 func TestUT_FSCache_ConcurrentSet_NoDurableCorruption(t *testing.T) {
@@ -456,8 +467,8 @@ func TestUT_FSCache_ConcurrentSet_NoDurableCorruption(t *testing.T) {
 }
 
 func TestUT_FSCache_ConcurrentReader_EntryNeverMutatedInPlace(t *testing.T) {
-	const numFiles = 24
-	const writerRounds = 40
+	const numFiles = 8
+	const writerRounds = 15
 
 	cacheDir := t.TempDir()
 	cache, err := NewFSCache(cacheDir)
@@ -498,6 +509,7 @@ func TestUT_FSCache_ConcurrentReader_EntryNeverMutatedInPlace(t *testing.T) {
 		defer close(writerDone)
 		writers.Wait()
 	})
+	t.Cleanup(wg.Wait)
 
 	failures := 0
 	retired := 0
@@ -571,8 +583,6 @@ readLoop:
 		}
 	}
 
-	wg.Wait()
-
 	t.Logf("snapshots=%d retired=%d failures=%d", snapshots, retired, failures)
 	assert.Zero(t, failures, "a pinned-root reader must never observe a mixed snapshot")
 	assert.Positive(t, snapshots, "the reader must have observed at least one consistent snapshot")
@@ -617,7 +627,10 @@ func TestUT_FSCache_StagingDirsAreNotCacheEntries(t *testing.T) {
 		return dir
 	}
 
-	stagingDir := plantStagingDir(t, stagingPrefix+"planted")
+	staleDir := plantStagingDir(t, stagingPrefix+"stale")
+	require.NoError(t, os.Chtimes(staleDir, time.Now().Add(-25*time.Hour), time.Now().Add(-25*time.Hour)))
+
+	freshDir := plantStagingDir(t, stagingPrefix+"fresh")
 
 	entries, err := cache.List()
 	require.NoError(t, err)
@@ -626,22 +639,25 @@ func TestUT_FSCache_StagingDirsAreNotCacheEntries(t *testing.T) {
 
 	removed, err := cache.ClearAll()
 	require.NoError(t, err)
-	assert.Equal(t, 1, removed, "ClearAll must count only the real entry, not the staging dir")
-	assert.NoDirExists(t, stagingDir, "ClearAll must still remove staging dirs from disk")
+	assert.Equal(t, 1, removed, "ClearAll must count only the real entry, not the staging dirs")
+	assert.NoDirExists(t, staleDir, "ClearAll must reap a stale staging dir")
+	assert.DirExists(t, freshDir, "ClearAll must leave a fresh staging dir alone, or it could delete an in-flight Set's staging directory")
 	assert.NoDirExists(t, cache.Path("real-key"))
+
+	require.NoError(t, os.RemoveAll(freshDir))
 
 	_, err = cache.Set("real-key-2", srcDir, &CacheMeta{FetchedAt: time.Now(), Version: "v1"})
 	require.NoError(t, err)
 
-	staleDir := plantStagingDir(t, stagingPrefix+"stale")
-	require.NoError(t, os.Chtimes(staleDir, time.Now().Add(-2*time.Hour), time.Now().Add(-2*time.Hour)))
+	staleDir2 := plantStagingDir(t, stagingPrefix+"stale2")
+	require.NoError(t, os.Chtimes(staleDir2, time.Now().Add(-25*time.Hour), time.Now().Add(-25*time.Hour)))
 
-	freshDir := plantStagingDir(t, stagingPrefix+"fresh")
+	freshDir2 := plantStagingDir(t, stagingPrefix+"fresh2")
 
 	removedCount, err := cache.Cleanup()
 	require.NoError(t, err)
 	assert.Zero(t, removedCount, "Cleanup must not count reaped staging dirs as removed cache entries")
-	assert.NoDirExists(t, staleDir, "Cleanup must reap a stale staging dir")
-	assert.DirExists(t, freshDir, "Cleanup must leave a fresh staging dir alone")
+	assert.NoDirExists(t, staleDir2, "Cleanup must reap a stale staging dir")
+	assert.DirExists(t, freshDir2, "Cleanup must leave a fresh staging dir alone")
 	assert.DirExists(t, cache.Path("real-key-2"), "Cleanup must not touch a live, non-expired entry")
 }

@@ -96,9 +96,12 @@ func TestUT_Save_ConcurrentSameTemplate(t *testing.T) {
 	for round := range rounds {
 		var wg sync.WaitGroup
 		errs := make([]error, numWriters)
+		versions := make([]string, numWriters)
 		for w := range numWriters {
+			version := fmt.Sprintf("v%d.%d", round, w)
+			versions[w] = version
 			wg.Go(func() {
-				errs[w] = Save("same-template-source", fmt.Sprintf("v%d.%d", round, w), payload, nil)
+				errs[w] = Save("same-template-source", version, payload, nil)
 			})
 		}
 		wg.Wait()
@@ -114,5 +117,9 @@ func TestUT_Save_ConcurrentSameTemplate(t *testing.T) {
 
 		var parsed ReplayData
 		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final replay file must be valid JSON", round)
+
+		assert.Equal(t, "same-template-source", parsed.Template, "round %d", round)
+		assert.Contains(t, versions, parsed.Version, "round %d: surviving version must be exactly one writer's, not a mix", round)
+		assert.Equal(t, payload, parsed.Values, "round %d: surviving values must exactly match one writer's payload, not a mix", round)
 	}
 }

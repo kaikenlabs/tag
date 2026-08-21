@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -74,26 +75,8 @@ func (s *Store) save(reg *Registry) error {
 
 	path := filepath.Join(s.dataDir, registryFile)
 
-	tmpFile, err := os.CreateTemp(s.dataDir, registryFile+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("create temp registry: %w", err)
-	}
-	tempPath := tmpFile.Name()
-
-	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		_ = os.Remove(tempPath) //nolint:gosec // G703: tempPath is from os.CreateTemp, not user-controlled
+	if err := fileutil.WriteFileAtomic(path, data, types.FileModePrivate); err != nil {
 		return fmt.Errorf("write registry: %w", err)
-	}
-
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tempPath) //nolint:gosec // G703: tempPath is from os.CreateTemp, not user-controlled
-		return fmt.Errorf("write registry: %w", err)
-	}
-
-	if err := os.Rename(tempPath, path); err != nil { //nolint:gosec // G703: tempPath is from os.CreateTemp, not user-controlled
-		_ = os.Remove(tempPath) //nolint:gosec // G703: tempPath is from os.CreateTemp, not user-controlled
-		return fmt.Errorf("finalize registry: %w", err)
 	}
 
 	return nil

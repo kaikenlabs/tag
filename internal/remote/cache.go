@@ -29,9 +29,12 @@ const DefaultCacheTTL = 24 * time.Hour
 // entry and must never be surfaced to callers.
 const stagingPrefix = ".staging-"
 
-// staleStagingAge is how long an orphaned staging dir (left behind by a
-// crash between MkdirTemp and rename) is kept before Cleanup reaps it.
-const staleStagingAge = time.Hour
+// staleStagingAge is how long a staging directory is left alone before it is
+// treated as debris from a crashed run. Cleanup judges staleness from the
+// staging root's mtime, which writing into a subdirectory does not refresh,
+// so this has to comfortably exceed the longest plausible copy or a live
+// Set gets its own staging directory deleted mid-flight.
+const staleStagingAge = 24 * time.Hour
 
 // metaFileName is the filename of the metadata file within a cache entry.
 const metaFileName = "_meta.json"
@@ -154,16 +157,11 @@ func (c *FSCache) Set(key, sourcePath string, meta *CacheMeta) (string, error) {
 		return "", &CacheError{Key: key, Op: "set", Message: "cannot create cache base directory", Err: err}
 	}
 
-	stage, err := os.MkdirTemp(c.baseDir, stagingPrefix)
+	stage, err := fileutil.MkdirUnique(c.baseDir, stagingPrefix, types.DirMode)
 	if err != nil {
 		return "", &CacheError{Key: key, Op: "set", Message: "cannot create staging directory", Err: err}
 	}
 	defer os.RemoveAll(stage)
-
-	// MkdirTemp creates 0700; a published cache entry has always been types.DirMode.
-	if err := os.Chmod(stage, types.DirMode); err != nil {
-		return "", &CacheError{Key: key, Op: "set", Message: "cannot chmod staging directory", Err: err}
-	}
 
 	if err := fileutil.CopyDir(sourcePath, stage, types.DirMode); err != nil {
 		return "", &CacheError{Key: key, Op: "set", Message: "copy failed", Err: err}
@@ -205,7 +203,9 @@ func (c *FSCache) commit(stage, final string) error {
 			os.RemoveAll(prev)
 			return nil
 		}
-		_ = os.Rename(prev, final)
+		if rollbackErr := os.Rename(prev, final); rollbackErr != nil {
+			slog.Warn("failed to restore previous cache entry after failed commit", "path", final, "error", rollbackErr)
+		}
 		return err
 	}
 	os.RemoveAll(prev)
@@ -250,6 +250,28 @@ func (c *FSCache) writeMetaTo(path string, meta *CacheMeta) error {
 	return os.WriteFile(path, data, types.FileModePrivate)
 }
 
+// reapIfStaleStaging removes name if it is a staging directory old enough to
+// be crash debris, and reports whether name identifies a staging directory
+// at all — callers use that to skip it from further processing regardless of
+// whether it was actually removed. Cleanup and ClearAll both call this so
+// "stale" means the same thing in both places.
+//
+// A staging directory this old is debris from a run that died between
+// creating it and renaming it into place. A ".prev" one holds the entry
+// that run was replacing; its key is not recoverable from the name, so a
+// refetch is the only way back and dropping it is safe.
+func (c *FSCache) reapIfStaleStaging(entry os.DirEntry) bool {
+	name := entry.Name()
+	if !strings.HasPrefix(name, stagingPrefix) {
+		return false
+	}
+
+	if info, err := entry.Info(); err == nil && time.Since(info.ModTime()) > staleStagingAge {
+		os.RemoveAll(filepath.Join(c.baseDir, name))
+	}
+	return true
+}
+
 // Cleanup removes expired cache entries and returns the count of removed entries.
 func (c *FSCache) Cleanup() (int, error) {
 	entries, err := os.ReadDir(c.baseDir)
@@ -268,14 +290,7 @@ func (c *FSCache) Cleanup() (int, error) {
 
 		key := entry.Name()
 
-		if strings.HasPrefix(key, stagingPrefix) {
-			// A staging dir this old survived a crash between MkdirTemp and
-			// rename; reap it so it doesn't leak disk forever. It was never
-			// a cache entry, so it does not count toward removed.
-			info, infoErr := entry.Info()
-			if infoErr == nil && time.Since(info.ModTime()) > staleStagingAge {
-				os.RemoveAll(filepath.Join(c.baseDir, key))
-			}
+		if c.reapIfStaleStaging(entry) {
 			continue
 		}
 
@@ -349,11 +364,7 @@ func (c *FSCache) ClearAll() (int, error) {
 			continue
 		}
 		key := entry.Name()
-		if strings.HasPrefix(key, stagingPrefix) {
-			// The prefix alone proves TAG wrote this dir, so it is always
-			// safe to remove regardless of readable metadata. It was never
-			// a cache entry, so it does not count toward removed.
-			os.RemoveAll(filepath.Join(c.baseDir, key))
+		if c.reapIfStaleStaging(entry) {
 			continue
 		}
 		// Only remove directories TAG wrote. Since TAG_CACHE_DIR lets an
