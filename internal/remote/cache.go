@@ -15,6 +15,11 @@ import (
 // DefaultCacheDir is the default cache directory relative to user home.
 const DefaultCacheDir = ".tag/cache"
 
+// EnvCacheDir overrides the cache base directory when set to a non-empty
+// absolute path. It is consulted before os.UserHomeDir, so it works in
+// sandboxes/containers where HOME is unset.
+const EnvCacheDir = "TAG_CACHE_DIR"
+
 // DefaultCacheTTL is the default TTL for non-pinned cache entries.
 const DefaultCacheTTL = 24 * time.Hour
 
@@ -55,16 +60,20 @@ type FSCache struct {
 // If baseDir is empty, uses ~/.tag/cache/
 func NewFSCache(baseDir string) (*FSCache, error) {
 	if baseDir == "" {
+		if envDir := os.Getenv(EnvCacheDir); envDir != "" {
+			if !filepath.IsAbs(envDir) {
+				return nil, fmt.Errorf("%s must be an absolute path, got %q", EnvCacheDir, envDir)
+			}
+			baseDir = envDir
+		}
+	}
+
+	if baseDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("cannot determine home directory: %w", err)
 		}
 		baseDir = filepath.Join(home, DefaultCacheDir)
-	}
-
-	// Create cache directory if it doesn't exist
-	if err := os.MkdirAll(baseDir, types.DirMode); err != nil {
-		return nil, fmt.Errorf("cannot create cache directory: %w", err)
 	}
 
 	return &FSCache{
@@ -277,6 +286,14 @@ func (c *FSCache) ClearAll() (int, error) {
 	removed := 0
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+		// Only remove directories TAG wrote. Since TAG_CACHE_DIR lets an
+		// operator point the base anywhere, removing every subdirectory would
+		// turn `cache clear --all` into a recursive delete of whatever that
+		// path happens to contain. Cleanup already skips entries with no
+		// readable metadata for its own reasons; this matches it.
+		if _, statErr := os.Stat(c.metaPath(entry.Name())); statErr != nil {
 			continue
 		}
 		if err := c.Invalidate(entry.Name()); err != nil {

@@ -18,10 +18,18 @@ func TestUT_FSCache_NewFSCache(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, cache)
 
-	// Verify directory was created
-	info, err := os.Stat(cacheDir)
+	assert.NoDirExists(t, cacheDir)
+
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("content"), 0o644))
+
+	cachedPath, err := cache.Set("some-key", srcDir, &CacheMeta{})
 	require.NoError(t, err)
-	assert.True(t, info.IsDir())
+
+	assert.DirExists(t, cacheDir)
+	content, err := os.ReadFile(filepath.Join(cachedPath, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "content", string(content))
 }
 
 func TestUT_FSCache_GetMiss(t *testing.T) {

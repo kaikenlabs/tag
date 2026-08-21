@@ -327,6 +327,19 @@ my-project/
 | `--force` | scaffold | Overwrite existing output |
 | `--format text\|json` | doctor, version, check, diff, cache ls, lib ls, lib search, dialect list, dialect show, template info, template lint, template variables, template graph (also `dot`), generate list, template list, test, generate, extract, undo, undo --list, update, convert cookiecutter, scaffold | Output format (default: `text`). Unknown value = usage error, exit 2 |
 
+## Environment Variables
+
+| Variable | Description |
+|----------|--------------|
+| `TAG_CACHE_DIR` | Override the remote-template cache directory (default `~/.tag/cache`). Must be an absolute path — a relative value is a hard error. |
+| `TAG_REPLAY_DIR` | Override the replay-file directory (default `~/.tag/replay`). Must be an absolute path — a relative value is a hard error. |
+
+Both are read before `$HOME` is resolved, so they work in containers/sandboxes where `$HOME`
+is unset or read-only; leaving either unset keeps today's default path. **Multi-tenant/shared
+deployments must set `TAG_CACHE_DIR` explicitly** — an unset value silently falls back to the
+single shared cache, and with it cross-tenant template disclosure. See reference.md → "Cache
+Management" for details.
+
 ## Pitfalls
 
 - **Gonja, not Jinja2**: No `{% do %}` tag. No `tojson`/`wordwrap`/`batch` filters. TAG registers its own filter set.

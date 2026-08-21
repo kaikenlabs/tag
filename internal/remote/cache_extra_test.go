@@ -20,8 +20,7 @@ func TestUT_FSCacheExtra_NewFSCache_UsesHomeWhenBaseDirEmpty(t *testing.T) {
 
 	expected := filepath.Join(home, DefaultCacheDir)
 	assert.Equal(t, expected, cache.baseDir)
-	_, statErr := os.Stat(expected)
-	require.NoError(t, statErr)
+	assert.NoDirExists(t, expected)
 }
 
 func TestUT_FSCacheExtra_ClearExpired_RemovesOnlyExpiredEntries(t *testing.T) {

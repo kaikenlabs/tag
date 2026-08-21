@@ -737,6 +737,24 @@ pinned and never expires. `cache list --format json` redacts query strings from 
 (`original_ref`/`resolved_url` become `...?[redacted]`) so presigned-URL credentials aren't
 printed; the text table never showed these URLs at all, so it is unaffected.
 
+The cache directory defaults to `~/.tag/cache` and can be overridden with the
+`TAG_CACHE_DIR` environment variable — must be an absolute path, or TAG errors naming the
+variable. It is checked before `$HOME` is resolved, so it also works when `$HOME` is unset
+or unwritable (containers/sandboxes). No directory is created until the first cache write —
+constructing the resolver alone touches nothing on disk. `tag cache clear --all` only removes
+directories TAG itself wrote (identified by a `_meta.json` file), so pointing `TAG_CACHE_DIR`
+at a directory holding other data will not delete that data.
+
+**Multi-tenant deployments** (e.g. a shared service running `tag` on behalf of multiple
+tenants, such as a Backstage scaffolder integration): a missing `TAG_CACHE_DIR` silently
+falls back to the single shared cache, and with it cross-tenant template disclosure — one
+tenant's cached remote template can be served to another. Set `TAG_CACHE_DIR` explicitly per
+tenant and fail the caller's own startup if it is unset.
+
+The replay-file directory defaults to `~/.tag/replay` and follows the identical contract via
+`TAG_REPLAY_DIR`: absolute path or hard error, read before `$HOME` is resolved. See
+[docs/commands/scaffold.md](../docs/commands/scaffold.md#replay-system).
+
 ### Bundle Prerequisites
 
 Bundles and generators can declare a `requires` field — an array of `.tagconfig.json` variable names that must be present and truthy for the generator/bundle to run.

@@ -98,6 +98,13 @@ func FilterSecrets(values map[string]any, secrets map[string]bool) map[string]an
 // getReplayDir returns the path to the replay directory.
 // Default: ~/.tag/replay
 func getReplayDir() (string, error) {
+	if envDir := os.Getenv(EnvReplayDir); envDir != "" {
+		if !filepath.IsAbs(envDir) {
+			return "", fmt.Errorf("%s must be an absolute path, got %q", EnvReplayDir, envDir)
+		}
+		return envDir, nil
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
