@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -43,14 +44,9 @@ func Save(tagDir string, m Manifest) error {
 	}
 
 	target := manifestPath(tagDir)
-	tmp := target + ".tmp"
-	if err := os.WriteFile(tmp, data, types.FileMode); err != nil {
-		return fmt.Errorf("write temp manifest: %w", err)
-	}
 
-	if err := os.Rename(tmp, target); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("rename manifest: %w", err)
+	if err := fileutil.WriteFileAtomic(target, data, types.FileMode); err != nil {
+		return fmt.Errorf("write temp manifest: %w", err)
 	}
 	return nil
 }

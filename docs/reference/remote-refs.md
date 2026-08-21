@@ -221,7 +221,9 @@ rm -rf "$TAG_CACHE_DIR"
 
 `tag cache clear --all` only removes directories TAG itself wrote (identified by a
 `_meta.json` file), so pointing `TAG_CACHE_DIR` at a directory that holds other data will not
-delete that data.
+delete that data. It also leaves alone any `.staging-*` directory less than 24 hours old —
+that's an in-progress cache write (from this or another concurrent `tag` process), not a bug.
+An older `.staging-*` directory is debris from a crashed run and is removed.
 
 ### Cache TTL
 

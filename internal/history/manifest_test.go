@@ -1,8 +1,12 @@
 package history
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,6 +66,50 @@ func TestUT_Manifest_AtomicWrite_OverwritesExisting(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, loaded.Generations, 1)
 	assert.Equal(t, "gen_2_bbb", loaded.Generations[0].ID)
+}
+
+func TestUT_SaveManifest_ConcurrentWrites(t *testing.T) {
+	dir := t.TempDir()
+
+	const numWriters = 4
+	const rounds = 5
+
+	for round := range rounds {
+		var wg sync.WaitGroup
+		errs := make([]error, numWriters)
+		candidates := make([]Manifest, numWriters)
+		for w := range numWriters {
+			m := Manifest{Generations: []Generation{{ID: fmt.Sprintf("gen_%d_%d", round, w), Command: "generate"}}}
+			candidates[w] = m
+			wg.Go(func() {
+				errs[w] = Save(dir, m)
+			})
+		}
+		wg.Wait()
+
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+
+		data, err := os.ReadFile(manifestPath(dir))
+		require.NoError(t, err)
+
+		var parsed Manifest
+		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final manifest file must be valid JSON", round)
+
+		matched := false
+		for _, c := range candidates {
+			if reflect.DeepEqual(parsed, c) {
+				matched = true
+				break
+			}
+		}
+		assert.True(t, matched, "round %d: surviving manifest content must equal exactly one writer's payload, not a mix", round)
+	}
+
+	info, err := os.Stat(manifestPath(dir))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "history manifest must remain world-readable, owner-writable")
 }
 
 func TestUT_Manifest_CorruptJSON_ReturnsError(t *testing.T) {

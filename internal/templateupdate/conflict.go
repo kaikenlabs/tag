@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -203,29 +204,9 @@ func WriteConflictStatus(projectRoot string, status *ConflictStatus) error {
 	data = append(data, '\n')
 
 	target := filepath.Join(tagDir, "conflicts.json")
-	tmp := target + ".tmp"
 
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		_ = os.Remove(tmp)
+	if err := fileutil.WriteFileAtomic(target, data, 0o600); err != nil {
 		return fmt.Errorf("write temp file: %w", err)
-	}
-
-	if err := f.Sync(); err != nil {
-		f.Close()
-		_ = os.Remove(tmp)
-		return fmt.Errorf("sync temp file: %w", err)
-	}
-	f.Close()
-
-	if err := os.Rename(tmp, target); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("rename temp file: %w", err)
 	}
 
 	return nil

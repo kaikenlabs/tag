@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -73,15 +74,9 @@ func (s *Store) save(reg *Registry) error {
 	}
 
 	path := filepath.Join(s.dataDir, registryFile)
-	tempPath := path + ".tmp"
 
-	if err := os.WriteFile(tempPath, data, types.FileModePrivate); err != nil {
+	if err := fileutil.WriteFileAtomic(path, data, types.FileModePrivate); err != nil {
 		return fmt.Errorf("write registry: %w", err)
-	}
-
-	if err := os.Rename(tempPath, path); err != nil {
-		_ = os.Remove(tempPath)
-		return fmt.Errorf("finalize registry: %w", err)
 	}
 
 	return nil

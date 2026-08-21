@@ -2,8 +2,12 @@ package templateupdate
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -320,4 +324,54 @@ func TestUT_ConflictStatusFile_WriteMkdirFails(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create "+types.TemplatesDir+" directory")
+}
+
+func TestUT_WriteConflictStatus_ConcurrentWrites(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, types.TemplatesDir), 0o755))
+
+	const numWriters = 4
+	const rounds = 5
+
+	type candidate struct {
+		commit          string
+		conflictedFiles []string
+	}
+
+	for round := range rounds {
+		var wg sync.WaitGroup
+		errs := make([]error, numWriters)
+		candidates := make([]candidate, numWriters)
+		for w := range numWriters {
+			commit := fmt.Sprintf("commit-%d-%d", round, w)
+			conflictedFiles := []string{fmt.Sprintf("f_%d_%d.go", round, w)}
+			candidates[w] = candidate{commit: commit, conflictedFiles: conflictedFiles}
+			wg.Go(func() {
+				status := NewConflictStatus(&ConflictReport{
+					Conflicts: []ConflictedFile{{Path: conflictedFiles[0]}},
+				}, commit)
+				errs[w] = WriteConflictStatus(dir, status)
+			})
+		}
+		wg.Wait()
+
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+
+		data, err := os.ReadFile(filepath.Join(dir, types.TemplatesDir, "conflicts.json"))
+		require.NoError(t, err)
+
+		var parsed ConflictStatus
+		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final conflicts.json must be valid JSON", round)
+
+		matched := false
+		for _, c := range candidates {
+			if parsed.UpdateCommit == c.commit && reflect.DeepEqual(parsed.ConflictedFiles, c.conflictedFiles) {
+				matched = true
+				break
+			}
+		}
+		assert.True(t, matched, "round %d: surviving conflict status must equal exactly one writer's payload, not a mix", round)
+	}
 }

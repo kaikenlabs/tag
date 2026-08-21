@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/types"
 )
 
@@ -60,17 +61,8 @@ func Save(templateSource, version string, values map[string]any, secrets map[str
 	// Write to file with secure permissions
 	filePath := filepath.Join(replayDir, templateID+".json")
 
-	// Write atomically: write to temp file then rename
-	tempPath := filePath + ".tmp"
-	if err := os.WriteFile(tempPath, jsonData, types.FileModePrivate); err != nil {
+	if err := fileutil.WriteFileAtomic(filePath, jsonData, types.FileModePrivate); err != nil {
 		return NewReplayError(templateID, "save", fmt.Errorf("failed to write replay file: %w", err))
-	}
-
-	// Rename temp file to final path (atomic on most systems)
-	if err := os.Rename(tempPath, filePath); err != nil {
-		// Clean up temp file on error
-		_ = os.Remove(tempPath)
-		return NewReplayError(templateID, "save", fmt.Errorf("failed to finalize replay file: %w", err))
 	}
 
 	return nil

@@ -37,7 +37,7 @@ All ten open questions are resolved; nothing below blocks implementation.
 | B2 | Error output undocumented | **Holds — worst gap** | For `scaffold`/`info`, stdout is **zero bytes** and stderr gets a timestamped slog line (`main.go:79`). **Not universal** ⁽ᶜ⁾: `check`, `generate`, `undo`, `update` write a success-shaped document *then* exit non-zero (`generate.go:256-268`, `check.go:72-81`, `undo.go:232`, `update_template.go:285`). Any universal handler must not append a second document. |
 | B2b | Exit codes | **Caveat** | Table exists (`pkg/app/errors.go:8-14`: 0/1/2/3/130) but `ExitNotFound=3` is used at 4 sites only — not-found, auth-failure and bad-path **all return 1**. |
 | B2c | Existing types support a code | **Holds** | 12 sentinels + 18 typed errors. `ErrAuthRequired` **already exists**, with `AuthError.Is` mapping onto it ⁽ᶜ⁾ (`remote/errors.go:14`, `:101`) — what is missing is a *serialized* code, not the sentinel. Some sites flatten with `%s`, severing the chain (`library.go:301-307`). |
-| C1 | Cache can corrupt; locking? | **Holds — no locking at all** | `FSCache.Set` does `RemoveAll` → `MkdirAll` → `CopyDir` **in place** (`remote/cache.go:129-139`). Zero locks in `internal/remote`; floating refs always re-`Set` (`remote.go:77`). Correction ⁽ᶜ⁾: replay/library are **not** a safe counter-example — both use a fixed `<file>.tmp` (`replay/save.go:64`, `library/registry.go:75`), so same-ref saves race; `registry.go:29-32` documents itself process-unsafe. |
+| C1 | Cache can corrupt; locking? | **Fixed by #397** — `FSCache.Set` now builds each entry in a `.staging-*` dir and publishes via rename; replay/library/history/conflict-status writers all use unique temp names + `fileutil.WriteFileAtomic`. Originally: **Holds — no locking at all**. `FSCache.Set` did `RemoveAll` → `MkdirAll` → `CopyDir` **in place** (`remote/cache.go:129-139`). Zero locks in `internal/remote`; floating refs always re-`Set` (`remote.go:77`). Correction ⁽ᶜ⁾: replay/library are **not** a safe counter-example — both use a fixed `<file>.tmp` (`replay/save.go:64`, `library/registry.go:75`), so same-ref saves race; `registry.go:29-32` documents itself process-unsafe. |
 | C2 | Paths overridable | **Fails for the ones that matter** | `--path`/`--shared-path`/`--bundle-path` have flags + `TAG_*` env (`flags.go:247-264`). **Cache and replay have neither and ignore XDG** (`remote/cache.go:16,58`; `replay/save.go:100-105`). |
 | C3 | `--format json` implies `--no-save` | **Fails** | `jsonMode` feeds `NoInput` only (`flags.go:345`); `NoSave` reads its flag (`:348`). A `--values --format json` run wrote `~/.tag/replay/`. Secrets *are* stripped. |
 | C4 | TTY/`$HOME` at startup | **Caveat** | Startup is clean (`main.go:37-48`); TTY probes lazy and fail safe. But `NewResolver()` **eagerly `MkdirAll`s `~/.tag/cache`** (`remote/cache.go:66`) before knowing the ref is local. |
@@ -67,7 +67,7 @@ Total ≈ **4 days**. npm packaging is out of scope per §0.
 | 6 | Add `--no-library` (pairs with existing `--no-save`) | **~3h** | No (opt-in) | CI, sandboxes, anyone who does not want a scaffold mutating global state |
 | 7 | Print `prompt` in the **text** view of `template info` | **~1h** | Golden fixture changes — deliberate | Every CLI user: labels are currently invisible |
 | 8 | JSON error document **on stdout**, human line retained on stderr | **~0.5–1 day** (info+scaffold) | Yes — stdout is no longer empty on failure | Every scripted consumer |
-| 9 | Atomic cache `Set` (unique temp + `os.Rename`); fix the fixed-`.tmp` races in replay/library | **~6h** | No | Anyone running two `tag` processes at once |
+| 9 | ~~Atomic cache `Set` (unique temp + `os.Rename`); fix the fixed-`.tmp` races in replay/library~~ **Done (#397)** | **~6h** | No | Anyone running two `tag` processes at once |
 
 **Item 1 first** because §0's cache isolation cannot be deployed without it.
 
@@ -153,7 +153,7 @@ Initial codes from existing sentinels: `template_not_found`, `auth_required`, `v
 
 | Item | Trigger |
 |---|---|
-| Cache locking (flock) | Item 6 proves insufficient under real load |
+| Cache locking (flock) | Item 6 proves insufficient under real load. Note #397 removed the *corruption* case: `FSCache.Set` now stages and renames, so concurrent cache writes are last-writer-wins with complete entries. Locking the cache now buys efficiency (avoiding duplicate fetches), not correctness. The library registry's load-modify-save cycle is a separate, still-open correctness gap — tracked as #401. |
 | Credential-aware cache keys | Per-tenant directories (§0) prove insufficient — e.g. one tenant serving several credential scopes |
 | TAG-side `--allow-ref` enforcement | A second, non-Backstage caller appears, or the action-layer allowlist is bypassed |
 | npm packaging (`@kaikenlabs/tag-cli`) | Node users outside this integration ask for it — 3–5 days, six packages, and needs the `tag upgrade` conflict resolved |

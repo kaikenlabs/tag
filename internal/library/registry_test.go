@@ -1,8 +1,12 @@
 package library
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,21 +106,6 @@ func TestUT_SaveLoad_RoundTrip(t *testing.T) {
 	assert.Equal(t, "cookiecutter", django.ConvertedFrom)
 }
 
-func TestUT_SaveRegistry_AtomicWrite(t *testing.T) {
-	// Verify no .tmp file is left behind after successful save
-	dataDir := t.TempDir()
-	reg := &Registry{Entries: map[string]*Entry{
-		"test": {Name: "test", Source: "local"},
-	}}
-
-	err := newStore(dataDir).save(reg)
-	require.NoError(t, err)
-
-	tmpPath := filepath.Join(dataDir, registryFile+".tmp")
-	_, err = os.Stat(tmpPath)
-	assert.True(t, os.IsNotExist(err), "temp file should not exist after successful save")
-}
-
 func TestUT_SaveRegistry_FilePermissions(t *testing.T) {
 	dataDir := t.TempDir()
 	reg := &Registry{Entries: make(map[string]*Entry)}
@@ -128,4 +117,51 @@ func TestUT_SaveRegistry_FilePermissions(t *testing.T) {
 	require.NoError(t, err)
 	// File should be owner-only readable (0600)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
+func TestUT_SaveRegistry_ConcurrentWrites(t *testing.T) {
+	dataDir := t.TempDir()
+	store := newStore(dataDir)
+
+	const numWriters = 4
+	const rounds = 5
+
+	for round := range rounds {
+		var wg sync.WaitGroup
+		errs := make([]error, numWriters)
+		candidates := make([]*Registry, numWriters)
+		for w := range numWriters {
+			entryName := fmt.Sprintf("entry-%d-%d", round, w)
+			reg := &Registry{
+				Version: registryVersion,
+				Entries: map[string]*Entry{
+					entryName: {Name: entryName, Source: "local"},
+				},
+			}
+			candidates[w] = reg
+			wg.Go(func() {
+				errs[w] = store.save(reg)
+			})
+		}
+		wg.Wait()
+
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+
+		data, err := os.ReadFile(filepath.Join(dataDir, registryFile))
+		require.NoError(t, err)
+
+		var parsed Registry
+		require.NoError(t, json.Unmarshal(data, &parsed), "round %d: final registry file must be valid JSON", round)
+
+		matched := false
+		for _, c := range candidates {
+			if reflect.DeepEqual(parsed, *c) {
+				matched = true
+				break
+			}
+		}
+		assert.True(t, matched, "round %d: surviving registry content must equal exactly one writer's payload, not a mix", round)
+	}
 }
