@@ -87,7 +87,7 @@ tag generate handler UserAuth
 | `tag template init` | Initialize TAG in a project |
 | `tag template new generator <name>` | Create a new generator |
 | `tag template new bundle <name>` | Create a new bundle |
-| `tag template info <template>` | Show template metadata (`--format json`) |
+| `tag template info <template>` | Show template metadata |
 | `tag template list` | List available generators and bundles |
 | `tag template variables` | Audit variables across templates |
 | `tag template graph` | Visualize generator dependencies |
@@ -96,6 +96,8 @@ tag generate handler UserAuth
 | `tag test [template-dir]` | Matrix-test all boolean variable combinations |
 | `tag version [--check]` | Print version, optionally check for updates |
 | `tag completion <shell>` | Output shell completion script |
+
+Most commands accept `--format json` for machine-readable output. See [JSON output shapes](.skills/reference.md#json-output-shapes).
 
 ## Documentation
 
