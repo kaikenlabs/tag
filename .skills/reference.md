@@ -743,7 +743,10 @@ variable. It is checked before `$HOME` is resolved, so it also works when `$HOME
 or unwritable (containers/sandboxes). No directory is created until the first cache write —
 constructing the resolver alone touches nothing on disk. `tag cache clear --all` only removes
 directories TAG itself wrote (identified by a `_meta.json` file), so pointing `TAG_CACHE_DIR`
-at a directory holding other data will not delete that data.
+at a directory holding other data will not delete that data. It also leaves alone any
+`.staging-*` directory less than 24 hours old — that's an in-progress cache write (from this or
+another concurrent `tag` process), not a bug. An older `.staging-*` directory is debris from a
+crashed run and is removed.
 
 **Multi-tenant deployments** (e.g. a shared service running `tag` on behalf of multiple
 tenants, such as a Backstage scaffolder integration): a missing `TAG_CACHE_DIR` silently
