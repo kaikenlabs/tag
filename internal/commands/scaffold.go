@@ -33,6 +33,14 @@ import (
 // about JSON mode pass on a broken tree.
 var isTTY = scaffold.IsTTY
 
+// newPrompter is a package var so tests can substitute a prompter that fails
+// the test if it is ever consulted. Asserting on a return value cannot
+// distinguish "skipped the prompt" from "prompted and the prompt errored" —
+// both of these call sites collapse a prompt failure into the same answer they
+// give in non-interactive mode, which is precisely how a JSON-mode regression
+// would hide.
+var newPrompter = func() scaffold.Prompter { return scaffold.NewInteractivePrompter() }
+
 // nonInteractive reports whether scaffold must run without prompting: the
 // caller asked for it explicitly, JSON output has no terminal to prompt on,
 // or stdin isn't a terminal to prompt through in the first place.
@@ -229,14 +237,11 @@ func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.En
 		return app.Errorf("invalid meta flag: %w", err)
 	}
 
-	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
+	opts := buildScaffoldOpts(c, templateDir, projectName, meta, jsonMode)
 	opts.TemplateRef = entry.Source
 	opts.TemplateName = entry.Name
 	opts.IsRemote = false
 	opts.SkipGeneratorCopy = true // generators resolve from library
-	if jsonMode {
-		opts.NoInput = true
-	}
 
 	return runScaffold(c, opts, jsonMode, func(*scaffold.CookiecutterDetectedError) error {
 		return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", entry.Name, entry.Name)
@@ -286,7 +291,7 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool) error {
 	isRemote := !remote.IsLocal(templateRef)
 
 	// Build options
-	opts := buildScaffoldOpts(c, templateDir, projectName, meta)
+	opts := buildScaffoldOpts(c, templateDir, projectName, meta, jsonMode)
 	opts.TemplateRef = templateRef
 	opts.IsRemote = isRemote
 	if isRemote {
@@ -348,7 +353,7 @@ func resolveAddToLib(c *cli.Context, templateDir string, jsonMode bool) bool {
 		return false
 	}
 
-	prompter := scaffold.NewInteractivePrompter()
+	prompter := newPrompter()
 	add, err := prompter.Confirm("Add template to library? (enables generator resolution without copying .tag/)", false)
 	if err != nil {
 		return false
@@ -444,7 +449,7 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 			templateRef)
 	}
 
-	prompter := scaffold.NewInteractivePrompter()
+	prompter := newPrompter()
 
 	destination, err := promptForConversion(prompter, templateRef)
 	if err != nil {
