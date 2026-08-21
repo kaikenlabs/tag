@@ -30,7 +30,7 @@ func populateCache(t *testing.T, cacheDir, key string) {
 	}
 	metaData, err := json.Marshal(meta)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(entryDir, ".meta.json"), metaData, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(entryDir, "_meta.json"), metaData, 0o644))
 }
 
 func TestUT_CacheListAction_EmptyCache(t *testing.T) {
@@ -126,7 +126,9 @@ func TestUT_CacheClearAction_ExpiredOnly(t *testing.T) {
 	}
 	metaData, err := json.Marshal(meta)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(entryDir, ".meta.json"), metaData, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(entryDir, "_meta.json"), metaData, 0o644))
+
+	populateCache(t, cacheDir, "fresh-entry")
 
 	t.Setenv("HOME", homeDir)
 
@@ -141,6 +143,11 @@ func TestUT_CacheClearAction_ExpiredOnly(t *testing.T) {
 	err = cmd.Action(ctx)
 	require.NoError(t, err)
 
-	out := buf.String()
-	assert.Contains(t, out, "Removed")
+	// "Removed" alone is vacuous: the message is always "Removed %d cached
+	// template(s)", so it passed when nothing was removed — which is exactly
+	// what happened while the fixture wrote the wrong metadata filename. The
+	// surviving fresh entry is what makes this test about ExpiredOnly.
+	assert.Contains(t, buf.String(), "Removed 1 cached template(s)")
+	assert.NoDirExists(t, entryDir)
+	assert.DirExists(t, filepath.Join(cacheDir, "fresh-entry"))
 }

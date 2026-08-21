@@ -199,3 +199,33 @@ func TestUT_Resolver_Construction_CreatesNoCacheDir(t *testing.T) {
 	after := listTree(t, home)
 	assert.Equal(t, before, after, "HOME tree must be unchanged")
 }
+
+// TestUT_FSCache_ClearAll_OnlyRemovesCacheEntries pins the blast radius of
+// `tag cache clear --all`. TAG_CACHE_DIR lets an operator point the base at a
+// directory holding unrelated data, so ClearAll must remove only entries TAG
+// itself wrote. The unrelated-directory assertion is the point; the cache
+// entry and the return count are its positive control.
+func TestUT_FSCache_ClearAll_OnlyRemovesCacheEntries(t *testing.T) {
+	base := t.TempDir()
+	cache, err := NewFSCache(base)
+	require.NoError(t, err)
+
+	src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(src, "f.txt"), []byte("cached"), 0o644))
+	_, err = cache.Set("real-entry", src, &CacheMeta{Version: "v1"})
+	require.NoError(t, err)
+
+	bystander := filepath.Join(base, "not-a-cache-entry")
+	require.NoError(t, os.MkdirAll(bystander, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(bystander, "important.txt"), []byte("keep me"), 0o644))
+
+	removed, err := cache.ClearAll()
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, removed)
+	assert.NoDirExists(t, filepath.Join(base, "real-entry"))
+
+	kept, err := os.ReadFile(filepath.Join(bystander, "important.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "keep me", string(kept))
+}

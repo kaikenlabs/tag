@@ -249,7 +249,7 @@ Variables are resolved in this order (highest priority first):
 
 ## Replay System
 
-TAG automatically saves your inputs after a successful scaffold (unless `--no-save` is used). Replay files are stored in `~/.tag/replay/`, or under the directory named by the `TAG_REPLAY_DIR` environment variable if set (must be an absolute path). `TAG_REPLAY_DIR` is checked before `$HOME` is resolved, so it also works when `$HOME` is unset or unwritable (containers/sandboxes).
+TAG automatically saves your inputs after a successful scaffold (unless `--no-save` is used). Replay files are stored in `~/.tag/replay/`, or under the directory named by the `TAG_REPLAY_DIR` environment variable if set — a relative value is a hard error. `TAG_REPLAY_DIR` is checked before `$HOME` is resolved, so it also works when `$HOME` is unset or unwritable (containers/sandboxes). If `$HOME` cannot be resolved and `TAG_REPLAY_DIR` is unset, replay saving warns instead of failing the scaffold — set `TAG_REPLAY_DIR` to silence the warning.
 
 The replay system is useful for:
 - Creating multiple projects with similar configuration
@@ -415,6 +415,12 @@ Removed flag aliases: `-tp` (use `--path`), `-sp` (use `--shared-path`), `-bp` (
 | `GITHUB_TOKEN` | Authentication token for GitHub remote templates |
 | `GITLAB_TOKEN` | Authentication token for GitLab remote templates |
 | `BITBUCKET_TOKEN` | Authentication token for Bitbucket remote templates |
+| `TAG_CACHE_DIR` | Override the remote-template cache directory (default `~/.tag/cache`). Must be an absolute path — a relative value is a hard error. See [Cache Location](../reference/remote-refs.md#cache-location) |
+| `TAG_REPLAY_DIR` | Override the replay-file directory (default `~/.tag/replay`). Must be an absolute path — a relative value is a hard error. See [Replay System](#replay-system) above |
+
+Both `TAG_CACHE_DIR` and `TAG_REPLAY_DIR` are read before `$HOME` is resolved, so they also work when `$HOME` is unset or unwritable (containers/sandboxes). Leaving either unset keeps today's default path — there is no silent relocation for existing users.
+
+**Multi-tenant / shared deployments** (e.g. a service running `tag` on behalf of multiple tenants, such as a Backstage scaffolder integration): a missing `TAG_CACHE_DIR` silently falls back to the single shared cache, and with it cross-tenant template disclosure — one tenant's cached remote template can be served to another. A multi-tenant caller must set `TAG_CACHE_DIR` explicitly and should fail its own startup if it is unset.
 
 ## See Also
 

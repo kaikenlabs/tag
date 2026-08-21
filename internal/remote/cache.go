@@ -288,6 +288,14 @@ func (c *FSCache) ClearAll() (int, error) {
 		if !entry.IsDir() {
 			continue
 		}
+		// Only remove directories TAG wrote. Since TAG_CACHE_DIR lets an
+		// operator point the base anywhere, removing every subdirectory would
+		// turn `cache clear --all` into a recursive delete of whatever that
+		// path happens to contain. Cleanup already skips entries with no
+		// readable metadata for its own reasons; this matches it.
+		if _, statErr := os.Stat(c.metaPath(entry.Name())); statErr != nil {
+			continue
+		}
 		if err := c.Invalidate(entry.Name()); err != nil {
 			return removed, err
 		}

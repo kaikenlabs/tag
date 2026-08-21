@@ -195,6 +195,16 @@ Remote templates are cached locally to avoid repeated downloads.
 └── _url_a1b2c3d4e5f6/      # URL-based (hashed)
 ```
 
+Override the cache directory with the `TAG_CACHE_DIR` environment variable — it must be an
+absolute path, or TAG errors naming the variable. It's read before `$HOME` is resolved, so it
+also works in containers/sandboxes where `$HOME` is unset or unwritable, and it isn't created
+until the first cache write (constructing a resolver alone touches nothing on disk).
+
+**Multi-tenant / shared deployments**: a missing `TAG_CACHE_DIR` silently restores the single
+shared cache, which means one tenant's cached template can be served to another — cross-tenant
+template disclosure. A multi-tenant caller (e.g. a Backstage scaffolder integration) must set
+`TAG_CACHE_DIR` explicitly and should fail its own startup if it is unset.
+
 ### Cache Management
 
 **Force refresh:**
@@ -205,7 +215,13 @@ tag scaffold gh:user/template --update
 **Clear all cache:**
 ```bash
 rm -rf ~/.tag/cache/
+# or, if TAG_CACHE_DIR is set:
+rm -rf "$TAG_CACHE_DIR"
 ```
+
+`tag cache clear --all` only removes directories TAG itself wrote (identified by a
+`_meta.json` file), so pointing `TAG_CACHE_DIR` at a directory that holds other data will not
+delete that data.
 
 ### Cache TTL
 

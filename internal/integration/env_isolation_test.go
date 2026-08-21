@@ -100,6 +100,7 @@ func TestIT_CacheLs_HonoursCacheDirEnv(t *testing.T) {
 		defer cancel()
 
 		workDir := t.TempDir()
+		isolatedHome := t.TempDir()
 		cacheDir := filepath.Join(workDir, "cache")
 		entryDir := filepath.Join(cacheDir, "my-template-key")
 		require.NoError(t, os.MkdirAll(entryDir, 0o750))
@@ -113,25 +114,81 @@ func TestIT_CacheLs_HonoursCacheDirEnv(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(entryDir, "_meta.json"), metaData, 0o644))
 
 		stdout, stderr, runErr := runTagSubprocessEnv(t, ctx, workDir,
-			[]string{"TAG_CACHE_DIR=" + cacheDir},
+			[]string{"TAG_CACHE_DIR=" + cacheDir, "HOME=" + isolatedHome},
 			"cache", "ls")
 		require.NoError(t, runErr, "stdout=%s stderr=%s", stdout, stderr)
 		assert.Contains(t, string(stdout), "my-template-key")
 	})
 
+	// The absent-dir subtest must isolate HOME. Its only feature-specific
+	// assertion is the empty listing, and a pre-#389 binary against an empty
+	// ~/.tag/cache prints exactly the same bytes — so without an isolated HOME
+	// this passes on a reverted tree on any machine with a cold cache, which
+	// is the default on CI.
 	t.Run("absent cache dir prints empty and creates nothing", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		workDir := t.TempDir()
+		isolatedHome := t.TempDir()
 		cacheDir := filepath.Join(workDir, "does-not-exist", "cache")
 
+		seededHomeCache := filepath.Join(isolatedHome, ".tag", "cache", "home-cache-entry")
+		require.NoError(t, os.MkdirAll(seededHomeCache, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(seededHomeCache, "_meta.json"),
+			[]byte(`{"original_ref":"gh:x/y","fetched_at":"2026-01-01T00:00:00Z"}`), 0o644))
+
 		stdout, stderr, runErr := runTagSubprocessEnv(t, ctx, workDir,
-			[]string{"TAG_CACHE_DIR=" + cacheDir},
+			[]string{"TAG_CACHE_DIR=" + cacheDir, "HOME=" + isolatedHome},
 			"cache", "ls")
 		require.NoError(t, runErr, "stdout=%s stderr=%s", stdout, stderr)
 		assert.Equal(t, "No cached templates.\n", string(stdout))
 
 		assert.NoDirExists(t, cacheDir)
+		assert.DirExists(t, seededHomeCache)
+	})
+
+	// Proves runTagSubprocessEnv's bare-"KEY" force-unset actually removes an
+	// inherited value: the parent process exports TAG_CACHE_DIR pointing at a
+	// seeded cache, and the child must not see it.
+	t.Run("force-unset drops an inherited TAG_CACHE_DIR", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		workDir := t.TempDir()
+		isolatedHome := t.TempDir()
+		inheritedCache := filepath.Join(workDir, "inherited")
+		entryDir := filepath.Join(inheritedCache, "inherited-key")
+		require.NoError(t, os.MkdirAll(entryDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(entryDir, "_meta.json"),
+			[]byte(`{"original_ref":"gh:x/y","fetched_at":"2026-01-01T00:00:00Z"}`), 0o644))
+
+		t.Setenv("TAG_CACHE_DIR", inheritedCache)
+
+		seen, stderr, runErr := runTagSubprocessEnv(t, ctx, workDir,
+			[]string{"TAG_CACHE_DIR=" + inheritedCache, "HOME=" + isolatedHome},
+			"cache", "ls")
+		require.NoError(t, runErr, "stderr=%s", stderr)
+		require.Contains(t, string(seen), "inherited-key", "control: the child sees it when passed")
+
+		hidden, stderr, runErr := runTagSubprocessEnv(t, ctx, workDir,
+			[]string{"TAG_CACHE_DIR", "HOME=" + isolatedHome},
+			"cache", "ls")
+		require.NoError(t, runErr, "stderr=%s", stderr)
+		assert.Equal(t, "No cached templates.\n", string(hidden))
+	})
+
+	t.Run("relative TAG_CACHE_DIR fails loudly at the CLI boundary", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		workDir := t.TempDir()
+
+		stdout, stderr, runErr := runTagSubprocessEnv(t, ctx, workDir,
+			[]string{"TAG_CACHE_DIR=relative/cache", "HOME=" + t.TempDir()},
+			"cache", "ls")
+		require.Error(t, runErr, "stdout=%s", stdout)
+		assert.Contains(t, string(stdout)+string(stderr), "TAG_CACHE_DIR")
+		assert.NoDirExists(t, filepath.Join(workDir, "relative"))
 	})
 }
