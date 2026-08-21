@@ -60,7 +60,7 @@ func TestUT_BuildScaffoldOpts_AllFlagsMapped(t *testing.T) {
 	})
 
 	meta := map[string]string{"key": "val"}
-	opts := buildScaffoldOpts(ctx, "/tmpl", "myproject", meta)
+	opts := buildScaffoldOpts(ctx, "/tmpl", "myproject", meta, false)
 
 	assert.Equal(t, "/tmpl", opts.TemplateDir)
 	assert.Equal(t, "/out", opts.OutputDir)
@@ -82,7 +82,7 @@ func TestUT_BuildScaffoldOpts_Defaults(t *testing.T) {
 	t.Parallel()
 	ctx := newScaffoldCLIContext(t, nil)
 
-	opts := buildScaffoldOpts(ctx, "/tmpl", "proj", nil)
+	opts := buildScaffoldOpts(ctx, "/tmpl", "proj", nil, false)
 
 	assert.Equal(t, ".", opts.OutputDir)
 	assert.False(t, opts.NoInput)

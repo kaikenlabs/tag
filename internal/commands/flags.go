@@ -329,14 +329,20 @@ func commonScaffoldFlags() []cli.Flag {
 
 // buildScaffoldOpts reads common flags from the CLI context and returns a scaffold.Options
 // with all shared fields populated. Callers set only the differing fields (TemplateRef, IsRemote).
-func buildScaffoldOpts(c *cli.Context, templateDir, projectName string, meta map[string]string) scaffold.Options {
+//
+// jsonMode forces NoInput. That decision lives here rather than at the call
+// sites so it has exactly one definition and can be asserted directly on the
+// returned struct: GetPrompter already falls back to NoopPrompter whenever
+// !IsTTY(), and tests never have a TTY, so no assertion about prompter
+// behaviour can distinguish this being wired up from it being absent.
+func buildScaffoldOpts(c *cli.Context, templateDir, projectName string, meta map[string]string, jsonMode bool) scaffold.Options {
 	return scaffold.Options{
 		TemplateDir:          templateDir,
 		OutputDir:            c.String("output"),
 		ProjectName:          projectName,
 		ValuesFile:           c.String("values"),
 		Meta:                 meta,
-		NoInput:              c.Bool("no-input"),
+		NoInput:              c.Bool("no-input") || jsonMode,
 		Force:                c.Bool("force"),
 		Replay:               c.Bool("replay"),
 		NoSave:               c.Bool("no-save"),

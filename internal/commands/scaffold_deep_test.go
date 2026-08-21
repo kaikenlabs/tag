@@ -374,7 +374,7 @@ func TestUT_BuildScaffoldOpts_PopulatesFields(t *testing.T) {
 	})
 
 	meta := map[string]string{"key": "val"}
-	opts := buildScaffoldOpts(ctx, templateDir, "myproj", meta)
+	opts := buildScaffoldOpts(ctx, templateDir, "myproj", meta, false)
 
 	assert.Equal(t, templateDir, opts.TemplateDir)
 	assert.Equal(t, "myproj", opts.ProjectName)
