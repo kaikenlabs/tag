@@ -264,6 +264,7 @@ func TestUT_JSONErrorDoc_ScopedToTwoCommands(t *testing.T) {
 	searchBaseURL = srv.URL
 	t.Cleanup(func() { searchBaseURL = originalSearchBaseURL })
 
+	saw := make(map[string]bool, len(jsonErrorScopedCommands))
 	for _, fc := range cmds {
 		t.Run(fc.name(), func(t *testing.T) {
 			dir := t.TempDir()
@@ -285,10 +286,21 @@ func TestUT_JSONErrorDoc_ScopedToTwoCommands(t *testing.T) {
 				return
 			}
 			if _, hasError := m["error"]; hasError {
+				saw[fc.name()] = true
 				assert.True(t, jsonErrorScopedCommands[fc.name()],
 					"%v produced a top-level 'error' key but is not one of the two scoped commands", fc.name())
 			}
 		})
+	}
+
+	// The negative half above is vacuously true if NO command emits an error
+	// document — deleting the withJSONErrorDoc wiring from both commands leaves
+	// every subtest green, because the `hasError` guard simply never fires.
+	// This is the same vacuous direction the sibling version_keys_test.go had
+	// to close; the census only means something with both halves present.
+	for name := range jsonErrorScopedCommands {
+		assert.True(t, saw[name],
+			"%v is a scoped command but produced no error document — the wrapper is not wired up", name)
 	}
 }
 
@@ -442,6 +454,11 @@ func TestUT_JSONUsageError_ParseFailureEmitsOneDocument(t *testing.T) {
 
 			assert.Equal(t, codeUsage, doc.Error.Code)
 			assert.NotEmpty(t, doc.Error.Message)
+			// exit_code must be asserted here specifically: this is the one
+			// document whose exit code does NOT come from an *app.CommandError
+			// (a raw urfave parse error carries none), so it is the only place
+			// exitCodeOf's fallback is load-bearing.
+			assert.Equal(t, app.ExitGeneral, doc.Error.ExitCode)
 			assert.NotContains(t, out.String(), "Incorrect Usage",
 				"urfave's help dump must not reach stdout in JSON mode")
 			assert.Contains(t, errOut.String(), "tag error: ")
@@ -464,4 +481,92 @@ func TestUT_JSONUsageError_TextModeKeepsUrfaveOutput(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, out.String(), "Incorrect Usage: flag provided but not defined: -bogus")
 	assert.Contains(t, out.String(), "tag template info")
+}
+
+// TestUT_JSONUsageError_TextArgvIsNotMistakenForJSON pins the arity rule in
+// jsonRequestedInArgs. Both rows contain the literal tokens "--format" and
+// "json" while requesting TEXT, so a scan that merely greps argv flips them to
+// JSON and silently changes text-mode output:
+//
+//   - --output takes a value, so it swallows the following --format; the flag
+//     package would never see a format flag at all.
+//   - everything after "--" is positional by definition.
+func TestUT_JSONUsageError_TextArgvIsNotMistakenForJSON(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		argv []string
+	}{
+		{"--format is the value of --output", []string{"tag", "scaffold", "--bogus", "--output", "--format", "json"}},
+		{"after the -- separator", []string{"tag", "template", "info", "--bogus", "--", "--format", "json"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testApp, out, _ := newJSONErrorApp(t)
+			require.Error(t, testApp.Run(tt.argv))
+
+			assert.Contains(t, out.String(), "Incorrect Usage:",
+				"a text-mode parse failure must still get urfave's own output")
+			var m map[string]any
+			assert.Error(t, json.Unmarshal(out.Bytes(), &m),
+				"stdout must not be a JSON document when JSON was never requested")
+		})
+	}
+}
+
+// TestUT_JSONErrorDoc_UnknownFlagCodeIsStableAcrossPlacement pins the fix for a
+// contract defect: the same typo reported two different machine codes
+// depending on where it sat. A leading bad flag is rejected by urfave before
+// the action runs and reaches the OnUsageError seam; a trailing one survives
+// into reparseTrailingFlags and is wrapped with a general exit code, which used
+// to map to "internal". The exit codes still differ — renumbering them is
+// deferred — but error.code, which is what a consumer branches on, must not.
+func TestUT_JSONErrorDoc_UnknownFlagCodeIsStableAcrossPlacement(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalTagTemplate(t, dir, "probe")
+
+	// scaffold, not template info: info's reparse failure already goes through
+	// app.UsageErrorf (exit 2), so it maps to "usage" via exitCodeOf whether or
+	// not errUnknownFlag exists, and a table built on it passes on the broken
+	// tree. scaffold wraps the same failure with app.Errorf (exit 1), which is
+	// what used to land on "internal".
+	codes := make([]string, 0, 2)
+	for _, argv := range [][]string{
+		{"tag", "scaffold", "--format", "json", "--bogus"},
+		{"tag", "scaffold", dir, "--bogus", "--format", "json"},
+	} {
+		testApp, out, _ := newJSONErrorApp(t)
+		require.Error(t, testApp.Run(argv))
+
+		var doc errorDoc
+		decodeOneJSONDoc(t, out.Bytes(), &doc)
+		codes = append(codes, doc.Error.Code)
+	}
+
+	assert.Equal(t, []string{codeUsage, codeUsage}, codes)
+}
+
+// TestUT_AsAppError_PreservesSentinelChain pins the reason asAppError stopped
+// flattening *library.LibraryError through %s. The message is identical either
+// way, so every pre-existing assertion on .Error() passed before the change
+// too — errors.Is is the only thing that can see the difference, and without
+// it a stale library entry reports "internal" instead of "template_not_found".
+func TestUT_AsAppError_PreservesSentinelChain(t *testing.T) {
+	t.Parallel()
+
+	libErr := &library.LibraryError{
+		Name:      "gone",
+		Operation: "get",
+		Err:       library.ErrTemplateNotFound,
+	}
+
+	wrapped := asAppError(libErr)
+
+	assert.Equal(t, libErr.Error(), wrapped.Error(), "the rendered message must not change")
+	require.ErrorIs(t, wrapped, library.ErrTemplateNotFound)
+	assert.Equal(t, codeTemplateNotFound, errorCode(wrapped))
 }

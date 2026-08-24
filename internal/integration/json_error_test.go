@@ -183,16 +183,9 @@ func TestIT_JSONError_ExitCodesAndCodesMatchText(t *testing.T) {
 		},
 		{
 			// A business-logic usage error (infoAction's own len(args)<1
-			// check), not the OnUsageError parse-time hole. Verified against
-			// the built binary that a genuine flag-parse failure (a bad flag
-			// such as --bogus) makes urfave/cli's Command.parseFlags return a
-			// nil *flag.FlagSet on error (v2.27.7 command.go:315-336), so
-			// cCtx.flagSet is nil by the time jsonUsageErrorHandler runs and
-			// resolveFormat can never see --format there, in EITHER argument
-			// order — contrary to what the seam's doc comment claims. That
-			// JSON branch is dead code against this dependency pin; see the
-			// implementation report. This scenario instead uses the usage
-			// error path that genuinely reaches withJSONErrorDoc.
+			// check), which reaches withJSONErrorDoc rather than the
+			// OnUsageError seam. The parse-time seam is a separate row below,
+			// because the two produce the same code by different routes.
 			name: "usage error",
 			textArgv: func(t *testing.T, workDir string) []string {
 				t.Helper()
@@ -230,4 +223,53 @@ func TestIT_JSONError_ExitCodesAndCodesMatchText(t *testing.T) {
 	}
 
 	assert.Len(t, codes, len(scenarios), "the four scenarios must map to four distinct error codes, got %v", codes)
+}
+
+// TestIT_JSONError_ParseFailureEmitsOneDocument covers the OnUsageError seam
+// through the real binary. It is deliberately separate from the differential
+// table above: a parse failure also maps to "usage", so folding it in would
+// break that table's distinct-codes assertion.
+//
+// This is the one seam whose JSON branch an earlier revision of this file
+// claimed was unreachable dead code. It is not — the claim came from analysing
+// resolveFormat, which the shipped code does not use here. Running the built
+// binary is what settles it, which is why this test spawns a subprocess rather
+// than asserting in-process.
+func TestIT_JSONError_ParseFailureEmitsOneDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	tests := []struct {
+		name string
+		argv []string
+	}{
+		{"format before the bad flag", []string{"template", "info", "--format", "json", "--bogus"}},
+		{"format after the bad flag", []string{"template", "info", "--bogus", "--format", "json"}},
+		{"scaffold", []string{"scaffold", "--format", "json", "--bogus"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			workDir := t.TempDir()
+			stdout, stderr, runErr := runTagSubprocess(t, ctx, workDir, tt.argv...)
+
+			exit := processExitCode(t, runErr)
+			require.NotZero(t, exit)
+
+			doc := decodeOneJSONErrorDoc(t, stdout)
+			assert.Equal(t, "usage", doc.Error.Code)
+			assert.Equal(t, exit, doc.Error.ExitCode,
+				"document exit_code must equal the process exit code")
+			assert.NotContains(t, string(stdout), "Incorrect Usage",
+				"urfave's help dump must not reach stdout when JSON was requested")
+
+			assert.False(t, timestampPrefix.Match(stderr),
+				"JSON mode stderr must not carry prettylog's timestamp prefix, got %q", string(stderr))
+			assert.Contains(t, string(stderr), "tag error: ")
+		})
+	}
 }

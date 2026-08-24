@@ -66,7 +66,7 @@ func errorCode(err error) string {
 	if errors.As(err, &parseErr) {
 		return codeInvalidReference
 	}
-	if exitCodeOf(err) == app.ExitUsage {
+	if exitCodeOf(err) == app.ExitUsage || errors.Is(err, errUnknownFlag) {
 		return codeUsage
 	}
 	return codeInternal
@@ -98,6 +98,10 @@ type reportedError struct{ err error }
 func (e reportedError) Error() string { return e.err.Error() }
 func (e reportedError) Unwrap() error { return e.err }
 
+// ErrorAlreadyReported reports whether err's human-readable message has already
+// been written to stderr by the JSON error seam. main() consults it so a
+// reported error is not logged a second time through prettylog, which would
+// re-add the timestamp prefix the JSON contract promises is absent.
 func ErrorAlreadyReported(err error) bool {
 	var r reportedError
 	return errors.As(err, &r)
@@ -116,8 +120,14 @@ func withJSONErrorDoc(c *cli.Context, schemaVersion int, version string, fn func
 		return nil
 	}
 
+	// jsonRequestedInArgs is the fallback for the case resolveFormat cannot
+	// see: reparseTrailingFlags returns at the FIRST unknown flag, so in
+	// `info ./tpl --bogus --format json` the format flag is never applied and
+	// the context still reads "text". Emitting a text error for a command line
+	// that plainly says --format json is the failure this ticket exists to
+	// remove. An outright bad --format value (ferr) is never json.
 	format, ferr := resolveFormat(c, formatText, formatJSON)
-	if ferr != nil || format != formatJSON {
+	if ferr != nil || (format != formatJSON && !jsonRequestedInArgs(c)) {
 		return err
 	}
 
@@ -156,7 +166,15 @@ func writeErrorDoc(c *cli.Context, schemaVersion int, version, code, message str
 func jsonUsageErrorHandler(schemaVersion int, version string) func(*cli.Context, error, bool) error {
 	return func(c *cli.Context, err error, _ bool) error {
 		if jsonRequestedInArgs(c) {
-			writeErrorDoc(c, schemaVersion, version, codeUsage, err.Error(), exitCodeOf(err))
+			// The write result is checked for the same reason
+			// withJSONErrorDoc checks it: claiming the error was already
+			// reported when nothing reached stdout makes main.go skip its own
+			// log too, and the run exits non-zero having said nothing at all
+			// on either stream. Falling back to the help dump is not an
+			// option here — stdout is the stream that just failed.
+			if !writeErrorDoc(c, schemaVersion, version, codeUsage, err.Error(), exitCodeOf(err)) {
+				return err
+			}
 			return reportedError{err}
 		}
 
@@ -175,26 +193,74 @@ func jsonUsageErrorHandler(schemaVersion int, version string) func(*cli.Context,
 // argv. The parent context's argv is intact, so the scan runs there.
 //
 // A miss falls back to text, which is exactly today's behaviour, so this is
-// fail-safe by construction rather than fail-wrong. Last occurrence wins,
-// matching what the flag package would have done had parsing succeeded.
+// fail-safe by construction rather than fail-wrong. Last occurrence wins, and
+// the scan deliberately does NOT stop where the flag package stopped: a line
+// containing --format json was written by someone who wants JSON, and handing
+// them a kilobyte of help text on stdout instead is the exact failure #396
+// exists to remove.
 func jsonRequestedInArgs(c *cli.Context) bool {
 	lineage := c.Lineage()
 	if len(lineage) < 2 {
 		return false
 	}
 
+	known, takesValue := flagArity(c)
 	args := lineage[1].Args().Slice()
 	requested := false
-	for i, arg := range args {
-		name, value, hasValue := strings.Cut(arg, "=")
-		if name != "--format" && name != "-format" {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if !strings.HasPrefix(arg, "-") {
 			continue
 		}
-		if hasValue {
-			requested = value == formatJSON
-			continue
+
+		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if name == "format" && known[name] {
+			if hasValue {
+				requested = value == formatJSON
+			} else {
+				requested = i+1 < len(args) && args[i+1] == formatJSON
+			}
 		}
-		requested = i+1 < len(args) && args[i+1] == formatJSON
+
+		// Skipping a value-taking flag's value is what stops `--output
+		// --format json` from reading as a format request: there, --format is
+		// the VALUE of --output and the flag package would never see it. An
+		// unknown flag has no arity to consult, so it is treated as valueless.
+		if !hasValue && takesValue[name] {
+			i++
+		}
 	}
 	return requested
+}
+
+// flagArity reports which flag names exist and which of them consume the
+// following token, taken from the command's own declarations plus the App-level
+// globals — the same two sources reparseTrailingFlags registers, and for the
+// same reason: a name is only a flag if something declared it.
+func flagArity(c *cli.Context) (known, takesValue map[string]bool) {
+	known = make(map[string]bool)
+	takesValue = make(map[string]bool)
+
+	add := func(flags []cli.Flag) {
+		for _, f := range flags {
+			df, isDoc := f.(cli.DocGenerationFlag)
+			for _, n := range f.Names() {
+				known[n] = true
+				if isDoc && df.TakesValue() {
+					takesValue[n] = true
+				}
+			}
+		}
+	}
+
+	if c.App != nil {
+		add(c.App.Flags)
+	}
+	if c.Command != nil {
+		add(c.Command.Flags)
+	}
+	return known, takesValue
 }

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -224,8 +225,20 @@ func reparseTrailingFlags(c *cli.Context, cliFlags []cli.Flag) ([]string, error)
 // c.Args(). The hint says "after another argument" rather than a bare "use --"
 // so it does not send the reader down a path that cannot work.
 func unknownFlagError(name string) error {
-	return fmt.Errorf("unknown flag -%s (to pass it as a literal argument, put it after another argument and a \"--\" separator)", name)
+	return fmt.Errorf("%w -%s (to pass it as a literal argument, put it after another argument and a \"--\" separator)", errUnknownFlag, name)
 }
+
+// errUnknownFlag makes a mistyped trailing flag recognisable by errors.Is so
+// the JSON error document can report it as `usage` wherever it appears.
+// Without it the code depended on where the flag sat: urfave/cli rejects a
+// leading one before the action runs (mapped from the OnUsageError seam),
+// while a trailing one is caught by reparseTrailingFlags and wrapped by
+// scaffold.go with a general exit code, which mapped to `internal` — the same
+// user mistake reporting two different machine codes.
+//
+// It carries the leading words of the message so the rendered text is
+// unchanged: "unknown flag -bogus (to pass it as ...)".
+var errUnknownFlag = errors.New("unknown flag")
 
 // GlobalFlags returns the flags declared on the cli.App itself rather than on
 // any single command: they apply to several commands and are read through the
