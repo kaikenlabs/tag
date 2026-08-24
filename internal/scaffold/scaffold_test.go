@@ -1,9 +1,11 @@
 package scaffold
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -599,50 +601,188 @@ func TestUT_ValidateSafeOutputDir(t *testing.T) {
 }
 
 func TestUT_FindProjectWrapper(t *testing.T) {
-	t.Run("detects single template-expression directory", func(t *testing.T) {
+	tests := []struct {
+		name         string
+		root         func(t *testing.T) string
+		wantWrapper  string
+		wantSiblings []string
+		wantErr      bool
+	}{
+		{
+			name: "wrapper alone with only skipped entries has no siblings",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte("{}"), 0o644))
+				return dir
+			},
+			wantWrapper: "{{ vars.project_name }}",
+		},
+		{
+			name: "sibling directory beside the wrapper is reported",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o755))
+				return dir
+			},
+			wantWrapper:  "{{ vars.project_name }}",
+			wantSiblings: []string{"hooks"},
+		},
+		{
+			name: "sibling file beside the wrapper is reported",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(""), 0o644))
+				return dir
+			},
+			wantWrapper:  "{{ vars.project_name }}",
+			wantSiblings: []string{".gitignore"},
+		},
+		{
+			name: "root file named as an expression is a sibling, never a wrapper",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "{{ vars.name }}.txt"), []byte("content"), 0o644))
+				return dir
+			},
+			wantSiblings: []string{"{{ vars.name }}.txt"},
+		},
+		{
+			name: "no template directories reports the plain entries as siblings",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+				return dir
+			},
+			wantSiblings: []string{"src"},
+		},
+		{
+			name: "multiple template directories disqualify unwrapping and drop siblings",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.a }}"), 0o755))
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.b }}"), 0o755))
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "extra"), 0o755))
+				return dir
+			},
+		},
+		{
+			name: "sibling matched by .tagignore leaves no siblings",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".tagignore"), []byte("hooks/\n"), 0o644))
+				return dir
+			},
+			wantWrapper: "{{ vars.project_name }}",
+		},
+		{
+			name: "the sole expression dir ignored by .tagignore is not chosen",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".tagignore"), []byte("{{ vars.project_name }}/\n"), 0o644))
+				return dir
+			},
+		},
+		{
+			name: "two expression dirs, one ignored, the other wins",
+			root: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.a }}"), 0o755))
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.b }}"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".tagignore"), []byte("{{ vars.a }}/\n"), 0o644))
+				return dir
+			},
+			wantWrapper: "{{ vars.b }}",
+		},
+		{
+			name: "nonexistent template root is tolerated",
+			root: func(t *testing.T) string {
+				t.Helper()
+				return filepath.Join(t.TempDir(), "does-not-exist")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := tt.root(t)
+			wrapper, siblings, err := findProjectWrapper(dir)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantWrapper, wrapper)
+			assert.Equal(t, tt.wantSiblings, siblings)
+		})
+	}
+}
+
+func TestUT_FindProjectWrapper_SymlinkEntries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on windows")
+	}
+
+	t.Run("a symlink beside the wrapper is a sibling", func(t *testing.T) {
 		dir := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte("{}"), 0o644))
+		outsideTarget := filepath.Join(t.TempDir(), "real-file")
+		require.NoError(t, os.WriteFile(outsideTarget, []byte("x"), 0o644))
+		require.NoError(t, os.Symlink(outsideTarget, filepath.Join(dir, "link")))
 
-		result := findProjectWrapper(dir)
-		assert.Equal(t, "{{ vars.project_name }}", result)
+		wrapper, siblings, err := findProjectWrapper(dir)
+		require.NoError(t, err)
+		assert.Equal(t, "{{ vars.project_name }}", wrapper)
+		assert.Equal(t, []string{"link"}, siblings)
 	})
 
-	t.Run("returns empty for no template directories", func(t *testing.T) {
+	t.Run("a symlinked expression-named directory is a sibling, not a wrapper", func(t *testing.T) {
 		dir := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte("{}"), 0o644))
+		realDir := t.TempDir()
+		linkName := "{{ vars.project_name }}"
+		require.NoError(t, os.Symlink(realDir, filepath.Join(dir, linkName)))
 
-		result := findProjectWrapper(dir)
-		assert.Empty(t, result)
+		entries, statErr := os.Lstat(filepath.Join(dir, linkName))
+		require.NoError(t, statErr)
+		require.False(t, entries.IsDir(), "lstat on a symlink to a directory must not report IsDir")
+
+		wrapper, siblings, err := findProjectWrapper(dir)
+		require.NoError(t, err)
+		assert.Empty(t, wrapper)
+		assert.Equal(t, []string{linkName}, siblings)
 	})
+}
 
-	t.Run("returns empty for multiple template directories", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.other_dir }}"), 0o755))
+func TestUT_FindProjectWrapper_TagignoreReadError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses permission checks, chmod 000 would still be readable")
+	}
 
-		result := findProjectWrapper(dir)
-		assert.Empty(t, result)
-	})
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
+	ignorePath := filepath.Join(dir, ".tagignore")
+	require.NoError(t, os.WriteFile(ignorePath, []byte("hooks/\n"), 0o644))
+	require.NoError(t, os.Chmod(ignorePath, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(ignorePath, 0o644) })
 
-	t.Run("ignores non-directory template entries", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "{{ vars.name }}.txt"), []byte("content"), 0o644))
-
-		result := findProjectWrapper(dir)
-		assert.Empty(t, result)
-	})
-
-	t.Run("works alongside regular directories and files", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(""), 0o644))
-
-		result := findProjectWrapper(dir)
-		assert.Equal(t, "{{ vars.project_name }}", result)
-	})
+	wrapper, siblings, err := findProjectWrapper(dir)
+	require.Error(t, err)
+	assert.Empty(t, wrapper)
+	assert.Nil(t, siblings)
 }
 
 func TestIT_Scaffold_ExplicitOutputDir_KeepsNesting(t *testing.T) {
@@ -1067,4 +1207,135 @@ func TestUT_ResolveOutputDir_TraversalBlocked(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newPlanOutputScaffold(t *testing.T, out *bytes.Buffer) *Scaffold {
+	t.Helper()
+	s, err := NewScaffold(Options{}, WithOutput(out), WithIsTTY(false))
+	require.NoError(t, err)
+	return s
+}
+
+func TestUT_PlanOutput_MixedRootSuppressesUnwrapping(t *testing.T) {
+	tests := []struct {
+		name                      string
+		mixedRoot                 bool
+		useOutputFlag             bool
+		wantEffectiveIsWrapperDir bool
+		wantProjectRootIsOutput   bool
+	}{
+		{
+			name:                      "clean wrapper root without --output unwraps",
+			mixedRoot:                 false,
+			useOutputFlag:             false,
+			wantEffectiveIsWrapperDir: true,
+			wantProjectRootIsOutput:   true,
+		},
+		{
+			name:                      "mixed root without --output suppresses unwrapping",
+			mixedRoot:                 true,
+			useOutputFlag:             false,
+			wantEffectiveIsWrapperDir: false,
+			wantProjectRootIsOutput:   true,
+		},
+		{
+			name:                      "clean wrapper root with --output nests under the rendered wrapper",
+			mixedRoot:                 false,
+			useOutputFlag:             true,
+			wantEffectiveIsWrapperDir: false,
+			wantProjectRootIsOutput:   false,
+		},
+		{
+			name:                      "mixed root with --output keeps project_root at output_dir",
+			mixedRoot:                 true,
+			useOutputFlag:             true,
+			wantEffectiveIsWrapperDir: false,
+			wantProjectRootIsOutput:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			templateDir := t.TempDir()
+			wrapperDir := filepath.Join(templateDir, "{{ vars.project_name }}")
+			require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "README.md"), []byte("hi"), 0o644))
+			if tt.mixedRoot {
+				require.NoError(t, os.WriteFile(filepath.Join(templateDir, "ROOTFILE.md"), []byte("beside"), 0o644))
+			}
+
+			opts := Options{TemplateDir: templateDir, ProjectName: "my-proj"}
+			if tt.useOutputFlag {
+				opts.OutputDir = filepath.Join(t.TempDir(), "out")
+			}
+
+			var out bytes.Buffer
+			s := newPlanOutputScaffold(t, &out)
+			ctx := &runContext{
+				opts: opts,
+				cwd:  t.TempDir(),
+				vars: map[string]any{"project_name": "my-proj"},
+			}
+
+			err := s.planOutput(ctx)
+			require.NoError(t, err)
+
+			if tt.wantEffectiveIsWrapperDir {
+				assert.Equal(t, wrapperDir, ctx.effectiveTemplateDir)
+			} else {
+				assert.Equal(t, templateDir, ctx.effectiveTemplateDir)
+			}
+
+			if tt.wantProjectRootIsOutput {
+				assert.Equal(t, ctx.outputDir, ctx.projectRoot)
+			} else {
+				assert.NotEqual(t, ctx.outputDir, ctx.projectRoot)
+				assert.Equal(t, filepath.Join(ctx.outputDir, "my-proj"), ctx.projectRoot)
+			}
+		})
+	}
+}
+
+func TestUT_PlanOutput_MixedRootWarnsNamingSiblings(t *testing.T) {
+	t.Run("mixed root warns naming each sibling and mentioning .tagignore", func(t *testing.T) {
+		templateDir := t.TempDir()
+		wrapperDir := filepath.Join(templateDir, "{{ vars.project_name }}")
+		require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(templateDir, ".github"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(templateDir, "ROOTFILE.md"), []byte("beside"), 0o644))
+
+		var out bytes.Buffer
+		s := newPlanOutputScaffold(t, &out)
+		ctx := &runContext{
+			opts: Options{TemplateDir: templateDir, ProjectName: "my-proj"},
+			cwd:  t.TempDir(),
+			vars: map[string]any{"project_name": "my-proj"},
+		}
+
+		err := s.planOutput(ctx)
+		require.NoError(t, err)
+
+		warning := out.String()
+		assert.Contains(t, warning, ".github")
+		assert.Contains(t, warning, "ROOTFILE.md")
+		assert.Contains(t, warning, ".tagignore")
+	})
+
+	t.Run("clean wrapper root warns nothing", func(t *testing.T) {
+		templateDir := t.TempDir()
+		wrapperDir := filepath.Join(templateDir, "{{ vars.project_name }}")
+		require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+
+		var out bytes.Buffer
+		s := newPlanOutputScaffold(t, &out)
+		ctx := &runContext{
+			opts: Options{TemplateDir: templateDir, ProjectName: "my-proj"},
+			cwd:  t.TempDir(),
+			vars: map[string]any{"project_name": "my-proj"},
+		}
+
+		err := s.planOutput(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, out.String())
+	})
 }

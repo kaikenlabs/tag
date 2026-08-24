@@ -201,6 +201,12 @@ Cookiecutter hooks (Python scripts in `hooks/`) are copied but require manual re
 - Python hooks may need adaptation to work without Cookiecutter's environment
 - Environment variables are provided differently (see [Hooks Guide](../templates/hooks.md))
 
+When at least one hook is copied, `convert` also writes (or appends to) a `.tagignore` in the
+output excluding `hooks/`. Cookiecutter's layout always puts `hooks/` beside the project-wrapper
+directory, and without excluding it `tag scaffold` would see content beside the wrapper and stop
+unwrapping (see [`scaffold`](scaffold.md)) — the hook script would otherwise land in every
+generated project.
+
 ## Post-Conversion Steps
 
 1. **Review incompatibilities**: Fix any reported syntax differences

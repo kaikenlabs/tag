@@ -273,20 +273,38 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 	// project_name/project_name nesting. Unwrap by using the wrapper as the
 	// effective template root for Write().
 	ctx.effectiveTemplateDir = ctx.opts.TemplateDir
-	wrapperDir := findProjectWrapper(ctx.opts.TemplateDir)
-	if wrapperDir != "" {
-		if ctx.opts.OutputDir == "" {
-			// No explicit output dir — unwrap to avoid double nesting
-			ctx.effectiveTemplateDir = filepath.Join(ctx.opts.TemplateDir, wrapperDir)
-		} else {
-			// Explicit output dir — wrapper creates a subdirectory inside outputDir.
-			// The project root (for .tagconfig.json, hooks workdir) is that subdirectory.
-			tmplCtx := template.NewContextBuilder().WithVars(ctx.vars).Build()
-			rendered, err := s.engine.ExecuteToString(wrapperDir, tmplCtx)
-			if err == nil && rendered != "" {
-				ctx.projectRoot = filepath.Join(ctx.outputDir, rendered)
-			}
-		}
+	wrapperDir, siblings, err := findProjectWrapper(ctx.opts.TemplateDir)
+	if err != nil {
+		return err
+	}
+	if wrapperDir == "" {
+		return nil
+	}
+
+	// A wrapper only "unwraps" when it holds ALL of the template's generated
+	// content. A root with siblings beside the wrapper is written whole —
+	// nothing is discarded, and project_root stays the output directory.
+	if len(siblings) > 0 {
+		fmt.Fprintf(s.output,
+			"Warning: template root has content beside the wrapper %q: %s\n"+
+				"  Not unwrapping — all files are written under the output directory.\n"+
+				"  Add these entries to .tagignore to restore unwrapping.\n",
+			wrapperDir, strings.Join(siblings, ", "))
+		return nil
+	}
+
+	if ctx.opts.OutputDir == "" {
+		// No explicit output dir — unwrap to avoid double nesting
+		ctx.effectiveTemplateDir = filepath.Join(ctx.opts.TemplateDir, wrapperDir)
+		return nil
+	}
+
+	// Explicit output dir — wrapper creates a subdirectory inside outputDir.
+	// The project root (for .tagconfig.json, hooks workdir) is that subdirectory.
+	tmplCtx := template.NewContextBuilder().WithVars(ctx.vars).Build()
+	rendered, err := s.engine.ExecuteToString(wrapperDir, tmplCtx)
+	if err == nil && rendered != "" {
+		ctx.projectRoot = filepath.Join(ctx.outputDir, rendered)
 	}
 
 	return nil
@@ -611,34 +629,64 @@ func validateSafeOutputDir(outputDir string) error {
 	return nil
 }
 
+// readDirTolerant reads a directory's entries, reporting failure via ok
+// rather than an error value — the caller treats a missing/unreadable
+// directory as "no entries" rather than a hard failure.
+func readDirTolerant(dir string) (entries []os.DirEntry, ok bool) {
+	entries, err := os.ReadDir(dir)
+	return entries, err == nil
+}
+
 // findProjectWrapper scans the template root for a project wrapper directory.
 // Cookiecutter-style templates wrap all project files in a single directory whose
 // name is a template expression (e.g., "{{ vars.project_name }}"). When detected,
 // the wrapper directory name is returned so callers can use it as the effective
 // template root, avoiding double nesting (e.g., my-service/my-service/).
 // Returns empty string if no single wrapper directory is found.
-func findProjectWrapper(templateRoot string) string {
-	entries, err := os.ReadDir(templateRoot)
-	if err != nil {
-		return ""
+func findProjectWrapper(templateRoot string) (wrapper string, siblings []string, err error) {
+	// A missing/unreadable template root is tolerated here — loadConfig
+	// already fails the run earlier for that case, so erroring on it in this
+	// helper would be an unrelated behaviour change.
+	entries, ok := readDirTolerant(templateRoot)
+	if !ok {
+		return "", nil, nil
 	}
 
-	var wrapper string
+	ignoreMatcher, err := loadIgnorePatterns(templateRoot)
+	if err != nil {
+		return "", nil, err
+	}
+
+	var candidates []string
 	for _, e := range entries {
-		if !e.IsDir() {
+		name := e.Name()
+		if isSkippedEntry(name, name) {
 			continue
 		}
-		name := e.Name()
-		if strings.Contains(name, "{{") && strings.Contains(name, "}}") {
-			if wrapper != "" {
-				// Multiple template-expression directories — don't unwrap
-				return ""
-			}
-			wrapper = name
+		if ignoreMatcher != nil && ignoreMatcher.Match([]string{name}, e.IsDir()) {
+			continue
 		}
+
+		// os.ReadDir uses lstat, so a symlink to a directory already reports
+		// IsDir() == false; the explicit ModeSymlink check documents that
+		// rather than relying on it silently.
+		isRealDir := e.IsDir() && e.Type()&os.ModeSymlink == 0
+		if isRealDir && strings.Contains(name, "{{") && strings.Contains(name, "}}") {
+			candidates = append(candidates, name)
+			continue
+		}
+		siblings = append(siblings, name)
 	}
 
-	return wrapper
+	switch len(candidates) {
+	case 0:
+		return "", siblings, nil
+	case 1:
+		return candidates[0], siblings, nil
+	default:
+		// Multiple template-expression directories — don't unwrap, don't warn.
+		return "", nil, nil
+	}
 }
 
 // renderHookCommands renders template expressions in hook command strings.

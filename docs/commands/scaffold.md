@@ -248,12 +248,13 @@ carries the project directory as a prefix. Join file paths onto `output_dir`, ne
 `project_root`. Under `--dry-run`, `project_root` names the directory the run *would* create;
 nothing is written, so that directory does not exist.
 
-That last point matters if you publish the result. Wrapper detection requires exactly one
-expression-named directory at the template root, not that the directory holds everything — a
-template with files beside the wrapper generates them under `output_dir`, outside `project_root`.
-So walk `files[]` relative to `output_dir` rather than archiving `project_root` wholesale, or
-those files are dropped. `project_root` tells you where the project *begins*; `files[]` is the
-authoritative list of what was written.
+That last point matters if you publish the result. A wrapper only unwraps when it holds *all* of
+the template's generated content: a root with files beside the wrapper directory is written
+whole instead — nothing is discarded, but `project_root` stays equal to `output_dir` even though
+the template has a wrapper directory, and scaffold prints a warning naming the sibling entries
+(on stderr under `--format json`). Add those entries to `.tagignore` to restore unwrapping. Walk
+`files[]` relative to `output_dir` to enumerate what was written; `project_root` tells you where
+the project *begins*.
 
 `--format json` forces non-interactive behavior: it implies `--no-input` (defaults and `-m`
 overrides still apply; prompts never fire), never shows the interactive template picker — running

@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -201,34 +203,30 @@ func TestIT_ScaffoldTextSummary_NamesProjectRoot(t *testing.T) {
 	assert.NotContains(t, out, "cd "+filepath.Join(dir, "out", "proj")+"\n")
 }
 
-// TestIT_ScaffoldJSON_MixedRootTemplate_ContentSitsBesideProjectRoot records
-// what project_root does NOT promise.
-//
-// findProjectWrapper only requires exactly one expression-named directory at
-// the template root; it does not require that directory to hold everything. So
-// a template with content beside the wrapper produces generated files that are
-// under output_dir but NOT under project_root. Anything that publishes the
-// result must walk files[] relative to output_dir rather than archiving
-// project_root wholesale, which is why the docs say to join onto output_dir.
-//
-// Both rows characterise pre-existing planOutput behaviour that #390 is
-// deliberately not changing — see the follow-up ticket on mixed-root wrapper
-// templates. They exist so a future change to that behaviour is a decision
-// rather than an accident.
-func TestIT_ScaffoldJSON_MixedRootTemplate_ContentSitsBesideProjectRoot(t *testing.T) {
-	writeMixedRootTemplate := func(t *testing.T, dir string) {
-		t.Helper()
-		root := filepath.Join(dir, "tmpl")
-		wrapper := filepath.Join(root, "{{ vars.project_name }}")
-		require.NoError(t, os.MkdirAll(wrapper, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "tag.template.json"), []byte(
-			`{"name":"mixed","description":"d","vars":{"project_name":"my_project"}}`,
-		), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(wrapper, "README.md"), []byte("inside\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "ROOTFILE.md"), []byte("beside\n"), 0o600))
-	}
+// writeMixedRootTemplate writes a template whose root holds both a
+// Cookiecutter-style wrapper directory ("{{ vars.project_name }}") and a
+// sibling file (ROOTFILE.md) beside it. This is a "mixed root": #403's rule is
+// that a wrapper only unwraps when it holds ALL of the template's generated
+// content, so a mixed root is written whole instead.
+func writeMixedRootTemplate(t *testing.T, dir string) {
+	t.Helper()
+	root := filepath.Join(dir, "tmpl")
+	wrapper := filepath.Join(root, "{{ vars.project_name }}")
+	require.NoError(t, os.MkdirAll(wrapper, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tag.template.json"), []byte(
+		`{"name":"mixed","description":"d","vars":{"project_name":"my_project"}}`,
+	), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapper, "README.md"), []byte("inside\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "ROOTFILE.md"), []byte("beside\n"), 0o600))
+}
 
-	t.Run("with --output the sibling file lands outside project_root", func(t *testing.T) {
+// TestIT_ScaffoldJSON_MixedRootTemplate_WritesWholeRootUnderProjectRoot pins
+// #403: a wrapper only unwraps when it holds ALL of the template's generated
+// content. A root with content beside the wrapper is written whole —
+// project_root == output_dir, and nothing (not ROOTFILE.md, not the wrapper's
+// own content) is discarded, in both the --output and no-flag shapes.
+func TestIT_ScaffoldJSON_MixedRootTemplate_WritesWholeRootUnderProjectRoot(t *testing.T) {
+	t.Run("with --output project_root is output_dir and both siblings are written", func(t *testing.T) {
 		dir, err := filepath.EvalSymlinks(t.TempDir())
 		require.NoError(t, err)
 		writeMixedRootTemplate(t, dir)
@@ -243,13 +241,12 @@ func TestIT_ScaffoldJSON_MixedRootTemplate_ContentSitsBesideProjectRoot(t *testi
 		var doc scaffoldJSONDoc
 		require.NoError(t, json.Unmarshal(stdout, &doc))
 
-		require.FileExists(t, filepath.Join(doc.OutputDir, "ROOTFILE.md"))
-		assert.NoFileExists(t, filepath.Join(doc.ProjectRoot, "ROOTFILE.md"),
-			"the sibling file is under output_dir, not project_root")
-		assert.FileExists(t, filepath.Join(doc.ProjectRoot, "README.md"))
+		assert.Equal(t, doc.OutputDir, doc.ProjectRoot)
+		require.FileExists(t, filepath.Join(doc.ProjectRoot, "ROOTFILE.md"))
+		assert.FileExists(t, filepath.Join(doc.ProjectRoot, "my-proj", "README.md"))
 	})
 
-	t.Run("without --output the sibling file is dropped entirely", func(t *testing.T) {
+	t.Run("without --output project_root is output_dir, files has 2 entries, ROOTFILE.md is written", func(t *testing.T) {
 		dir, err := filepath.EvalSymlinks(t.TempDir())
 		require.NoError(t, err)
 		writeMixedRootTemplate(t, dir)
@@ -265,8 +262,108 @@ func TestIT_ScaffoldJSON_MixedRootTemplate_ContentSitsBesideProjectRoot(t *testi
 		require.NoError(t, json.Unmarshal(stdout, &doc))
 
 		assert.Equal(t, doc.OutputDir, doc.ProjectRoot)
-		assert.FileExists(t, filepath.Join(doc.ProjectRoot, "README.md"))
-		assert.NoFileExists(t, filepath.Join(doc.ProjectRoot, "ROOTFILE.md"),
-			"unwrapping makes the wrapper the template root, so siblings are never written")
+		require.Len(t, doc.Files, 2)
+		assert.FileExists(t, filepath.Join(doc.ProjectRoot, "ROOTFILE.md"))
+		assert.FileExists(t, filepath.Join(doc.ProjectRoot, "my-proj", "README.md"))
+	})
+}
+
+// TestIT_Scaffold_MixedRootWarning_GoesToStderrNotStdout pins that the
+// suppression warning respects the JSON/text stream split that already
+// governs every other user-facing scaffold message: under --format json the
+// warning goes to stderr, never stdout, and stdout still decodes as exactly
+// one JSON document.
+func TestIT_Scaffold_MixedRootWarning_GoesToStderrNotStdout(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	writeMixedRootTemplate(t, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+		"scaffold", "./tmpl", "my-proj", "-m", "project_name=my-proj", "--format", "json")
+	require.NoError(t, runErr, "stderr: %s", stderr)
+
+	assert.Contains(t, string(stderr), "ROOTFILE.md")
+	assert.Contains(t, string(stderr), ".tagignore")
+	// "Warning" alone is a bad marker here: t.TempDir() embeds this test's own
+	// name in output_dir/project_root, and that name contains "Warning" — so
+	// a plain substring check would false-positive on the path, not a leak.
+	assert.NotContains(t, string(stdout), "Not unwrapping")
+
+	dec := json.NewDecoder(bytes.NewReader(stdout))
+	var doc scaffoldJSONDoc
+	require.NoError(t, dec.Decode(&doc))
+	_, err = dec.Token()
+	require.ErrorIs(t, err, io.EOF, "stdout carried more than one JSON document")
+}
+
+// TestIT_Scaffold_MixedRoot_TagconfigAndHookCwdFollowProjectRoot pins that
+// .tagconfig.json placement and the post-hook working directory follow
+// project_root, not output_dir's rendered-wrapper subdirectory, on a mixed
+// root — in both the --output and no-flag shapes. A hook that writes its own
+// working directory to a file is the honest oracle: it observes what the
+// hook runner actually did, not what the JSON document claims.
+func TestIT_Scaffold_MixedRoot_TagconfigAndHookCwdFollowProjectRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the post-scaffold hook below assumes a POSIX shell")
+	}
+
+	writeMixedRootTemplateWithHook := func(t *testing.T, dir string) {
+		t.Helper()
+		root := filepath.Join(dir, "tmpl")
+		wrapper := filepath.Join(root, "{{ vars.project_name }}")
+		require.NoError(t, os.MkdirAll(wrapper, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "tag.template.json"), []byte(
+			`{"name":"mixed","description":"d","vars":{"project_name":"my_project"},`+
+				`"hooks":{"post_scaffold":["sh -c \"pwd > CWD.txt\""]}}`,
+		), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(wrapper, "README.md"), []byte("inside\n"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "ROOTFILE.md"), []byte("beside\n"), 0o600))
+	}
+
+	t.Run("with --output", func(t *testing.T) {
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, err)
+		writeMixedRootTemplateWithHook(t, dir)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+			"scaffold", "./tmpl", "-o", "./out/proj", "-m", "project_name=my-proj",
+			"--accept-hooks", "--format", "json")
+		require.NoError(t, runErr, "stderr: %s", stderr)
+
+		var doc scaffoldJSONDoc
+		require.NoError(t, json.Unmarshal(stdout, &doc))
+
+		require.FileExists(t, filepath.Join(doc.ProjectRoot, ".tagconfig.json"))
+		cwdBytes, readErr := os.ReadFile(filepath.Join(doc.ProjectRoot, "CWD.txt"))
+		require.NoError(t, readErr)
+		assert.Equal(t, doc.ProjectRoot, strings.TrimSpace(string(cwdBytes)))
+	})
+
+	t.Run("without --output", func(t *testing.T) {
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, err)
+		writeMixedRootTemplateWithHook(t, dir)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+			"scaffold", "./tmpl", "my-proj", "-m", "project_name=my-proj",
+			"--accept-hooks", "--format", "json")
+		require.NoError(t, runErr, "stderr: %s", stderr)
+
+		var doc scaffoldJSONDoc
+		require.NoError(t, json.Unmarshal(stdout, &doc))
+
+		require.FileExists(t, filepath.Join(doc.ProjectRoot, ".tagconfig.json"))
+		cwdBytes, readErr := os.ReadFile(filepath.Join(doc.ProjectRoot, "CWD.txt"))
+		require.NoError(t, readErr)
+		assert.Equal(t, doc.ProjectRoot, strings.TrimSpace(string(cwdBytes)))
 	})
 }

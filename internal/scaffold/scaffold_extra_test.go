@@ -120,42 +120,6 @@ func TestUT_ValidateSafeOutputDir_ValidPath(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestUT_FindProjectWrapper_SingleWrapper(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "{{ vars.project_name }}"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag.template.json"), []byte("{}"), 0o644))
-
-	wrapper := findProjectWrapper(dir)
-	assert.Equal(t, "{{ vars.project_name }}", wrapper)
-}
-
-func TestUT_FindProjectWrapper_MultipleWrappers(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "{{ vars.a }}"), 0o755))
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "{{ vars.b }}"), 0o755))
-
-	wrapper := findProjectWrapper(dir)
-	assert.Empty(t, wrapper, "multiple template dirs should not unwrap")
-}
-
-func TestUT_FindProjectWrapper_NoWrapper(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "src"), 0o755))
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "docs"), 0o755))
-
-	wrapper := findProjectWrapper(dir)
-	assert.Empty(t, wrapper)
-}
-
-func TestUT_FindProjectWrapper_NonexistentDir(t *testing.T) {
-	t.Parallel()
-	wrapper := findProjectWrapper("/nonexistent/dir/12345")
-	assert.Empty(t, wrapper)
-}
-
 func TestUT_SecretKeys_Empty(t *testing.T) {
 	t.Parallel()
 	keys := secretKeys(nil)
