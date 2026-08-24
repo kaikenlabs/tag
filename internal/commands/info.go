@@ -315,6 +315,14 @@ type templateInfoVariableJSON struct {
 	Required bool     `json:"required"`
 	Options  []string `json:"options,omitempty"`
 	Secret   bool     `json:"secret"`
+
+	// The four form-metadata fields describe scaffold-time behaviour so a form
+	// generator can decide whether to render an input. They carry no omitempty:
+	// a consumer must be able to tell false from absent.
+	Prompted            bool `json:"prompted"`
+	Derived             bool `json:"derived"`
+	Private             bool `json:"private"`
+	DefaultIsExpression bool `json:"default_is_expression"`
 }
 
 // templateInfoHooksJSON always carries both keys, as "[]" rather than "null"
@@ -340,14 +348,19 @@ func buildTemplateInfoJSON(config *scaffold.TemplateConfig, hasReadme, hasHowto 
 	variables := make([]templateInfoVariableJSON, 0, len(names))
 	for _, name := range names {
 		v := config.Vars[name]
+		private, derived := v.IsPrivate(name), v.IsDerived()
 		variables = append(variables, templateInfoVariableJSON{
-			Name:     name,
-			Type:     string(v.Type),
-			Prompt:   v.Prompt,
-			Default:  v.Default,
-			Required: v.Required,
-			Options:  slices.Clone(v.Options),
-			Secret:   v.Secret,
+			Name:                name,
+			Type:                string(v.Type),
+			Prompt:              v.Prompt,
+			Default:             v.Default,
+			Required:            v.Required,
+			Options:             slices.Clone(v.Options),
+			Secret:              v.Secret,
+			Prompted:            !private && !derived,
+			Derived:             derived,
+			Private:             private,
+			DefaultIsExpression: derived || v.IsEvaluatedDefault(),
 		})
 	}
 

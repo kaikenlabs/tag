@@ -550,7 +550,7 @@ tag template info <template> --format json  # Machine-readable output
 tag template info --format json <template>  # Flags may come before or after the template argument
 ```
 
-Bare JSON object (no envelope): `{"name","description","version","variables":[{"name","type","prompt","default","required","options","secret"}],"hooks":{"pre_scaffold":[],"post_scaffold":[]},"has_readme","has_howto"}`.
+Bare JSON object (no envelope): `{"name","description","version","variables":[{"name","type","prompt","default","required","options","secret","prompted","derived","private","default_is_expression"}],"hooks":{"pre_scaffold":[],"post_scaffold":[]},"has_readme","has_howto"}`.
 
 ```json
 {
@@ -558,9 +558,16 @@ Bare JSON object (no envelope): `{"name","description","version","variables":[{"
   "description": "Go REST API template",
   "version": "v1.2.0",
   "variables": [
-    { "name": "author", "type": "string", "required": true, "secret": false },
-    { "name": "license", "type": "choice", "required": true, "options": ["MIT", "Apache-2.0", "GPL-3.0"], "secret": false },
-    { "name": "port", "type": "number", "default": 8080, "required": false, "secret": false }
+    { "name": "_build_stamp", "type": "string", "default": "{{ vars.author }}", "required": false, "secret": false,
+      "prompted": false, "derived": true, "private": true, "default_is_expression": true },
+    { "name": "author", "type": "string", "prompt": "Author name", "required": true, "secret": false,
+      "prompted": true, "derived": false, "private": false, "default_is_expression": false },
+    { "name": "license", "type": "choice", "required": true, "options": ["MIT", "Apache-2.0", "GPL-3.0"], "secret": false,
+      "prompted": true, "derived": false, "private": false, "default_is_expression": false },
+    { "name": "port", "type": "number", "default": 8080, "required": false, "secret": false,
+      "prompted": true, "derived": false, "private": false, "default_is_expression": false },
+    { "name": "service_name", "type": "string", "default": "{{ vars.author }}-svc", "required": false, "secret": false,
+      "prompted": false, "derived": true, "private": false, "default_is_expression": true }
   ],
   "hooks": {
     "pre_scaffold": [],
@@ -571,7 +578,7 @@ Bare JSON object (no envelope): `{"name","description","version","variables":[{"
 }
 ```
 
-`variables` is sorted by name and reports the resolved variable definitions — the same values the text output shows — not the raw declarations from `tag.template.json`. `hooks` always carries both `pre_scaffold` and `post_scaffold`, `[]` when a phase has no hooks. `has_readme`/`has_howto` are booleans only: README/HOWTO content is never included, and the glamour-rendered ANSI of the text view never appears in JSON. There is deliberately no `source` field. `--update` works the same in JSON mode as in text mode.
+`variables` is sorted by name and reports the resolved variable definitions — the same values the text output shows — not the raw declarations from `tag.template.json`. `hooks` always carries both `pre_scaffold` and `post_scaffold`, `[]` when a phase has no hooks. `has_readme`/`has_howto` are booleans only: README/HOWTO content is never included, and the glamour-rendered ANSI of the text view never appears in JSON. There is deliberately no `source` field. `--update` works the same in JSON mode as in text mode. Each variable also carries four booleans describing what TAG does with it at scaffold time, so a form generator can decide whether to render an input: `private` (name starts with `_`), `derived` (the default is a template expression and no explicit `prompt` is declared), `prompted` (`!private && !derived` — the variable is asked for interactively), and `default_is_expression` (the `default` is raw template source rather than a literal, whether the variable is derived or has a prompt with an evaluated default). All four are always present, never omitted when `false`. `default` is reported verbatim: `info` has no values to resolve expressions against, so `default_is_expression` is what tells a consumer not to render the default literally.
 
 `tag template info` takes exactly one template argument; a second positional is a usage error (exit `2`), not silently ignored.
 

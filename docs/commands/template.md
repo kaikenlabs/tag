@@ -195,9 +195,16 @@ Bundles:
   "description": "Go REST API template",
   "version": "v1.2.0",
   "variables": [
-    { "name": "author", "type": "string", "required": true, "secret": false },
-    { "name": "license", "type": "choice", "required": true, "options": ["MIT", "Apache-2.0", "GPL-3.0"], "secret": false },
-    { "name": "port", "type": "number", "default": 8080, "required": false, "secret": false }
+    { "name": "_build_stamp", "type": "string", "default": "{{ vars.author }}", "required": false, "secret": false,
+      "prompted": false, "derived": true, "private": true, "default_is_expression": true },
+    { "name": "author", "type": "string", "prompt": "Author name", "required": true, "secret": false,
+      "prompted": true, "derived": false, "private": false, "default_is_expression": false },
+    { "name": "license", "type": "choice", "required": true, "options": ["MIT", "Apache-2.0", "GPL-3.0"], "secret": false,
+      "prompted": true, "derived": false, "private": false, "default_is_expression": false },
+    { "name": "port", "type": "number", "default": 8080, "required": false, "secret": false,
+      "prompted": true, "derived": false, "private": false, "default_is_expression": false },
+    { "name": "service_name", "type": "string", "default": "{{ vars.author }}-svc", "required": false, "secret": false,
+      "prompted": false, "derived": true, "private": false, "default_is_expression": true }
   ],
   "hooks": {
     "pre_scaffold": [],
@@ -208,7 +215,7 @@ Bundles:
 }
 ```
 
-Bare object, no envelope. `variables` is sorted by name and reports the resolved variable definitions — the same values shown in the text output — not the raw declarations from `tag.template.json`. `hooks` always carries both `pre_scaffold` and `post_scaffold`, `[]` when a phase has no hooks. `has_readme` and `has_howto` are booleans only: README/HOWTO content is never included, and the ANSI formatting from the text view's rendered docs never appears in JSON. There is deliberately no `source` field. `--update` works the same way in JSON mode as in text mode.
+Bare object, no envelope. `variables` is sorted by name and reports the resolved variable definitions — the same values shown in the text output — not the raw declarations from `tag.template.json`. `hooks` always carries both `pre_scaffold` and `post_scaffold`, `[]` when a phase has no hooks. `has_readme` and `has_howto` are booleans only: README/HOWTO content is never included, and the ANSI formatting from the text view's rendered docs never appears in JSON. There is deliberately no `source` field. `--update` works the same way in JSON mode as in text mode. Each variable also carries four booleans describing what TAG does with it at scaffold time, so a form generator can decide whether to render an input: `private` (name starts with `_`), `derived` (the default is a template expression and no explicit `prompt` is declared), `prompted` (`!private && !derived` — the variable is asked for interactively), and `default_is_expression` (the `default` is raw template source rather than a literal, whether the variable is derived or has a prompt with an evaluated default). All four are always present, never omitted when `false`. `default` is reported verbatim: `info` has no values to resolve expressions against, so `default_is_expression` is what tells a consumer not to render the default literally.
 
 ---
 
