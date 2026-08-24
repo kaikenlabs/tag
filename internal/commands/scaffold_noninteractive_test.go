@@ -143,7 +143,7 @@ func TestUT_HandleCookiecutterDetection_JSONModeErrorsWithoutPromptingOnATTY(t *
 	withNoPrompting(t)
 	ctx := newScaffoldCLIContextExtra(t, nil)
 
-	err := handleCookiecutterDetection(ctx, nil, "gh:user/tmpl", t.TempDir(), scaffold.Options{}, true)
+	err := handleCookiecutterDetection(ctx, nil, "gh:user/tmpl", t.TempDir(), scaffold.Options{}, true, testVersion)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Cookiecutter")

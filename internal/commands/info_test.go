@@ -192,9 +192,10 @@ func TestUT_ResolveTemplateDir_LibraryFirst(t *testing.T) {
 	})
 
 	c := createTestCLIContext(t, []string{"my-lib-template"}, nil)
-	resolved, err := resolveTemplateDir(c, "my-lib-template")
+	resolved, commitSHA, err := resolveTemplateDir(c, "my-lib-template")
 	require.NoError(t, err)
 	assert.Equal(t, templateDir, resolved)
+	assert.Empty(t, commitSHA, "a library entry is resolved by name, never through the resolver")
 }
 
 func TestUT_ResolveTemplateDir_LocalPath(t *testing.T) {
@@ -207,9 +208,10 @@ func TestUT_ResolveTemplateDir_LocalPath(t *testing.T) {
 	})
 
 	c := createTestCLIContext(t, []string{dir}, nil)
-	resolved, err := resolveTemplateDir(c, dir)
+	resolved, commitSHA, err := resolveTemplateDir(c, dir)
 	require.NoError(t, err)
 	assert.Equal(t, dir, resolved)
+	assert.Empty(t, commitSHA, "a local directory has no commit")
 }
 
 func TestUT_DisplayMetadata_AllFields(t *testing.T) {
@@ -296,10 +298,10 @@ func TestUT_TemplateInfo_FormatFlagBothPositions_ProducesJSON(t *testing.T) {
 		"vars": map[string]any{},
 	})
 
-	trailing := runCLI(t, templateInfoCommand(), "info", dir, "--format", formatJSON)
+	trailing := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format", formatJSON)
 	require.NoError(t, trailing.Err)
 
-	leading := runCLI(t, templateInfoCommand(), "info", "--format", formatJSON, dir)
+	leading := runCLI(t, templateInfoCommand(testVersion), "info", "--format", formatJSON, dir)
 	require.NoError(t, leading.Err)
 
 	var trailingParsed, leadingParsed map[string]any
@@ -315,7 +317,7 @@ func TestUT_TemplateInfo_EmptyFormat_IsUsageError(t *testing.T) {
 	dir := t.TempDir()
 	createTemplateConfig(t, dir, map[string]any{"name": "x", "vars": map[string]any{}})
 
-	run := runCLI(t, templateInfoCommand(), "info", dir, "--format=")
+	run := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format=")
 	require.Error(t, run.Err)
 	assert.Contains(t, run.Err.Error(), `unsupported format ""`)
 }
@@ -326,7 +328,7 @@ func TestUT_TemplateInfo_RejectsSecondPositional(t *testing.T) {
 	dir := t.TempDir()
 	createTemplateConfig(t, dir, map[string]any{"name": "x", "vars": map[string]any{}})
 
-	run := runCLI(t, templateInfoCommand(), "info", dir, "extra-arg")
+	run := runCLI(t, templateInfoCommand(testVersion), "info", dir, "extra-arg")
 	require.Error(t, run.Err)
 	assert.Contains(t, run.Err.Error(), "expected exactly one template argument, got 2")
 }
@@ -336,10 +338,10 @@ func TestUT_TemplateInfo_FormatTextEqualsDefault(t *testing.T) {
 
 	dir := seedInfoTemplate(t)
 
-	defaultRun := runCLI(t, templateInfoCommand(), "info", dir)
+	defaultRun := runCLI(t, templateInfoCommand(testVersion), "info", dir)
 	require.NoError(t, defaultRun.Err)
 
-	explicitRun := runCLI(t, templateInfoCommand(), "info", dir, "--format", formatText)
+	explicitRun := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format", formatText)
 	require.NoError(t, explicitRun.Err)
 
 	assert.Equal(t, defaultRun.Writer, explicitRun.Writer)
@@ -348,7 +350,7 @@ func TestUT_TemplateInfo_FormatTextEqualsDefault(t *testing.T) {
 func TestUT_TemplateInfoJSON_LeavesStdoutClean(t *testing.T) {
 	dir := seedInfoTemplate(t)
 
-	run := runCLICapturingStdout(t, templateInfoCommand(), "info", dir, "--format", formatJSON)
+	run := runCLICapturingStdout(t, templateInfoCommand(testVersion), "info", dir, "--format", formatJSON)
 	require.NoError(t, run.Err)
 	assert.Empty(t, run.Stdout, "a JSON command must not bypass c.App.Writer")
 
@@ -362,7 +364,7 @@ func TestUT_TemplateInfoJSON_MissingConfigErrorsBeforeWriting(t *testing.T) {
 
 	dir := t.TempDir()
 
-	run := runCLI(t, templateInfoCommand(), "info", dir, "--format", formatJSON)
+	run := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format", formatJSON)
 	require.Error(t, run.Err)
 	assert.Contains(t, run.Err.Error(), "not a TAG template")
 	assert.Empty(t, run.Writer, "no partial document may be written before the load error")
@@ -377,12 +379,14 @@ func TestUT_TemplateInfoJSON_EmptyCollectionsAreArrays(t *testing.T) {
 		"vars": map[string]any{},
 	})
 
-	run := runCLI(t, templateInfoCommand(), "info", dir, "--format", formatJSON)
+	run := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format", formatJSON)
 	require.NoError(t, run.Err)
 
 	// Asserting on raw encoded bytes matters: `null` and `[]` both unmarshal
 	// to a nil Go slice, so a struct-level assertion would be vacuous here.
 	assert.Contains(t, run.Writer, `"variables": []`)
+	assert.Contains(t, run.Writer, `"keywords": []`)
+	assert.Contains(t, run.Writer, `"categories": []`)
 	assert.Contains(t, run.Writer, `"pre_scaffold": []`)
 	assert.Contains(t, run.Writer, `"post_scaffold": []`)
 	assert.NotContains(t, run.Writer, "null")
@@ -400,7 +404,7 @@ func TestUT_TemplateInfoJSON_NeverInvokesGlamour(t *testing.T) {
 	}
 	t.Cleanup(func() { renderMarkdown = orig })
 
-	run := runCLI(t, templateInfoCommand(), "info", dir, "--format", formatJSON)
+	run := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format", formatJSON)
 	require.NoError(t, run.Err)
 	assert.Zero(t, calls, "the JSON path must never render markdown through glamour")
 }
@@ -417,7 +421,7 @@ func TestUT_TemplateInfo_TextRendersDocsThroughGlamour(t *testing.T) {
 	}
 	t.Cleanup(func() { renderMarkdown = orig })
 
-	run := runCLI(t, templateInfoCommand(), "info", dir)
+	run := runCLI(t, templateInfoCommand(testVersion), "info", dir)
 	require.NoError(t, run.Err)
 	assert.Equal(t, 1, calls, "the text path must render the README through glamour")
 }
@@ -425,7 +429,7 @@ func TestUT_TemplateInfo_TextRendersDocsThroughGlamour(t *testing.T) {
 func TestUT_TemplateInfoJSON_ContainsNoANSI(t *testing.T) {
 	dir := seedInfoTemplate(t)
 
-	run := runCLI(t, templateInfoCommand(), "info", dir, "--format", formatJSON)
+	run := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format", formatJSON)
 	require.NoError(t, run.Err)
 
 	// A raw-byte scan of the encoded output would be vacuous: encoding/json
@@ -467,7 +471,7 @@ func TestUT_BuildTemplateInfoJSON_Shape(t *testing.T) {
 		},
 	}
 
-	dto := buildTemplateInfoJSON(config, true, false)
+	dto := buildTemplateInfoJSON(config, true, false, "", testVersion)
 
 	assert.Equal(t, "go-api", dto.Name)
 	assert.Equal(t, "A Go API", dto.Description)
@@ -491,7 +495,7 @@ func TestUT_BuildTemplateInfoJSON_VariablesSortedByName(t *testing.T) {
 		},
 	}
 
-	dto := buildTemplateInfoJSON(config, false, false)
+	dto := buildTemplateInfoJSON(config, false, false, "", testVersion)
 
 	require.Len(t, dto.Variables, 3)
 	assert.Equal(t, []string{"alpha", "mike", "zebra"},
@@ -511,7 +515,7 @@ func TestUT_BuildTemplateInfoJSON_UsesResolvedVarsNotRaw(t *testing.T) {
 		Vars:    nil,
 	}
 
-	dto := buildTemplateInfoJSON(config, false, false)
+	dto := buildTemplateInfoJSON(config, false, false, "", testVersion)
 	assert.Empty(t, dto.Variables)
 }
 
@@ -526,32 +530,32 @@ func TestUT_BuildTemplateInfoJSON_VariableFields(t *testing.T) {
 		{
 			name: "short-form string default",
 			def:  scaffold.VariableDef{Type: scaffold.VarTypeString, Default: "my-app"},
-			want: templateInfoVariableJSON{Name: "v", Type: "string", Default: "my-app", Prompted: true},
+			want: templateInfoVariableJSON{Name: "v", Type: "string", Default: "my-app", Prompted: true, DependsOn: []string{}},
 		},
 		{
 			name: "boolean",
 			def:  scaffold.VariableDef{Type: scaffold.VarTypeBoolean, Default: true},
-			want: templateInfoVariableJSON{Name: "v", Type: "boolean", Default: true, Prompted: true},
+			want: templateInfoVariableJSON{Name: "v", Type: "boolean", Default: true, Prompted: true, DependsOn: []string{}},
 		},
 		{
 			name: "choice",
 			def:  scaffold.VariableDef{Type: scaffold.VarTypeChoice, Options: []string{"a", "b"}},
-			want: templateInfoVariableJSON{Name: "v", Type: "choice", Options: []string{"a", "b"}, Prompted: true},
+			want: templateInfoVariableJSON{Name: "v", Type: "choice", Options: []string{"a", "b"}, Prompted: true, DependsOn: []string{}},
 		},
 		{
 			name: "required with prompt",
 			def:  scaffold.VariableDef{Type: scaffold.VarTypeString, Required: true, Prompt: "Enter value"},
-			want: templateInfoVariableJSON{Name: "v", Type: "string", Required: true, Prompt: "Enter value", Prompted: true},
+			want: templateInfoVariableJSON{Name: "v", Type: "string", Required: true, Prompt: "Enter value", Prompted: true, DependsOn: []string{}},
 		},
 		{
 			name: "secret",
 			def:  scaffold.VariableDef{Type: scaffold.VarTypeString, Secret: true},
-			want: templateInfoVariableJSON{Name: "v", Type: "string", Secret: true, Prompted: true},
+			want: templateInfoVariableJSON{Name: "v", Type: "string", Secret: true, Prompted: true, DependsOn: []string{}},
 		},
 		{
 			name: "private var",
 			def:  scaffold.VariableDef{Type: scaffold.VarTypeString},
-			want: templateInfoVariableJSON{Name: "_computed", Type: "string", Private: true},
+			want: templateInfoVariableJSON{Name: "_computed", Type: "string", Private: true, DependsOn: []string{}},
 		},
 	}
 
@@ -562,7 +566,7 @@ func TestUT_BuildTemplateInfoJSON_VariableFields(t *testing.T) {
 			config := &scaffold.TemplateConfig{
 				Vars: map[string]scaffold.VariableDef{tt.want.Name: tt.def},
 			}
-			dto := buildTemplateInfoJSON(config, false, false)
+			dto := buildTemplateInfoJSON(config, false, false, "", testVersion)
 			require.Len(t, dto.Variables, 1)
 			assert.Equal(t, tt.want, dto.Variables[0])
 		})
@@ -646,7 +650,7 @@ func TestUT_TemplateInfo_UpdateFlagWithJSON(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			run := runCLI(t, templateInfoCommand(), tc.argv...)
+			run := runCLI(t, templateInfoCommand(testVersion), tc.argv...)
 			require.NoError(t, run.Err)
 
 			var got map[string]any
@@ -686,7 +690,7 @@ func TestUT_TemplateInfoJSON_AuthorSuppliedANSIIsEscapedNotGenerated(t *testing.
 		"vars":        map[string]any{"greeting": "\x1b[32mhi\x1b[0m"},
 	})
 
-	run := runCLI(t, templateInfoCommand(), "info", dir, "--format", formatJSON)
+	run := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format", formatJSON)
 	require.NoError(t, run.Err)
 
 	assert.NotContains(t, run.Writer, "\x1b",
@@ -775,7 +779,7 @@ func TestUT_BuildTemplateInfoJSON_FormMetadata(t *testing.T) {
 			config := &scaffold.TemplateConfig{
 				Vars: map[string]scaffold.VariableDef{tt.varName: tt.def},
 			}
-			dto := buildTemplateInfoJSON(config, false, false)
+			dto := buildTemplateInfoJSON(config, false, false, "", testVersion)
 			require.Len(t, dto.Variables, 1)
 
 			assert.Equal(t, tt.prompted, dto.Variables[0].Prompted, "prompted")
@@ -803,7 +807,7 @@ func TestUT_TemplateInfoJSON_FormMetadataAlwaysSerialised(t *testing.T) {
 		},
 	}
 
-	raw, err := json.Marshal(buildTemplateInfoJSON(config, false, false))
+	raw, err := json.Marshal(buildTemplateInfoJSON(config, false, false, "", testVersion))
 	require.NoError(t, err)
 
 	var doc struct {

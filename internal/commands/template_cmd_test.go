@@ -13,7 +13,7 @@ import (
 func TestUT_TemplateCommand_SubcommandCount(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{}
-	cmd := TemplateCommand(cfg)
+	cmd := TemplateCommand(cfg, testVersion)
 
 	require.NotNil(t, cmd)
 	assert.Equal(t, "template", cmd.Name)
@@ -23,7 +23,7 @@ func TestUT_TemplateCommand_SubcommandCount(t *testing.T) {
 func TestUT_TemplateCommand_NewHasSubcommands(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{}
-	cmd := TemplateCommand(cfg)
+	cmd := TemplateCommand(cfg, testVersion)
 
 	var newCmd *cli.Command
 	for _, sc := range cmd.Subcommands {

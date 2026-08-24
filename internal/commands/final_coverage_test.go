@@ -972,7 +972,7 @@ func TestUT_HandleCookiecutterDetection_NonInteractive(t *testing.T) {
 		"no-input": "true",
 	})
 
-	err := handleCookiecutterDetection(ctx, nil, "gh:user/cc-template", t.TempDir(), scaffold.Options{}, false)
+	err := handleCookiecutterDetection(ctx, nil, "gh:user/cc-template", t.TempDir(), scaffold.Options{}, false, testVersion)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Cookiecutter template")
 	assert.Contains(t, err.Error(), "non-interactive")

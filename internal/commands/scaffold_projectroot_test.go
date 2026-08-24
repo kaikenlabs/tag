@@ -18,12 +18,17 @@ func TestUT_NewScaffoldDoc_EmitsProjectRoot(t *testing.T) {
 		ProjectRoot: "/abs/out/my-proj",
 		Opts:        scaffold.Options{TemplateRef: "./tmpl"},
 		Files:       []scaffold.FileEntry{{Path: "my-proj/README.md", Action: fileaction.ActionCreate}},
-	})
+	}, testVersion)
 
 	data, err := json.Marshal(doc)
 	require.NoError(t, err)
 
+	// Exact key set, not a subset: this is the only whole-document assertion on
+	// scaffoldDoc, so it is what makes a new or dropped root key a deliberate,
+	// reviewable change rather than a silent one.
 	assert.JSONEq(t, `{
+		"schema_version": 1,
+		"tag_version": "9.9.9-test",
 		"output_dir": "/abs/out",
 		"project_root": "/abs/out/my-proj",
 		"template": "./tmpl",

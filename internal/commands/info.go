@@ -14,6 +14,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
+	varscan "github.com/kaikenlabs/tag/internal/vars"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -29,7 +30,7 @@ func templateInfoFlags() []cli.Flag {
 }
 
 // InfoCommand returns the info command definition.
-func templateInfoCommand() *cli.Command {
+func templateInfoCommand(version string) *cli.Command {
 	return &cli.Command{
 		Name:      "info",
 		Usage:     "Show information about a template without scaffolding",
@@ -53,13 +54,15 @@ Examples:
 
   # Force refresh of cached remote template
   tag template info gh:user/awesome-template --update`,
-		Flags:        templateInfoFlags(),
-		Action:       infoAction,
+		Flags: templateInfoFlags(),
+		Action: func(c *cli.Context) error {
+			return infoAction(c, version)
+		},
 		BashComplete: completeLibraryTemplateNames,
 	}
 }
 
-func infoAction(c *cli.Context) error {
+func infoAction(c *cli.Context, version string) error {
 	args, err := reparseTrailingFlags(c, templateInfoFlags())
 	if err != nil {
 		return app.UsageErrorf("%s", err)
@@ -78,7 +81,7 @@ func infoAction(c *cli.Context) error {
 
 	ref := args[0]
 
-	templateDir, err := resolveTemplateDir(c, ref)
+	templateDir, resolvedCommit, err := resolveTemplateDir(c, ref)
 	if err != nil {
 		return err
 	}
@@ -92,7 +95,8 @@ func infoAction(c *cli.Context) error {
 		}
 		dto := buildTemplateInfoJSON(config,
 			docFileHasContent(templateDir, types.TemplateReadme),
-			docFileHasContent(templateDir, types.TemplateHowto))
+			docFileHasContent(templateDir, types.TemplateHowto),
+			resolvedCommit, version)
 		if writeErr := jsonout.Write(out, dto); writeErr != nil {
 			return app.Errorf("write json: %w", writeErr)
 		}
@@ -102,31 +106,38 @@ func infoAction(c *cli.Context) error {
 	return displayTemplateInfo(out, templateDir)
 }
 
-// resolveTemplateDir resolves a template reference to a directory path.
+// resolveTemplateDir resolves a template reference to a directory path and the
+// commit SHA it resolved to.
+//
 // It tries library lookup first, then falls back to local/remote resolution.
-func resolveTemplateDir(c *cli.Context, ref string) (string, error) {
+// The SHA is empty for anything that is not a git-backed remote fetch or cache
+// hit: a library entry (resolved by name, never through the resolver), a local
+// directory, and a zip. Callers surface it as an always-present, possibly-empty
+// field rather than omitting it, so a consumer can tell "local template" from
+// "field not supported by this binary".
+func resolveTemplateDir(c *cli.Context, ref string) (dir, commitSHA string, err error) {
 	// Try library first
-	lib, err := newLocalLibrary()
-	if err == nil {
+	lib, libNewErr := newLocalLibrary()
+	if libNewErr == nil {
 		if templateDir, libErr := lib.TemplatePath(ref); libErr == nil {
-			return templateDir, nil
+			return templateDir, "", nil
 		}
 	}
 
 	// Fall back to local/remote resolution
 	resolver, err := remote.NewResolver()
 	if err != nil {
-		return "", app.Errorf("failed to create resolver: %w", err)
+		return "", "", app.Errorf("failed to create resolver: %w", err)
 	}
 
 	resolveResult, err := resolver.Resolve(c.Context, ref, remote.ResolveOptions{
 		ForceUpdate: c.Bool("update"),
 	})
 	if err != nil {
-		return "", app.Errorf("failed to resolve template %q: %w", ref, err)
+		return "", "", app.Errorf("failed to resolve template %q: %w", ref, err)
 	}
 
-	return resolveResult.Path, nil
+	return resolveResult.Path, resolveResult.CommitSHA, nil
 }
 
 // displayTemplateInfo orchestrates the display of all template information sections.
@@ -308,14 +319,34 @@ func joinOptions(opts []string) string {
 // is never valid JSON output. Do not "simplify" this back to json tags on the
 // domain types; see buildTemplateInfoJSON.
 type templateInfoJSON struct {
+	// SchemaVersion and TagVersion let a pinned consumer detect this binary's
+	// contract without a second process spawn. This is NOT the {"ok","data"}
+	// envelope jsonout rejects — see that package's doc.
+	SchemaVersion int    `json:"schema_version"`
+	TagVersion    string `json:"tag_version"`
+
 	Name        string                     `json:"name"`
 	Description string                     `json:"description"`
 	Version     string                     `json:"version"`
+	Keywords    []string                   `json:"keywords"`
+	Categories  []string                   `json:"categories"`
 	Variables   []templateInfoVariableJSON `json:"variables"`
 	Hooks       templateInfoHooksJSON      `json:"hooks"`
 	HasReadme   bool                       `json:"has_readme"`
 	HasHowto    bool                       `json:"has_howto"`
+
+	// ResolvedCommit is the git SHA the reference resolved to, or "" for a
+	// library, local or zip template. Never omitempty: absent means "this
+	// binary does not emit it", which is not the same claim as "no SHA".
+	ResolvedCommit string `json:"resolved_commit"`
 }
+
+// infoSchemaVersion is the contract version of the `template info` document.
+// Bump it only for a breaking change — a removed or renamed key, a changed
+// type, or a changed meaning. Adding a key is not breaking. It is deliberately
+// separate from scaffoldSchemaVersion so one document can bump without the
+// other; see docs/reference/json-contract.md.
+const infoSchemaVersion = 1
 
 // templateInfoVariableJSON is one entry of templateInfoJSON.Variables.
 type templateInfoVariableJSON struct {
@@ -326,6 +357,12 @@ type templateInfoVariableJSON struct {
 	Required bool     `json:"required"`
 	Options  []string `json:"options,omitempty"`
 	Secret   bool     `json:"secret"`
+
+	// DependsOn names the declared variables this variable's default expression
+	// references, sorted, [] when there are none. `variables` stays sorted
+	// alphabetically; this is what lets a consumer recover the order scaffold
+	// actually prompts in without info changing its own sort.
+	DependsOn []string `json:"depends_on"`
 
 	// The four form-metadata fields describe scaffold-time behaviour so a form
 	// generator can decide whether to render an input. They carry no omitempty:
@@ -349,12 +386,16 @@ type templateInfoHooksJSON struct {
 // Using scaffold.TemplateConfig.Vars (never RawVars) is what guarantees the
 // JSON path reports resolved variable types/defaults, not the raw JSON shapes
 // a template author wrote.
-func buildTemplateInfoJSON(config *scaffold.TemplateConfig, hasReadme, hasHowto bool) templateInfoJSON {
+func buildTemplateInfoJSON(config *scaffold.TemplateConfig, hasReadme, hasHowto bool,
+	resolvedCommit, tagVersion string,
+) templateInfoJSON {
 	names := make([]string, 0, len(config.Vars))
 	for name := range config.Vars {
 		names = append(names, name)
 	}
 	slices.Sort(names)
+
+	deps := varscan.DeclaredDeps(config.Vars)
 
 	variables := make([]templateInfoVariableJSON, 0, len(names))
 	for _, name := range names {
@@ -372,6 +413,7 @@ func buildTemplateInfoJSON(config *scaffold.TemplateConfig, hasReadme, hasHowto 
 			Derived:             derived,
 			Private:             private,
 			DefaultIsExpression: derived || v.IsEvaluatedDefault(),
+			DependsOn:           deps[name],
 		})
 	}
 
@@ -392,12 +434,26 @@ func buildTemplateInfoJSON(config *scaffold.TemplateConfig, hasReadme, hasHowto 
 	}
 
 	return templateInfoJSON{
-		Name:        config.Name,
-		Description: config.Description,
-		Version:     config.Version,
-		Variables:   variables,
-		Hooks:       hooks,
-		HasReadme:   hasReadme,
-		HasHowto:    hasHowto,
+		SchemaVersion:  infoSchemaVersion,
+		TagVersion:     tagVersion,
+		Name:           config.Name,
+		Description:    config.Description,
+		Version:        config.Version,
+		Keywords:       cloneOrEmpty(config.Keywords),
+		Categories:     cloneOrEmpty(config.Categories),
+		Variables:      variables,
+		Hooks:          hooks,
+		HasReadme:      hasReadme,
+		HasHowto:       hasHowto,
+		ResolvedCommit: resolvedCommit,
 	}
+}
+
+// cloneOrEmpty copies src, returning an empty slice rather than nil for empty
+// input. slices.Clone(nil) is nil, and a nil slice marshals to null, not [].
+func cloneOrEmpty(src []string) []string {
+	if len(src) == 0 {
+		return []string{}
+	}
+	return slices.Clone(src)
 }

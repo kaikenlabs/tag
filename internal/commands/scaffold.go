@@ -49,7 +49,7 @@ func nonInteractive(c *cli.Context, jsonMode bool) bool {
 }
 
 // ScaffoldCommand returns the scaffold command definition.
-func ScaffoldCommand() *cli.Command {
+func ScaffoldCommand(version string) *cli.Command {
 	return &cli.Command{
 		Name:      "scaffold",
 		Aliases:   []string{"s"},
@@ -97,13 +97,15 @@ Examples:
 
   # Replay with saved values from previous scaffold
   tag scaffold gh:user/template another-api --replay`,
-		Flags:        scaffoldFlags(),
-		Action:       scaffoldAction,
+		Flags: scaffoldFlags(),
+		Action: func(c *cli.Context) error {
+			return scaffoldAction(c, version)
+		},
 		BashComplete: completeLibraryTemplateNames,
 	}
 }
 
-func scaffoldAction(c *cli.Context) error {
+func scaffoldAction(c *cli.Context, version string) error {
 	positional, err := reparseTrailingFlags(c, scaffoldFlags())
 	if err != nil {
 		return app.Errorf("invalid flags: %w", err)
@@ -135,17 +137,19 @@ func scaffoldAction(c *cli.Context) error {
 			return asAppError(err)
 		}
 
-		return scaffoldFromLibrary(c, lib, entry, positional, jsonMode)
+		return scaffoldFromLibrary(c, lib, entry, positional, jsonMode, version)
 	}
 
-	return scaffoldFromRef(c, positional, jsonMode)
+	return scaffoldFromRef(c, positional, jsonMode, version)
 }
 
 // scaffoldFromLibrary scaffolds a project from an installed library template.
 // runScaffold initialises and runs a scaffold with the given options.
 // onCookiecutter handles the CookiecutterDetectedError case, allowing callers to
 // provide context-specific error messages or recovery logic.
-func runScaffold(c *cli.Context, opts scaffold.Options, jsonMode bool, onCookiecutter func(*scaffold.CookiecutterDetectedError) error) error {
+func runScaffold(c *cli.Context, opts scaffold.Options, jsonMode bool, version string,
+	onCookiecutter func(*scaffold.CookiecutterDetectedError) error,
+) error {
 	// Load dialect registry (all 3 tiers: built-in + user-global + template-local).
 	reg, err := loadDialectRegistry(opts.TemplateDir)
 	if err != nil {
@@ -185,7 +189,7 @@ func runScaffold(c *cli.Context, opts scaffold.Options, jsonMode bool, onCookiec
 	}
 
 	if jsonMode {
-		return jsonout.Write(cmdOut(c), newScaffoldDoc(result))
+		return jsonout.Write(cmdOut(c), newScaffoldDoc(result, version))
 	}
 	displayScaffoldSummary(c.App.Writer, result)
 	return nil
@@ -199,6 +203,11 @@ type scaffoldFileJSON struct {
 
 // scaffoldDoc is the JSON shape for `scaffold --format json`.
 type scaffoldDoc struct {
+	// See templateInfoJSON for why these two keys exist on this document and
+	// on no other, and why they are not the envelope jsonout rejects.
+	SchemaVersion int    `json:"schema_version"`
+	TagVersion    string `json:"tag_version"`
+
 	OutputDir   string             `json:"output_dir"`
 	ProjectRoot string             `json:"project_root"`
 	Template    string             `json:"template"`
@@ -207,23 +216,32 @@ type scaffoldDoc struct {
 	DryRun      bool               `json:"dry_run"`
 }
 
-func newScaffoldDoc(result scaffold.ScaffoldResult) scaffoldDoc {
+// scaffoldSchemaVersion is the contract version of the `scaffold` document.
+// Deliberately separate from infoSchemaVersion so one document's shape can bump
+// without dragging the other; see docs/reference/json-contract.md.
+const scaffoldSchemaVersion = 1
+
+func newScaffoldDoc(result scaffold.ScaffoldResult, version string) scaffoldDoc {
 	files := make([]scaffoldFileJSON, 0, len(result.Files))
 	for _, f := range result.Files {
 		files = append(files, scaffoldFileJSON{Path: f.Path, Action: f.Action})
 	}
 
 	return scaffoldDoc{
-		OutputDir:   result.OutputDir,
-		ProjectRoot: result.ProjectRoot,
-		Template:    result.Opts.TemplateRef,
-		Files:       files,
-		Created:     len(files),
-		DryRun:      result.Opts.DryRun,
+		SchemaVersion: scaffoldSchemaVersion,
+		TagVersion:    version,
+		OutputDir:     result.OutputDir,
+		ProjectRoot:   result.ProjectRoot,
+		Template:      result.Opts.TemplateRef,
+		Files:         files,
+		Created:       len(files),
+		DryRun:        result.Opts.DryRun,
 	}
 }
 
-func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.Entry, positional []string, jsonMode bool) error {
+func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.Entry, positional []string,
+	jsonMode bool, version string,
+) error {
 	projectName := ""
 	if len(positional) >= 2 {
 		projectName = positional[1]
@@ -245,13 +263,13 @@ func scaffoldFromLibrary(c *cli.Context, lib *library.Library, entry *library.En
 	opts.IsRemote = false
 	opts.SkipGeneratorCopy = true // generators resolve from library
 
-	return runScaffold(c, opts, jsonMode, func(*scaffold.CookiecutterDetectedError) error {
+	return runScaffold(c, opts, jsonMode, version, func(*scaffold.CookiecutterDetectedError) error {
 		return app.Errorf("template %q is a Cookiecutter template; run 'tag lib update %s' to convert it", entry.Name, entry.Name)
 	})
 }
 
 // scaffoldFromRef handles the case where a template reference is provided.
-func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool) error {
+func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version string) error {
 	templateRef := positional[0]
 	projectName := ""
 	if len(positional) >= 2 {
@@ -264,7 +282,7 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool) error {
 		lib, libErr := newLocalLibrary()
 		if libErr == nil {
 			if entry, getErr := lib.Get(templateRef); getErr == nil {
-				return scaffoldFromLibrary(c, lib, entry, positional, jsonMode)
+				return scaffoldFromLibrary(c, lib, entry, positional, jsonMode, version)
 			}
 		}
 	}
@@ -322,8 +340,8 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool) error {
 	}
 
 	// Create and run scaffold
-	if err := runScaffold(c, opts, jsonMode, func(ccErr *scaffold.CookiecutterDetectedError) error {
-		return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts, jsonMode)
+	if err := runScaffold(c, opts, jsonMode, version, func(ccErr *scaffold.CookiecutterDetectedError) error {
+		return handleCookiecutterDetection(c, ccErr, templateRef, templateDir, opts, jsonMode, version)
 	}); err != nil {
 		return err
 	}
@@ -441,7 +459,9 @@ func scaffoldFlags() []cli.Flag {
 
 // handleCookiecutterDetection handles the case when a Cookiecutter template is detected.
 // Output convention: fmt for user-facing messages, slog for diagnostic messages.
-func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetectedError, templateRef, templateDir string, opts scaffold.Options, jsonMode bool) error {
+func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetectedError,
+	templateRef, templateDir string, opts scaffold.Options, jsonMode bool, version string,
+) error {
 	// In non-interactive mode, fail with helpful error
 	if nonInteractive(c, jsonMode) {
 		return app.Errorf("This appears to be a Cookiecutter template.\n"+
@@ -472,7 +492,7 @@ func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetecte
 
 	// Retry scaffolding with converted template — reuse runScaffold to
 	// ensure dialect loading and all other initialization happens correctly.
-	return runScaffold(c, opts, jsonMode, func(*scaffold.CookiecutterDetectedError) error {
+	return runScaffold(c, opts, jsonMode, version, func(*scaffold.CookiecutterDetectedError) error {
 		return app.Errorf("unexpected Cookiecutter detection after conversion")
 	})
 }
