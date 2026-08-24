@@ -350,8 +350,31 @@ func (r *Reference) IsRemote() bool {
 }
 
 // CacheKey returns a filesystem-safe cache key for this reference.
-// For shorthands: gh_user_repo or gh_user_repo@v1.0.0
+// For shorthands: gh_user_repo-<digest> or gh_user_repo@v1.0.0-<digest>
 // For URLs: _url_{hash}
+//
+// The readable prefix is lossy and MUST NOT be the whole key. Owner and repo are
+// only validated for path-traversal safety, so both may legitimately contain the
+// "_" used as the separator, and sanitizeForPath maps several more characters
+// ("/", ":", "*", ...) onto "_" as well. Two different repositories therefore
+// flatten to the same prefix — gl:a_b/c and gl:a/b_c both give "gl_a_b_c" — and
+// because tryCache trusts the key alone and never re-checks CacheMeta.OriginalRef
+// against the request, whichever was fetched first is served for both: the wrong
+// template content, and the wrong commit SHA in `template info`'s
+// resolved_commit.
+//
+// The digest closes that by construction rather than by choosing a separator
+// that today's inputs happen not to contain. Components are joined with NUL,
+// which validation forbids anywhere, so no component boundary can be forged.
+//
+// SubPath is deliberately NOT part of the identity: an entry caches the whole
+// repository and applySubPath selects within it after the fact. That remains as
+// epic #388 recorded it.
+//
+// Changing this invalidates existing cache entries. That is safe — cache data is
+// regenerable and a refetch self-heals — and it is the intended consequence:
+// entries written under the ambiguous scheme cannot be trusted to belong to the
+// reference that would now read them.
 func (r *Reference) CacheKey() string {
 	if r.Provider != ProviderGeneric && r.Owner != "" && r.Repo != "" {
 		// Use human-readable format for known providers
@@ -360,12 +383,20 @@ func (r *Reference) CacheKey() string {
 		if r.Version != "" {
 			key += "@" + sanitizeForPath(r.Version)
 		}
-		return key
+		return key + "-" + r.identityDigest()
 	}
 
 	// Hash the URL for generic sources
 	hash := sha256.Sum256([]byte(r.URL))
 	return "_url_" + hex.EncodeToString(hash[:])[:12]
+}
+
+// identityDigest is a short digest over the exact, unsanitized components that
+// distinguish one cached repository from another.
+func (r *Reference) identityDigest() string {
+	sum := sha256.Sum256([]byte(strings.Join(
+		[]string{string(r.Provider), r.Owner, r.Repo, r.Version}, "\x00")))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 // shortProvider returns a short prefix for the provider.

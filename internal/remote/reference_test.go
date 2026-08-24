@@ -3,6 +3,8 @@ package remote
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -646,9 +648,9 @@ func TestUT_Reference_IsRemote(t *testing.T) {
 
 func TestUT_Reference_CacheKey(t *testing.T) {
 	tests := []struct {
-		name     string
-		ref      *Reference
-		expected string
+		name       string
+		ref        *Reference
+		wantPrefix string
 	}{
 		{
 			name: "github simple",
@@ -657,7 +659,7 @@ func TestUT_Reference_CacheKey(t *testing.T) {
 				Owner:    "user",
 				Repo:     "repo",
 			},
-			expected: "gh_user_repo",
+			wantPrefix: "gh_user_repo",
 		},
 		{
 			name: "github with version",
@@ -667,7 +669,7 @@ func TestUT_Reference_CacheKey(t *testing.T) {
 				Repo:     "repo",
 				Version:  "v1.0.0",
 			},
-			expected: "gh_user_repo@v1.0.0",
+			wantPrefix: "gh_user_repo@v1.0.0",
 		},
 		{
 			name: "gitlab",
@@ -676,7 +678,7 @@ func TestUT_Reference_CacheKey(t *testing.T) {
 				Owner:    "org",
 				Repo:     "project",
 			},
-			expected: "gl_org_project",
+			wantPrefix: "gl_org_project",
 		},
 		{
 			name: "bitbucket",
@@ -685,7 +687,7 @@ func TestUT_Reference_CacheKey(t *testing.T) {
 				Owner:    "team",
 				Repo:     "repo",
 			},
-			expected: "bb_team_repo",
+			wantPrefix: "bb_team_repo",
 		},
 		{
 			name: "generic URL uses hash",
@@ -693,7 +695,7 @@ func TestUT_Reference_CacheKey(t *testing.T) {
 				Provider: ProviderGeneric,
 				URL:      "https://example.com/template.zip",
 			},
-			expected: "_url_", // Starts with _url_, rest is hash
+			wantPrefix: "_url_", // Starts with _url_, rest is hash
 		},
 	}
 
@@ -704,7 +706,11 @@ func TestUT_Reference_CacheKey(t *testing.T) {
 				assert.True(t, len(key) > len("_url_"))
 				assert.Equal(t, "_url_", key[:5])
 			} else {
-				assert.Equal(t, tt.expected, key)
+				got := tt.ref.CacheKey()
+				assert.True(t, strings.HasPrefix(got, tt.wantPrefix+"-"),
+					"key %q must keep the readable prefix %q for debuggability", got, tt.wantPrefix)
+				assert.Regexp(t, `^`+regexp.QuoteMeta(tt.wantPrefix)+`-[0-9a-f]{12}$`, got,
+					"the identity digest is what makes the key collision-proof; see CacheKey")
 			}
 		})
 	}

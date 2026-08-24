@@ -87,7 +87,11 @@ func TestUT_Resolver_CacheHit(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "tag.template.json"), []byte(`{}`), 0o644))
 
 	// Cache it under the pinned key with a commit SHA
-	_, err = cache.Set("gh_user_repo@v1.0.0", srcDir, &CacheMeta{
+	pinnedRef, parseErr := Parse("gh:user/repo@v1.0.0")
+	require.NoError(t, parseErr)
+	pinnedKey := pinnedRef.CacheKey()
+
+	_, err = cache.Set(pinnedKey, srcDir, &CacheMeta{
 		OriginalRef: "gh:user/repo@v1.0.0",
 		FetchedAt:   time.Now(),
 		Version:     "v1.0.0",
@@ -113,7 +117,7 @@ func TestUT_Resolver_CacheHit(t *testing.T) {
 	result, err := resolver.Resolve(ctx, "gh:user/repo@v1.0.0", ResolveOptions{})
 	require.NoError(t, err)
 
-	assert.Equal(t, filepath.Join(cacheDir, "gh_user_repo@v1.0.0"), result.Path)
+	assert.Equal(t, filepath.Join(cacheDir, pinnedKey), result.Path)
 	assert.Equal(t, "abc123def456789012345678901234567890abcd", result.CommitSHA)
 	assert.Equal(t, "v1.0.0", result.Version)
 }
@@ -130,7 +134,11 @@ func TestUT_Resolver_CacheHit_BackwardCompatMeta(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "tag.template.json"), []byte(`{}`), 0o644))
 
-	_, err = cache.Set("gh_user_repo@v1.0.0", srcDir, &CacheMeta{
+	pinnedRef, parseErr := Parse("gh:user/repo@v1.0.0")
+	require.NoError(t, parseErr)
+	pinnedKey := pinnedRef.CacheKey()
+
+	_, err = cache.Set(pinnedKey, srcDir, &CacheMeta{
 		OriginalRef: "gh:user/repo@v1.0.0",
 		FetchedAt:   time.Now(),
 		Version:     "v1.0.0",
@@ -153,7 +161,7 @@ func TestUT_Resolver_CacheHit_BackwardCompatMeta(t *testing.T) {
 	result, err := resolver.Resolve(ctx, "gh:user/repo@v1.0.0", ResolveOptions{})
 	require.NoError(t, err)
 
-	assert.Equal(t, filepath.Join(cacheDir, "gh_user_repo@v1.0.0"), result.Path)
+	assert.Equal(t, filepath.Join(cacheDir, pinnedKey), result.Path)
 	assert.Empty(t, result.CommitSHA, "old cache entries should deserialize with empty CommitSHA")
 }
 
@@ -169,7 +177,10 @@ func TestUT_Resolver_FloatingRefAlwaysFetches(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "tag.template.json"), []byte(`{}`), 0o644))
 
-	_, err = cache.Set("gh_user_repo", srcDir, &CacheMeta{
+	floatingRef, parseErr := Parse("gh:user/repo")
+	require.NoError(t, parseErr)
+
+	_, err = cache.Set(floatingRef.CacheKey(), srcDir, &CacheMeta{
 		OriginalRef: "gh:user/repo",
 		FetchedAt:   time.Now(),
 	})
@@ -211,7 +222,10 @@ func TestUT_Resolver_ForceUpdate(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("old"), 0o644))
 
-	_, err = cache.Set("gh_user_repo", srcDir, &CacheMeta{
+	floatingRef, parseErr := Parse("gh:user/repo")
+	require.NoError(t, parseErr)
+
+	_, err = cache.Set(floatingRef.CacheKey(), srcDir, &CacheMeta{
 		OriginalRef: "gh:user/repo",
 		FetchedAt:   time.Now(),
 		Version:     "v1.0.0",
@@ -355,7 +369,9 @@ func TestUT_Resolver_CommitSHA_StoredInCache(t *testing.T) {
 
 	// Verify SHA is persisted in cache metadata
 	fsCache := resolver.cache.(*FSCache)
-	meta, err := fsCache.readMeta("gh_user_repo@v2.0.0")
+	v2Ref, parseErr := Parse("gh:user/repo@v2.0.0")
+	require.NoError(t, parseErr)
+	meta, err := fsCache.readMeta(v2Ref.CacheKey())
 	require.NoError(t, err)
 	assert.Equal(t, expectedSHA, meta.CommitSHA)
 }
