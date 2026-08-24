@@ -129,6 +129,7 @@ func TestUT_DisplayScaffoldSummary_WithGenerators_ShowsGenerateHint(t *testing.T
 
 	result := scaffold.ScaffoldResult{
 		OutputDir:   "/tmp/sample-app",
+		ProjectRoot: "/tmp/sample-app",
 		TemplateDir: templateDir,
 		Vars: map[string]any{
 			"project_name": "sample-app",

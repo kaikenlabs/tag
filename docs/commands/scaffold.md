@@ -212,6 +212,7 @@ tag scaffold --format json ./my-template my-project   # --format works on either
 ```json
 {
   "output_dir": "/abs/path/my-project",
+  "project_root": "/abs/path/my-project",
   "template": "./my-template",
   "files": [
     { "path": "README.md", "action": "create" },
@@ -222,11 +223,32 @@ tag scaffold --format json ./my-template my-project   # --format works on either
 }
 ```
 
-Bare object, no envelope. `output_dir` is always an absolute path. `action` is always
+Bare object, no envelope. `output_dir` and `project_root` are always absolute paths. `action` is always
 `"create"` — scaffold writes a fresh project tree, so it never reports inject/append/overwrite.
 `files` is the same list, in the same order, whether `--dry-run` is set or not: both paths record
 an entry at the same point right after a file is processed, and only whether the file actually
 lands on disk differs.
+
+`project_root` is the directory that actually holds the generated project, and it is the one to
+hand to anything that publishes or `cd`s into the result. It equals `output_dir` for most
+templates. The two differ for a **project-wrapper** template — one whose root is a single
+directory named by an expression, such as `{{ vars.project_name }}/`, which is what most
+Cookiecutter conversions look like — combined with an explicit `--output`: that combination
+deliberately does not unwrap, so the files land one level down and `output_dir` names the parent.
+Without `--output` the wrapper is unwrapped instead (to avoid `my-project/my-project` nesting) and
+the two are equal again.
+
+`files[].path` stays relative to `output_dir` in both shapes, so for a wrapper template it already
+carries the project directory as a prefix. Join file paths onto `output_dir`, never onto
+`project_root`. Under `--dry-run`, `project_root` names the directory the run *would* create;
+nothing is written, so that directory does not exist.
+
+That last point matters if you publish the result. Wrapper detection requires exactly one
+expression-named directory at the template root, not that the directory holds everything — a
+template with files beside the wrapper generates them under `output_dir`, outside `project_root`.
+So walk `files[]` relative to `output_dir` rather than archiving `project_root` wholesale, or
+those files are dropped. `project_root` tells you where the project *begins*; `files[]` is the
+authoritative list of what was written.
 
 `--format json` forces non-interactive behavior: it implies `--no-input` (defaults and `-m`
 overrides still apply; prompts never fire), never shows the interactive template picker — running

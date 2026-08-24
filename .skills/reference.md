@@ -940,6 +940,7 @@ tag scaffold ./tmpl my-project --dry-run --format json
 ```json
 {
   "output_dir": "/abs/path/my-project",
+  "project_root": "/abs/path/my-project",
   "template": "./tmpl",
   "files": [
     { "path": "README.md", "action": "create" },
@@ -949,6 +950,16 @@ tag scaffold ./tmpl my-project --dry-run --format json
   "dry_run": false
 }
 ```
+
+`project_root` is the directory that actually holds the generated project — hand that one
+to anything that publishes or `cd`s into the result. It equals `output_dir` except for a
+project-wrapper template (root is a single directory named by an expression, e.g.
+`{{ vars.project_name }}/`) combined with an explicit `--output`, which deliberately does
+not unwrap: the files land one level down and `output_dir` names the parent. `files[].path`
+stays relative to `output_dir` in both shapes, so join file paths onto `output_dir`, never
+onto `project_root`. Wrapper detection does not require the wrapper to hold everything, so a
+template with files beside it writes them outside `project_root`; walk `files[]` to publish a
+result rather than archiving `project_root` wholesale.
 
 `action` is always `"create"` — scaffold writes a fresh project tree, so it has no
 inject/append/overwrite cases. `files` is identical whether `--dry-run` is set or not
@@ -1362,7 +1373,7 @@ linked section for the full field list and worked example.
 | `generate list` | `{"generators":[...],"bundles":[...]}` (identical to `template list`) | [Bundle Prerequisites](#bundle-prerequisites) |
 | `lib ls` | `{"templates":[{"name","source","version","added_at","updated_at"}]}` | [Library Management](#library-management) |
 | `lib search` | `{"results":[{"name","full_name","description","url","stars","updated_at","language"}]}` | [Template Search](#template-search) |
-| `scaffold` | bare `{"output_dir","template","files":[...],"created","dry_run"}` | [Code Generation Flags](#code-generation-flags) |
+| `scaffold` | bare `{"output_dir","project_root","template","files":[...],"created","dry_run"}` | [Code Generation Flags](#code-generation-flags) |
 | `template graph` | `{"generators":[...],"bundles":[...],"markers":[...],"warnings":[...]}` (also `--format dot`) | [Dependency Graph](#dependency-graph) |
 | `template info` | bare `{"name","description","version","variables":[...],"hooks","has_readme","has_howto"}` | [Template Info](#template-info) |
 | `template lint` | `{"issues":[{"file","severity","message","rule"}]}` | [Template Linting](#template-linting) |

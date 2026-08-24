@@ -107,6 +107,8 @@ Hooks receive all template variables as environment variables:
 | `TAG_PROJECT_NAME` | Value of the `project_name` variable |
 | `TAG_VAR_<NAME>` | Each variable as `TAG_VAR_` + uppercase name |
 
+Despite the name, `TAG_OUTPUT_DIR` matches `project_root` from [`tag scaffold --format json`](../commands/scaffold.md#machine-readable-output), not `output_dir` — hooks run inside the wrapper directory when the template has one, same as the project root the JSON document reports.
+
 ### Variable Name Transformation
 
 Variable names are converted to environment variable format:

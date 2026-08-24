@@ -192,6 +192,7 @@ func TestUT_DisplayScaffoldSummary_VersionOnly_NoTemplateName(t *testing.T) {
 	var buf bytes.Buffer
 	result := scaffold.ScaffoldResult{
 		OutputDir:   "/tmp/proj",
+		ProjectRoot: "/tmp/proj",
 		TemplateDir: t.TempDir(),
 		Vars:        map[string]any{},
 		Opts: scaffold.Options{

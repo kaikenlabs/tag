@@ -220,6 +220,7 @@ func TestUT_DisplayScaffoldSummary_WritesToOutput(t *testing.T) {
 	var buf bytes.Buffer
 	result := scaffold.ScaffoldResult{
 		OutputDir:   "/tmp/my-app",
+		ProjectRoot: "/tmp/my-app",
 		TemplateDir: t.TempDir(),
 		Vars: map[string]any{
 			"project_name": "my-app",
@@ -245,6 +246,7 @@ func TestUT_DisplayScaffoldSummary_NoTemplateOrigin(t *testing.T) {
 	var buf bytes.Buffer
 	result := scaffold.ScaffoldResult{
 		OutputDir:   "/tmp/local-project",
+		ProjectRoot: "/tmp/local-project",
 		TemplateDir: t.TempDir(),
 		Vars: map[string]any{
 			"project_name": "local-project",

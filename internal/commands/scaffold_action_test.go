@@ -156,6 +156,7 @@ func TestUT_DisplayScaffoldSummary_WithReadme(t *testing.T) {
 
 	result := scaffold.ScaffoldResult{
 		OutputDir:   "/tmp/my-output",
+		ProjectRoot: "/tmp/my-output",
 		TemplateDir: templateDir,
 		Vars:        map[string]any{"project_name": "my-output"},
 		Opts:        scaffold.Options{},
