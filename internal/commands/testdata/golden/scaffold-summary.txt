@@ -1,0 +1,9 @@
+
+Scaffolding complete!
+  Output: /abs/out/my-proj
+  Project: my-proj
+  Template: gh:acme/go-api (v1.2.0)
+
+Next steps:
+  cd /abs/out/my-proj
+
