@@ -140,8 +140,8 @@ func TestUT_Diff_ExitCodeUnchangedAcrossFormats(t *testing.T) {
 	codes := map[string]map[string]int{}
 	for _, format := range []string{formatText, formatJSON} {
 		codes[format] = map[string]int{
-			"up-to-date":     exitCodeOf(runCLI(t, DiffCommand(), "diff", "--dir", upToDate, "--format", format).Err),
-			"missing-config": exitCodeOf(runCLI(t, DiffCommand(), "diff", "--dir", missing, "--format", format).Err),
+			"up-to-date":     diffExitCodeOf(runCLI(t, DiffCommand(), "diff", "--dir", upToDate, "--format", format).Err),
+			"missing-config": diffExitCodeOf(runCLI(t, DiffCommand(), "diff", "--dir", missing, "--format", format).Err),
 		}
 	}
 
@@ -151,10 +151,10 @@ func TestUT_Diff_ExitCodeUnchangedAcrossFormats(t *testing.T) {
 	assert.NotEqual(t, 0, codes[formatJSON]["missing-config"], "a missing project config must be non-zero in both formats")
 }
 
-// exitCodeOf extracts the process exit code an action's error would produce:
+// diffExitCodeOf extracts the process exit code an action's error would produce:
 // nil means 0, a cli.ExitCoder carries its own code, and any other error is
 // urfave/cli's default of 1.
-func exitCodeOf(err error) int {
+func diffExitCodeOf(err error) int {
 	if err == nil {
 		return 0
 	}

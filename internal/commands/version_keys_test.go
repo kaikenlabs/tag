@@ -15,8 +15,9 @@ import (
 // deliberately; extending them to the other 20 commands is a separate, larger
 // decision, not something a later story should do by accident.
 var versionKeyedDocuments = map[string]bool{
-	"info.go":     true,
-	"scaffold.go": true,
+	"info.go":      true,
+	"scaffold.go":  true,
+	"jsonerror.go": true,
 }
 
 // TestUT_VersionKeys_ScopedToTwoDocuments proves the negative half of #395's

@@ -11,6 +11,35 @@ that no other `--format json` command emits:
 These two commands are the only ones that carry these keys. The other 20 JSON-emitting commands
 are deliberately untouched — extending the keys to them is a separate decision, not an oversight.
 
+## Error documents
+
+When `tag template info --format json` or `tag scaffold --format json` fails, they emit a document
+in this shape instead of their normal success document — never a mix of the two:
+
+```json
+{
+  "schema_version": 1,
+  "tag_version": "dev",
+  "error": {
+    "code": "template_not_found",
+    "message": "not a TAG template: tag.template.json not found in /path/to/dir",
+    "exit_code": 1
+  }
+}
+```
+
+`schema_version` and `tag_version` carry the same meaning and the same per-command constant
+(`infoSchemaVersion`, `scaffoldSchemaVersion`) as the success document above — this is still the
+same two commands, not a third document type. `error.code` is one of a fixed, stable vocabulary
+(`invalid_reference`, `template_not_found`, `auth_required`, `version_not_found`,
+`required_variable_missing`, `output_exists`, `circular_dependency`, `usage`, `internal`);
+`error.message` is the human-readable error text also written to stderr as `tag error: <message>`;
+`error.exit_code` mirrors the process exit code. No other command emits an `error` key.
+
+If a command with a nonzero exit already writes a complete document before failing (`check`,
+`generate`, `undo`, `update`), that document is unaffected by this contract — it is not an error
+document and carries no `error` key.
+
 ## Not an envelope
 
 `schema_version` and `tag_version` are root-level members added beside a command's existing

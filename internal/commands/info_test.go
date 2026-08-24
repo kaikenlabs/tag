@@ -367,7 +367,16 @@ func TestUT_TemplateInfoJSON_MissingConfigErrorsBeforeWriting(t *testing.T) {
 	run := runCLI(t, templateInfoCommand(testVersion), "info", dir, "--format", formatJSON)
 	require.Error(t, run.Err)
 	assert.Contains(t, run.Err.Error(), "not a TAG template")
-	assert.Empty(t, run.Writer, "no partial document may be written before the load error")
+
+	// #396: a JSON-mode failure now writes the error document (schema_version /
+	// tag_version / error), not the partial success document — the two shapes
+	// are mutually exclusive, so this still guards against a half-written
+	// success document leaking out before the load error.
+	var doc errorDoc
+	require.NoError(t, json.Unmarshal([]byte(run.Writer), &doc),
+		"must be the error document, not a partial success document: %q", run.Writer)
+	assert.Equal(t, codeTemplateNotFound, doc.Error.Code)
+	assert.NotContains(t, run.Writer, `"variables"`, "no partial success document may be written before the load error")
 }
 
 func TestUT_TemplateInfoJSON_EmptyCollectionsAreArrays(t *testing.T) {
