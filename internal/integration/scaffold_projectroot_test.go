@@ -164,7 +164,11 @@ func TestIT_ScaffoldJSON_ProjectRootCannotEscapeOutputDir(t *testing.T) {
 
 	require.Error(t, runErr, "a wrapper name escaping the output dir must fail the run")
 	assert.Contains(t, string(stderr), "path traversal detected")
-	assert.Empty(t, stdout, "a rejected run must not emit a project_root at all")
+	// #396: a JSON-mode failure now writes the error document (schema_version /
+	// tag_version / error) instead of nothing, so stdout is no longer literally
+	// empty — the invariant this test pins is that no project_root ever names
+	// the escaped path, which the error document's fixed shape guarantees.
+	assert.NotContains(t, string(stdout), "project_root", "a rejected run must not emit a project_root at all")
 	assert.NoDirExists(t, filepath.Join(dir, "escaped"))
 }
 

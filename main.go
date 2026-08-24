@@ -74,8 +74,9 @@ func main() {
 			exitCode = cmdErr.ExitCode()
 		}
 
-		// Don't log user-initiated cancellation (Ctrl+C)
-		if exitCode != app.ExitInterrupted {
+		// Don't log user-initiated cancellation (Ctrl+C), and don't re-log an
+		// error the JSON error seam already reported to stderr.
+		if exitCode != app.ExitInterrupted && !commands.ErrorAlreadyReported(err) {
 			slog.Error(err.Error()) //nolint:gosec // G706: slog structured logging; log injection not a concern in a CLI tool
 		}
 		os.Exit(exitCode)

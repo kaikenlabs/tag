@@ -99,8 +99,9 @@ Examples:
   tag scaffold gh:user/template another-api --replay`,
 		Flags: scaffoldFlags(),
 		Action: func(c *cli.Context) error {
-			return scaffoldAction(c, version)
+			return withJSONErrorDoc(c, scaffoldSchemaVersion, version, func() error { return scaffoldAction(c, version) })
 		},
+		OnUsageError: jsonUsageErrorHandler(scaffoldSchemaVersion, version),
 		BashComplete: completeLibraryTemplateNames,
 	}
 }

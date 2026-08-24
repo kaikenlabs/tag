@@ -299,10 +299,6 @@ func updateAllTemplates(c *cli.Context, lib *library.Library) error {
 // asAppError wraps library errors as CommandErrors without adding redundant context.
 // LibraryError already contains operation and name context, so we pass its message through directly.
 func asAppError(err error) error {
-	var libErr *library.LibraryError
-	if errors.As(err, &libErr) {
-		return app.Errorf("%s", libErr.Error())
-	}
 	return app.Errorf("%w", err)
 }
 

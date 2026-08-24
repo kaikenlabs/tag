@@ -56,8 +56,9 @@ Examples:
   tag template info gh:user/awesome-template --update`,
 		Flags: templateInfoFlags(),
 		Action: func(c *cli.Context) error {
-			return infoAction(c, version)
+			return withJSONErrorDoc(c, infoSchemaVersion, version, func() error { return infoAction(c, version) })
 		},
+		OnUsageError: jsonUsageErrorHandler(infoSchemaVersion, version),
 		BashComplete: completeLibraryTemplateNames,
 	}
 }
@@ -165,7 +166,7 @@ func loadTemplateConfig(templateDir string) (*scaffold.TemplateConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, app.Errorf("not a TAG template: %s not found in %s", types.TemplateConfigFile, templateDir)
+			return nil, app.Errorf("not a TAG template: %w in %s", scaffold.ErrConfigNotFound, templateDir)
 		}
 		return nil, app.Errorf("failed to read %s: %w", types.TemplateConfigFile, err)
 	}

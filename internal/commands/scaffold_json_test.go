@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/types"
 )
@@ -107,10 +109,12 @@ func TestUT_ScaffoldJSON_NoTemplateIsUsageError(t *testing.T) {
 	run := runCLICapturingAll(t, ScaffoldCommand(testVersion), "scaffold", "--format", "json")
 	require.Error(t, run.Err)
 
-	type exitCoder interface{ ExitCode() int }
-	ec, ok := run.Err.(exitCoder)
-	require.True(t, ok, "no-template-in-JSON-mode must carry a usage exit code")
-	assert.Equal(t, 2, ec.ExitCode())
+	// A JSON-mode failure now comes back as reportedError (see
+	// withJSONErrorDoc), so the exit code is reached via errors.As through its
+	// Unwrap, not a direct type assertion — the same idiom main.go itself uses.
+	var coder cli.ExitCoder
+	require.True(t, errors.As(run.Err, &coder), "no-template-in-JSON-mode must carry a usage exit code")
+	assert.Equal(t, 2, coder.ExitCode())
 }
 
 func TestUT_ScaffoldJSON_MissingRequiredVarIsError(t *testing.T) {
