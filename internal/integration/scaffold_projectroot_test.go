@@ -25,7 +25,7 @@ type scaffoldJSONDoc struct {
 // writeScaffoldTemplate writes a minimal template under dir/name. When wrapped,
 // the single content file sits inside a "{{ vars.project_name }}" directory,
 // which is what makes findProjectWrapper treat it as a project wrapper.
-func writeScaffoldTemplate(t *testing.T, dir, name string, wrapped bool) string {
+func writeScaffoldTemplate(t *testing.T, dir, name string, wrapped bool) {
 	t.Helper()
 
 	root := filepath.Join(dir, name)
@@ -42,8 +42,6 @@ func writeScaffoldTemplate(t *testing.T, dir, name string, wrapped bool) string 
 	require.NoError(t, os.WriteFile(filepath.Join(contentDir, "README.md"), []byte(
 		"hello {{ vars.project_name }}\n",
 	), 0o600))
-
-	return root
 }
 
 // TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree pins the #390 contract
@@ -141,4 +139,60 @@ func TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIT_ScaffoldJSON_ProjectRootCannotEscapeOutputDir pins the invariant that
+// makes project_root safe to hand to an automated publish step: it can never
+// name a directory outside output_dir.
+//
+// project_root is built as filepath.Join(outputDir, renderedWrapperName) with no
+// sanitising of its own, so the guarantee comes entirely from the writer's
+// path-traversal check rejecting the run before any document is emitted. That is
+// a load-bearing dependency across two packages, which is why it is pinned here
+// rather than left implied.
+func TestIT_ScaffoldJSON_ProjectRootCannotEscapeOutputDir(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	writeScaffoldTemplate(t, dir, "tmpl", true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+		"scaffold", "./tmpl", "-o", "./out/proj", "-m", "project_name=../escaped", "--format", "json")
+	require.NoError(t, ctx.Err(), "subprocess did not terminate before the deadline")
+
+	require.Error(t, runErr, "a wrapper name escaping the output dir must fail the run")
+	assert.Contains(t, string(stderr), "path traversal detected")
+	assert.Empty(t, stdout, "a rejected run must not emit a project_root at all")
+	assert.NoDirExists(t, filepath.Join(dir, "escaped"))
+}
+
+// TestIT_ScaffoldTextSummary_NamesProjectRoot covers the text path for the same
+// case, through a real scaffold rather than a hand-built ScaffoldResult.
+//
+// The JSON and text summaries read the same field but are reached by two
+// separate branches of runScaffold, and the unit tests for the text path supply
+// their own ScaffoldResult, so nothing else proves the value a real wrapper run
+// puts on the `cd` line the user is told to follow.
+func TestIT_ScaffoldTextSummary_NamesProjectRoot(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	writeScaffoldTemplate(t, dir, "tmpl", true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+		"scaffold", "./tmpl", "-o", "./out/proj", "-m", "project_name=my-proj", "--no-input")
+	require.NoError(t, ctx.Err(), "subprocess did not terminate before the deadline")
+	require.NoError(t, runErr, "stderr: %s", stderr)
+
+	projectRoot := filepath.Join(dir, "out", "proj", "my-proj")
+	require.FileExists(t, filepath.Join(projectRoot, "README.md"))
+
+	out := string(stdout)
+	assert.Contains(t, out, "Output: "+projectRoot+"\n")
+	assert.Contains(t, out, "cd "+projectRoot+"\n")
+	assert.NotContains(t, out, "cd "+filepath.Join(dir, "out", "proj")+"\n")
 }
