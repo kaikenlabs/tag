@@ -196,3 +196,73 @@ func TestIT_ScaffoldTextSummary_NamesProjectRoot(t *testing.T) {
 	assert.Contains(t, out, "cd "+projectRoot+"\n")
 	assert.NotContains(t, out, "cd "+filepath.Join(dir, "out", "proj")+"\n")
 }
+
+// TestIT_ScaffoldJSON_MixedRootTemplate_ContentSitsBesideProjectRoot records
+// what project_root does NOT promise.
+//
+// findProjectWrapper only requires exactly one expression-named directory at
+// the template root; it does not require that directory to hold everything. So
+// a template with content beside the wrapper produces generated files that are
+// under output_dir but NOT under project_root. Anything that publishes the
+// result must walk files[] relative to output_dir rather than archiving
+// project_root wholesale, which is why the docs say to join onto output_dir.
+//
+// Both rows characterise pre-existing planOutput behaviour that #390 is
+// deliberately not changing — see the follow-up ticket on mixed-root wrapper
+// templates. They exist so a future change to that behaviour is a decision
+// rather than an accident.
+func TestIT_ScaffoldJSON_MixedRootTemplate_ContentSitsBesideProjectRoot(t *testing.T) {
+	writeMixedRootTemplate := func(t *testing.T, dir string) {
+		t.Helper()
+		root := filepath.Join(dir, "tmpl")
+		wrapper := filepath.Join(root, "{{ vars.project_name }}")
+		require.NoError(t, os.MkdirAll(wrapper, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "tag.template.json"), []byte(
+			`{"name":"mixed","description":"d","vars":{"project_name":"my_project"}}`,
+		), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(wrapper, "README.md"), []byte("inside\n"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "ROOTFILE.md"), []byte("beside\n"), 0o600))
+	}
+
+	t.Run("with --output the sibling file lands outside project_root", func(t *testing.T) {
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, err)
+		writeMixedRootTemplate(t, dir)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+			"scaffold", "./tmpl", "-o", "./out/proj", "-m", "project_name=my-proj", "--format", "json")
+		require.NoError(t, runErr, "stderr: %s", stderr)
+
+		var doc scaffoldJSONDoc
+		require.NoError(t, json.Unmarshal(stdout, &doc))
+
+		require.FileExists(t, filepath.Join(doc.OutputDir, "ROOTFILE.md"))
+		assert.NoFileExists(t, filepath.Join(doc.ProjectRoot, "ROOTFILE.md"),
+			"the sibling file is under output_dir, not project_root")
+		assert.FileExists(t, filepath.Join(doc.ProjectRoot, "README.md"))
+	})
+
+	t.Run("without --output the sibling file is dropped entirely", func(t *testing.T) {
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, err)
+		writeMixedRootTemplate(t, dir)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+			"scaffold", "./tmpl", "my-proj", "-m", "project_name=my-proj", "--format", "json")
+		require.NoError(t, runErr, "stderr: %s", stderr)
+
+		var doc scaffoldJSONDoc
+		require.NoError(t, json.Unmarshal(stdout, &doc))
+
+		assert.Equal(t, doc.OutputDir, doc.ProjectRoot)
+		assert.FileExists(t, filepath.Join(doc.ProjectRoot, "README.md"))
+		assert.NoFileExists(t, filepath.Join(doc.ProjectRoot, "ROOTFILE.md"),
+			"unwrapping makes the wrapper the template root, so siblings are never written")
+	})
+}

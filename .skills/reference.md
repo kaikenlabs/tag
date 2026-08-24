@@ -957,7 +957,9 @@ project-wrapper template (root is a single directory named by an expression, e.g
 `{{ vars.project_name }}/`) combined with an explicit `--output`, which deliberately does
 not unwrap: the files land one level down and `output_dir` names the parent. `files[].path`
 stays relative to `output_dir` in both shapes, so join file paths onto `output_dir`, never
-onto `project_root`.
+onto `project_root`. Wrapper detection does not require the wrapper to hold everything, so a
+template with files beside it writes them outside `project_root`; walk `files[]` to publish a
+result rather than archiving `project_root` wholesale.
 
 `action` is always `"create"` — scaffold writes a fresh project tree, so it has no
 inject/append/overwrite cases. `files` is identical whether `--dry-run` is set or not
