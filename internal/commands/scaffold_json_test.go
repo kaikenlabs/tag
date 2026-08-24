@@ -46,14 +46,27 @@ func TestUT_ScaffoldJSON_DocumentShape(t *testing.T) {
 	templateDir := t.TempDir()
 	createScaffoldJSONTemplate(t, templateDir)
 
-	run := runCLICapturingAll(t, ScaffoldCommand(), "scaffold", templateDir, "widget", "--format", "json")
+	run := runCLICapturingAll(t, ScaffoldCommand(testVersion), "scaffold", templateDir, "widget", "--format", "json")
 	require.NoError(t, run.Err)
 
-	var doc map[string]any
+	// Exact key set, not Contains: a subset check passes whether or not a key
+	// was dropped and whether or not a stray one appeared.
+	var doc map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal([]byte(run.Writer), &doc))
-	for _, key := range []string{"output_dir", "project_root", "template", "files", "created", "dry_run"} {
-		assert.Contains(t, doc, key)
+
+	got := make([]string, 0, len(doc))
+	for k := range doc {
+		got = append(got, k)
 	}
+	assert.ElementsMatch(t, []string{
+		"schema_version", "tag_version", "output_dir", "project_root",
+		"template", "files", "created", "dry_run",
+	}, got)
+
+	assert.Equal(t, "1", string(doc["schema_version"]))
+	// Asserted through the real command, not newScaffoldDoc directly: this is
+	// the only thing that can catch runScaffold passing "" down the chain.
+	assert.JSONEq(t, `"`+testVersion+`"`, string(doc["tag_version"]))
 }
 
 func TestUT_ScaffoldJSON_StdoutIsOnlyTheDocument(t *testing.T) {
@@ -61,7 +74,7 @@ func TestUT_ScaffoldJSON_StdoutIsOnlyTheDocument(t *testing.T) {
 	templateDir := t.TempDir()
 	createScaffoldJSONTemplate(t, templateDir)
 
-	run := runCLICapturingAll(t, ScaffoldCommand(), "scaffold", templateDir, "widget", "--format", "json")
+	run := runCLICapturingAll(t, ScaffoldCommand(testVersion), "scaffold", templateDir, "widget", "--format", "json")
 	require.NoError(t, run.Err)
 
 	require.Empty(t, run.Stdout, "nothing should bypass c.App.Writer to the real os.Stdout")
@@ -78,7 +91,7 @@ func TestUT_ScaffoldJSON_DryRunListsFilesAndWritesNothing(t *testing.T) {
 	templateDir := t.TempDir()
 	createScaffoldJSONTemplate(t, templateDir)
 
-	run := runCLICapturingAll(t, ScaffoldCommand(), "scaffold", templateDir, "widget", "--dry-run", "--format", "json")
+	run := runCLICapturingAll(t, ScaffoldCommand(testVersion), "scaffold", templateDir, "widget", "--dry-run", "--format", "json")
 	require.NoError(t, run.Err)
 
 	var doc scaffoldDoc
@@ -91,7 +104,7 @@ func TestUT_ScaffoldJSON_DryRunListsFilesAndWritesNothing(t *testing.T) {
 }
 
 func TestUT_ScaffoldJSON_NoTemplateIsUsageError(t *testing.T) {
-	run := runCLICapturingAll(t, ScaffoldCommand(), "scaffold", "--format", "json")
+	run := runCLICapturingAll(t, ScaffoldCommand(testVersion), "scaffold", "--format", "json")
 	require.Error(t, run.Err)
 
 	type exitCoder interface{ ExitCode() int }
@@ -120,7 +133,7 @@ func TestUT_ScaffoldJSON_MissingRequiredVarIsError(t *testing.T) {
 }`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "README.md"), []byte("# {{ vars.project_name }}"), 0o644))
 
-	run := runCLICapturingAll(t, ScaffoldCommand(), "scaffold", templateDir, "widget", "--format", "json")
+	run := runCLICapturingAll(t, ScaffoldCommand(testVersion), "scaffold", templateDir, "widget", "--format", "json")
 	require.Error(t, run.Err)
 	assert.Contains(t, run.Err.Error(), "author")
 }
@@ -130,7 +143,7 @@ func TestUT_ScaffoldJSON_TrailingFormatFlagWorks(t *testing.T) {
 	templateDir := t.TempDir()
 	createScaffoldJSONTemplate(t, templateDir)
 
-	run := runCLICapturingAll(t, ScaffoldCommand(), "scaffold", templateDir, "widget", "--format", "json")
+	run := runCLICapturingAll(t, ScaffoldCommand(testVersion), "scaffold", templateDir, "widget", "--format", "json")
 	require.NoError(t, run.Err)
 
 	var doc scaffoldDoc

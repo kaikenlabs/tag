@@ -175,7 +175,7 @@ func TestUT_PromptForConversion_InputError(t *testing.T) {
 func TestUT_ScaffoldCommand_Structure(t *testing.T) {
 	t.Parallel()
 
-	cmd := ScaffoldCommand()
+	cmd := ScaffoldCommand(testVersion)
 	require.NotNil(t, cmd)
 	assert.Equal(t, "scaffold", cmd.Name)
 	assert.Contains(t, cmd.Aliases, "s")
@@ -221,7 +221,7 @@ func TestUT_ScaffoldFromRef_WithOutputDir(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{templateDir, "out-proj"}, false)
+	err := scaffoldFromRef(ctx, []string{templateDir, "out-proj"}, false, testVersion)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(outputPath)
@@ -243,7 +243,7 @@ func TestUT_ScaffoldAction_WithTemplateArg(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldAction(ctx)
+	err := scaffoldAction(ctx, testVersion)
 	require.NoError(t, err)
 }
 
@@ -265,7 +265,7 @@ func TestUT_ScaffoldFromRef_LibraryWithGenerators(t *testing.T) {
 		"output":   outputPath,
 	})
 
-	err := scaffoldFromRef(ctx, []string{"gen-tmpl", "gen-proj"}, false)
+	err := scaffoldFromRef(ctx, []string{"gen-tmpl", "gen-proj"}, false, testVersion)
 	require.NoError(t, err)
 }
 

@@ -50,7 +50,7 @@ func TestUT_TemplateRenameVar_RegisteredAsSubcommand(t *testing.T) {
 	t.Parallel()
 
 	var names []string
-	for _, sub := range TemplateCommand(nil).Subcommands {
+	for _, sub := range TemplateCommand(nil, testVersion).Subcommands {
 		names = append(names, sub.Name)
 	}
 	assert.Contains(t, names, "rename-var")

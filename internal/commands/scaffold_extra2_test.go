@@ -114,6 +114,7 @@ func TestUT_HandleCookiecutterDetection_NoInput_ReturnsHelpfulError(t *testing.T
 		t.TempDir(),
 		scaffold.Options{},
 		false,
+		testVersion,
 	)
 
 	require.Error(t, err)

@@ -13,8 +13,8 @@ import (
 func RootCommands(cfg *config.Config, version string, docs SkillDocs) []*cli.Command {
 	return []*cli.Command{
 		GenerateCommand(cfg),
-		ScaffoldCommand(),
-		TemplateCommand(cfg),
+		ScaffoldCommand(version),
+		TemplateCommand(cfg, version),
 		LibCommand(),
 		DialectCommand(),
 		CacheCommand(),

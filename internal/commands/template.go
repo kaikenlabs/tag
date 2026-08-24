@@ -8,14 +8,14 @@ import (
 )
 
 // TemplateCommand returns the parent command for template authoring operations.
-func TemplateCommand(cfg *config.Config) *cli.Command {
+func TemplateCommand(cfg *config.Config, version string) *cli.Command {
 	return &cli.Command{
 		Name:  "template",
 		Usage: "Template authoring commands (init, new, info, list, lint, test, variables, rename-var, graph)",
 		Subcommands: []*cli.Command{
 			templateInitCommand(),
 			templateNewCommand(cfg),
-			templateInfoCommand(),
+			templateInfoCommand(version),
 			templateListCommand(cfg),
 			templateLintCommand(),
 			templateTestCommand(),

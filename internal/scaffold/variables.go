@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/replay"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
+	varscan "github.com/kaikenlabs/tag/internal/vars"
 )
 
 // VariableCollector gathers variable values from all sources.
@@ -490,30 +490,6 @@ func isEmptyValue(val any) bool {
 	}
 }
 
-// varRefPattern matches {{ vars.<name> }} references, capturing the variable name.
-// It handles optional filters (|), method calls (.), and whitespace.
-var varRefPattern = regexp.MustCompile(`\{\{\s*vars\.([a-zA-Z_][a-zA-Z0-9_]*)`)
-
-// extractVarRefs extracts variable names referenced via {{ vars.<name> }} in a
-// template expression. Returns a deduplicated, sorted slice.
-func extractVarRefs(expr string) []string {
-	matches := varRefPattern.FindAllStringSubmatch(expr, -1)
-	if len(matches) == 0 {
-		return nil
-	}
-	seen := make(map[string]bool, len(matches))
-	var refs []string
-	for _, m := range matches {
-		name := m[1]
-		if !seen[name] {
-			seen[name] = true
-			refs = append(refs, name)
-		}
-	}
-	slices.Sort(refs)
-	return refs
-}
-
 // ErrCircularDependency is returned when variable defaults form a circular dependency.
 var ErrCircularDependency = errors.New("circular variable dependency")
 
@@ -531,18 +507,11 @@ func topologicalSortVars(vars map[string]VariableDef) ([]string, error) {
 		inDegree[name] = 0
 	}
 
-	for name, def := range vars {
-		defaultStr, ok := def.Default.(string)
-		if !ok {
-			continue
-		}
-		refs := extractVarRefs(defaultStr)
+	// varscan.DeclaredDeps is the single definition of a vars.* reference,
+	// shared with template lint/variables/rename-var and with `template info`'s
+	// depends_on. It already drops undeclared names and retains self-references.
+	for name, refs := range varscan.DeclaredDeps(vars) {
 		for _, ref := range refs {
-			// Only consider references to known variables.
-			if _, exists := vars[ref]; !exists {
-				continue
-			}
-			// Self-reference is a cycle.
 			if ref == name {
 				return nil, fmt.Errorf("%w: variable %q references itself", ErrCircularDependency, name)
 			}

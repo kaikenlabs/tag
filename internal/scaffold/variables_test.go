@@ -1329,59 +1329,6 @@ func TestUT_EvaluatedDefault_NonTTY_MetaOverride(t *testing.T) {
 	assert.Equal(t, 0, mockPrompter.CallCount["Input"])
 }
 
-// TestUT_ExtractVarRefs verifies that variable references are correctly
-// extracted from template expressions.
-func TestUT_ExtractVarRefs(t *testing.T) {
-	tests := []struct {
-		name     string
-		expr     string
-		expected []string
-	}{
-		{
-			name:     "single reference",
-			expr:     "{{ vars.project_name }}",
-			expected: []string{"project_name"},
-		},
-		{
-			name:     "reference with filter",
-			expr:     "{{ vars.project_name | kebab }}",
-			expected: []string{"project_name"},
-		},
-		{
-			name:     "multiple references",
-			expr:     "{{ vars.org }}/{{ vars.project_name }}",
-			expected: []string{"org", "project_name"},
-		},
-		{
-			name:     "duplicate references deduplicated",
-			expr:     "{{ vars.name }}-{{ vars.name }}",
-			expected: []string{"name"},
-		},
-		{
-			name:     "no references",
-			expr:     "static-value",
-			expected: nil,
-		},
-		{
-			name:     "underscore and digits in name",
-			expr:     "{{ vars._private_var2 }}",
-			expected: []string{"_private_var2"},
-		},
-		{
-			name:     "method call syntax",
-			expr:     "{{ vars.name.lower() }}",
-			expected: []string{"name"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			refs := extractVarRefs(tt.expr)
-			assert.Equal(t, tt.expected, refs)
-		})
-	}
-}
-
 // TestUT_TopologicalSortVars_Basic verifies correct topological ordering.
 func TestUT_TopologicalSortVars_Basic(t *testing.T) {
 	vars := map[string]VariableDef{

@@ -189,11 +189,21 @@ Remote templates are cached locally to avoid repeated downloads.
 
 ```
 ~/.tag/cache/
-├── gh_user_repo/           # Latest version
-├── gh_user_repo@v1.0.0/    # Pinned version
-├── gl_org_template/
+├── gh_user_repo-0e3dc6440bd1/           # Latest version
+├── gh_user_repo@v1.0.0-f0f1e788101e/    # Pinned version
+├── gl_org_template-8eca3af81a8f/
 └── _url_a1b2c3d4e5f6/      # URL-based (hashed)
 ```
+
+The trailing twelve hex characters are a digest of the reference's exact identity
+(provider, owner, repository, version). The readable part before it is lossy —
+owner and repository names may themselves contain `_`, so `gl:a_b/c` and
+`gl:a/b_c` would otherwise share a directory and one repository would be served
+the other's template. The digest makes each entry unambiguous.
+
+Upgrading to a version of TAG that changed this scheme leaves the old entries
+unreferenced; they are reclaimed by `tag cache clear` or by normal expiry, and
+any template they held is simply refetched on next use.
 
 Override the cache directory with the `TAG_CACHE_DIR` environment variable — it must be an
 absolute path, or TAG errors naming the variable. It's read before `$HOME` is resolved, so it

@@ -21,6 +21,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/fileaction"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/remote"
+	"github.com/kaikenlabs/tag/internal/scaffold"
 )
 
 // updateGoldenText rewrites the golden fixtures instead of asserting against
@@ -176,6 +177,12 @@ func assertGolden(t *testing.T, name, got string) {
 }
 
 // --- fixtures -------------------------------------------------------------
+
+// testVersion is the sentinel threaded into commands that embed tag_version in
+// their JSON. Tests assert equality against this, never a shape: a real build
+// yields "dev", `make build` yields "dev-<sha>", and a release yields a semver,
+// so any format assertion would be wrong for two of the three.
+const testVersion = "9.9.9-test"
 
 // goldenTime is a fixed timestamp so fixtures containing dates stay stable.
 var goldenTime = time.Date(2024, 3, 15, 9, 30, 0, 0, time.UTC)
@@ -469,7 +476,7 @@ func TestUT_TextGolden(t *testing.T) {
 	t.Run("template-info-text", func(t *testing.T) {
 		seedHome(t)
 		seedLibrary(t)
-		run := runCLICapturingStdout(t, templateInfoCommand(), "info", seedInfoTemplate(t))
+		run := runCLICapturingStdout(t, templateInfoCommand(testVersion), "info", seedInfoTemplate(t))
 		require.NoError(t, run.Err)
 		assertGolden(t, "template-info-text", run.All())
 	})
@@ -507,5 +514,21 @@ func TestUT_TextGolden(t *testing.T) {
 		var buf bytes.Buffer
 		printGenerateSummary(&buf, result, true)
 		assertGolden(t, "generate-summary-verbose", buf.String())
+	})
+
+	t.Run("scaffold-summary", func(t *testing.T) {
+		var buf bytes.Buffer
+		displayScaffoldSummary(&buf, scaffold.ScaffoldResult{
+			OutputDir:   "/abs/out",
+			ProjectRoot: "/abs/out/my-proj",
+			TemplateDir: t.TempDir(),
+			Vars:        map[string]any{"project_name": "my-proj"},
+			Opts: scaffold.Options{
+				TemplateRef:     "gh:acme/go-api",
+				TemplateName:    "go-api",
+				TemplateVersion: "v1.2.0",
+			},
+		})
+		assertGolden(t, "scaffold-summary", buf.String())
 	})
 }

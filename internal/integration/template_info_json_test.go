@@ -28,7 +28,7 @@ func runTemplateInfoJSON(t *testing.T, ref string) (string, error) {
 	app := &cli.App{
 		Writer:         &buf,
 		ErrWriter:      io.Discard,
-		Commands:       []*cli.Command{commands.TemplateCommand(&config.Config{})},
+		Commands:       []*cli.Command{commands.TemplateCommand(&config.Config{}, "test")},
 		ExitErrHandler: func(*cli.Context, error) {},
 	}
 
@@ -79,10 +79,15 @@ func TestIT_TemplateInfoJSON_ResolvesLibraryName(t *testing.T) {
 		out, err := runTemplateInfoJSON(t, "go-api")
 		require.NoError(t, err)
 
-		var parsed map[string]any
+		var parsed map[string]json.RawMessage
 		require.NoError(t, json.Unmarshal([]byte(out), &parsed), "output: %s", out)
-		assert.Equal(t, "go-api", parsed["name"])
-		assert.Equal(t, "1.0.0", parsed["version"])
+		assert.JSONEq(t, `"go-api"`, string(parsed["name"]))
+		assert.JSONEq(t, `"1.0.0"`, string(parsed["version"]))
+
+		// A library entry is resolved by name and never reaches the remote
+		// resolver, so it has no SHA — but the key must still be there.
+		require.Contains(t, parsed, "resolved_commit")
+		assert.JSONEq(t, `""`, string(parsed["resolved_commit"]))
 	})
 
 	t.Run("local path", func(t *testing.T) {
@@ -100,8 +105,11 @@ func TestIT_TemplateInfoJSON_ResolvesLibraryName(t *testing.T) {
 		out, err := runTemplateInfoJSON(t, dir)
 		require.NoError(t, err)
 
-		var parsed map[string]any
+		var parsed map[string]json.RawMessage
 		require.NoError(t, json.Unmarshal([]byte(out), &parsed), "output: %s", out)
-		assert.Equal(t, "local-template", parsed["name"])
+		assert.JSONEq(t, `"local-template"`, string(parsed["name"]))
+
+		require.Contains(t, parsed, "resolved_commit")
+		assert.JSONEq(t, `""`, string(parsed["resolved_commit"]))
 	})
 }

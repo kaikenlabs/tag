@@ -191,19 +191,23 @@ Bundles:
 
 ```json
 {
+  "schema_version": 1,
+  "tag_version": "v2.3.0",
   "name": "go-api",
   "description": "Go REST API template",
   "version": "v1.2.0",
+  "keywords": ["go", "rest", "api"],
+  "categories": ["backend"],
   "variables": [
-    { "name": "_build_stamp", "type": "string", "default": "{{ vars.author }}", "required": false, "secret": false,
+    { "name": "_build_stamp", "type": "string", "default": "{{ vars.author }}", "required": false, "secret": false, "depends_on": ["author"],
       "prompted": false, "derived": true, "private": true, "default_is_expression": true },
-    { "name": "author", "type": "string", "prompt": "Author name", "required": true, "secret": false,
+    { "name": "author", "type": "string", "prompt": "Author name", "required": true, "secret": false, "depends_on": [],
       "prompted": true, "derived": false, "private": false, "default_is_expression": false },
-    { "name": "license", "type": "choice", "required": true, "options": ["MIT", "Apache-2.0", "GPL-3.0"], "secret": false,
+    { "name": "license", "type": "choice", "required": true, "options": ["MIT", "Apache-2.0", "GPL-3.0"], "secret": false, "depends_on": [],
       "prompted": true, "derived": false, "private": false, "default_is_expression": false },
-    { "name": "port", "type": "number", "default": 8080, "required": false, "secret": false,
+    { "name": "port", "type": "number", "default": 8080, "required": false, "secret": false, "depends_on": [],
       "prompted": true, "derived": false, "private": false, "default_is_expression": false },
-    { "name": "service_name", "type": "string", "default": "{{ vars.author }}-svc", "required": false, "secret": false,
+    { "name": "service_name", "type": "string", "default": "{{ vars.author }}-svc", "required": false, "secret": false, "depends_on": ["author"],
       "prompted": false, "derived": true, "private": false, "default_is_expression": true }
   ],
   "hooks": {
@@ -211,11 +215,34 @@ Bundles:
     "post_scaffold": ["go mod tidy", "git init"]
   },
   "has_readme": true,
-  "has_howto": false
+  "has_howto": false,
+  "resolved_commit": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 }
 ```
 
 Bare object, no envelope. `variables` is sorted by name and reports the resolved variable definitions — the same values shown in the text output — not the raw declarations from `tag.template.json`. `hooks` always carries both `pre_scaffold` and `post_scaffold`, `[]` when a phase has no hooks. `has_readme` and `has_howto` are booleans only: README/HOWTO content is never included, and the ANSI formatting from the text view's rendered docs never appears in JSON. There is deliberately no `source` field. `--update` works the same way in JSON mode as in text mode. Each variable also carries four booleans describing what TAG does with it at scaffold time, so a form generator can decide whether to render an input: `private` (name starts with `_`), `derived` (the default is a template expression and no explicit `prompt` is declared), `prompted` (`!private && !derived` — the variable is asked for interactively), and `default_is_expression` (the `default` is raw template source rather than a literal, whether the variable is derived or has a prompt with an evaluated default). All four are always present, never omitted when `false`. `default` is reported verbatim: `info` has no values to resolve expressions against, so `default_is_expression` is what tells a consumer not to render the default literally.
+
+`keywords` and `categories` mirror the same-named `tag.template.json` fields (see
+[tag.template.json Reference](../reference/tag.template.json.md)) — `[]` when the template
+declares neither.
+
+`resolved_commit` is the git SHA the reference resolved to. It is always present, never omitted:
+for a library template, a local directory, or a zip there is no commit to report and the field is
+`""` (empty, not absent) — that is how a consumer distinguishes "no commit for this kind of
+source" from "this binary predates the field". For a git remote reference it is populated the same
+way on a fresh fetch and on a cache hit.
+
+`depends_on`, on each variable, lists the declared variables that variable's default expression
+references — sorted alphabetically, `[]` when there are none. It is computed only when the default
+is an actual template expression (contains both `{{` and `vars.`); a statement-only default
+(`{% if vars.x %}`) or a subscript default (`{{ vars["x"] }}`) is a literal string that TAG never
+renders, so it gets `[]` too, consistent with `default_is_expression`. Undeclared names are
+dropped. The `variables` array itself stays sorted alphabetically by name — it does not change
+order — so `depends_on` is what lets a consumer reconstruct the same topological order
+`tag scaffold` uses when prompting.
+
+`schema_version` and `tag_version` are covered in full, including the bump policy, in the
+[JSON Contract reference](../reference/json-contract.md).
 
 ---
 
@@ -674,3 +701,4 @@ There is deliberately no per-generator `"bundle"` field: the data model records 
 - [tag scaffold](scaffold.md) - Create new projects from templates
 - [tag lib](lib.md) - Manage the template library
 - [Template Authoring](../templates/authoring.md) - Creating templates
+- [JSON Contract](../reference/json-contract.md) - `--format json` version keys and bump policy

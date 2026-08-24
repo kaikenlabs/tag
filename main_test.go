@@ -68,8 +68,8 @@ func TestUT_AppBuilds_HasExpectedCommands(t *testing.T) {
 		EnableBashCompletion: true,
 		Commands: []*cli.Command{
 			commands.GenerateCommand(cfg),
-			commands.ScaffoldCommand(),
-			commands.TemplateCommand(cfg),
+			commands.ScaffoldCommand("test"),
+			commands.TemplateCommand(cfg, "test"),
 			commands.LibCommand(),
 			commands.DialectCommand(),
 			commands.CacheCommand(),

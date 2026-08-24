@@ -36,9 +36,10 @@ const (
 // numbers by comparing the input and output line-by-line.
 func renameInExpressions(src, oldName, newName string) (string, int) {
 	var (
-		b     strings.Builder
-		count int
-		i     int
+		b      strings.Builder
+		count  int
+		i      int
+		shadow varsShadow
 	)
 	b.Grow(len(src))
 
@@ -54,7 +55,14 @@ func renameInExpressions(src, oldName, newName string) (string, int) {
 				return b.String(), count
 			}
 			block := src[i:end]
-			b.WriteString(rewriteBlock(block, oldName, newName, &count))
+			// Rewritten before observe, mirroring ScanRefs exactly: a shadowing
+			// block's own right-hand side is still the enclosing scope.
+			if shadow.active() {
+				b.WriteString(block)
+			} else {
+				b.WriteString(rewriteBlock(block, oldName, newName, &count))
+			}
+			shadow.observe(block)
 			i = end
 			// A {% raw %} block emits its body literally; skip to {% endraw %}.
 			if blockTag(block) == rawTag {
@@ -67,7 +75,11 @@ func renameInExpressions(src, oldName, newName string) (string, int) {
 				b.WriteString(src[i:])
 				return b.String(), count
 			}
-			b.WriteString(rewriteBlock(src[i:end], oldName, newName, &count))
+			if shadow.active() {
+				b.WriteString(src[i:end])
+			} else {
+				b.WriteString(rewriteBlock(src[i:end], oldName, newName, &count))
+			}
 			i = end
 
 		default:
