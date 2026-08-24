@@ -244,6 +244,15 @@ order — so `depends_on` is what lets a consumer reconstruct the same topologic
 `schema_version` and `tag_version` are covered in full, including the bump policy, in the
 [JSON Contract reference](../reference/json-contract.md).
 
+On failure, `--format json` writes a single JSON **error document** to stdout instead of the
+success document above (never a mix of the two), and the same human-readable message goes to
+stderr as a plain `tag error: <message>` line — no timestamp prefix, no color. This applies to
+every failure of this command, including a flag-parse error caught before the command runs (e.g.
+`tag template info --format json --bogus`). The process exit code is unchanged by `--format` —
+`error.code` is what distinguishes the failure kind, not the exit code. See
+[Error documents](../reference/json-contract.md#error-documents) for the document shape and the
+full `error.code` vocabulary.
+
 ---
 
 ### `tag template lint`

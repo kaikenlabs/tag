@@ -582,6 +582,8 @@ Bare JSON object (no envelope): `{"name","description","version","variables":[{"
 
 `tag template info` takes exactly one template argument; a second positional is a usage error (exit `2`), not silently ignored.
 
+On failure, `--format json` writes a single JSON error document to stdout instead of the success document above — see [Conventions](#conventions) below and [Error documents](../docs/reference/json-contract.md#error-documents) for the shape and the `error.code` vocabulary.
+
 ### Template Linting
 
 ```bash
@@ -976,7 +978,10 @@ after a file is processed; only whether the file actually lands on disk differs.
 fire) and turns the no-template-argument interactive picker into a usage error (exit 2)
 instead. Hook output, the "Add template to library?" prompt/messages, and the
 post-scaffold summary/README render are all suppressed or rerouted to stderr — stdout
-carries only the JSON document.
+carries only the JSON document. On failure, that document is a JSON error document instead
+of the success document above — see [Conventions](#conventions) below and
+[Error documents](../docs/reference/json-contract.md#error-documents) for the shape and the
+`error.code` vocabulary.
 
 **`tag extract --format json`**: bare object.
 
@@ -1346,7 +1351,8 @@ These decisions were made once, across the whole epic, rather than per command:
   previews go to `c.App.ErrWriter` (stderr) in JSON mode, never to the real `os.Stdout`. A failing
   command still writes its document before returning the exit-code-carrying error where there is
   a meaningful partial result to report (a conflict, a warning list); a command that fails before
-  producing one writes nothing.
+  producing one writes nothing — **except `tag template info` and `tag scaffold`, which always
+  write an error document on failure instead of nothing; see the next bullet.**
 - **Errors stay text on stderr; exit codes don't change with `--format`.** For 20 of the 22
   commands, `--format json` never turns an error into a JSON error object, and the process exit
   code for a given failure is the same in both formats.

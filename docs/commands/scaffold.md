@@ -264,6 +264,15 @@ library?" prompt, and the post-scaffold summary/README render are all suppressed
 stderr — stdout carries only the JSON document. `--dry-run --format json` does not create the
 output directory, same as `--dry-run` in text mode.
 
+On failure, `--format json` writes a single JSON **error document** to stdout instead of the
+success document above (never a mix of the two), and the same human-readable message goes to
+stderr as a plain `tag error: <message>` line — no timestamp prefix, no color. This applies to
+every failure of this command, including a flag-parse error caught before the command runs (e.g.
+`tag scaffold --format json --bogus`). The process exit code is unchanged by `--format` — a
+not-found template still exits `1`, a usage error still exits `2` — `error.code` is what
+distinguishes the failure kind, not the exit code. See [Error documents](../reference/json-contract.md#error-documents)
+in the JSON Contract reference for the document shape and the full `error.code` vocabulary.
+
 ## Variable Input Priority
 
 Variables are resolved in this order (highest priority first):
@@ -415,6 +424,11 @@ tag scaffold   # picker
 | "required variable missing" | Required variable has no value in `--no-input` mode | Error includes `--meta` and `--values` hints |
 | "output directory escapes working directory" | `project_name` contains path traversal (`../`) | Use a simple project name without path separators |
 | "This appears to be a Cookiecutter template" | Cookiecutter template in non-interactive mode | Use `tag convert cookiecutter` first |
+
+This table describes the text-mode message. Under `--format json`, each of these failures is
+reported as a JSON error document on stdout (with the same message text and a stable `error.code`)
+instead of text on stderr with nothing on stdout — see
+[Machine-Readable Output](#machine-readable-output) above.
 
 ## Migration from Previous Versions
 
