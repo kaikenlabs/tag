@@ -825,3 +825,78 @@ func TestUT_TemplateInfoJSON_FormMetadataAlwaysSerialised(t *testing.T) {
 		}
 	}
 }
+
+// --- #394: `prompt` in the text view ----------------------------------------
+
+// TestUT_DisplayVariables_DeclaredPromptOnly asserts the whole variables block
+// by equality rather than with Contains. Column alignment and the absence of a
+// trailing separator on prompt-less lines are both invisible to a substring
+// assertion — they are exactly what a formatting change regresses. The map
+// covers all four switch branches with and without a declared prompt, so a
+// branch that forgets the label fails here.
+func TestUT_DisplayVariables_DeclaredPromptOnly(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	displayVariables(&buf, &scaffold.TemplateConfig{
+		Vars: map[string]scaffold.VariableDef{
+			"alpha":                        {Type: scaffold.VarTypeString},
+			"beta":                         {Type: scaffold.VarTypeString, Prompt: "Beta label"},
+			"charlie":                      {Type: scaffold.VarTypeBoolean, Prompt: "Enable charlie"},
+			"delta":                        {Type: scaffold.VarTypeChoice, Options: []string{"a", "b", "c"}, Prompt: "Pick one"},
+			"echo":                         {Default: "hi", Prompt: "Echo value"},
+			"foxtrot":                      {Default: "bye"},
+			"golf":                         {Type: scaffold.VarTypeChoice, Options: []string{"x", "y"}},
+			"hotel":                        {Type: scaffold.VarTypeBoolean},
+			"india":                        {Type: scaffold.VarTypeChoice, Options: []string{"p", "q", "r", "s"}, Prompt: "Region"},
+			"zulu_name_longer_than_twenty": {Type: scaffold.VarTypeString, Prompt: "Overflows the column"},
+		},
+	})
+
+	want := "\nVariables:\n" +
+		"  alpha                (string)\n" +
+		"  beta                 (string)  — Beta label\n" +
+		"  charlie              (boolean)  — Enable charlie\n" +
+		"  delta                (choice: [a b c])  — Pick one\n" +
+		"  echo                 = hi  — Echo value\n" +
+		"  foxtrot              = bye\n" +
+		"  golf                 (choice: [x y])\n" +
+		"  hotel                (boolean)\n" +
+		"  india                (choice: [p q r] +1 more)  — Region\n" +
+		"  zulu_name_longer_than_twenty (string)  — Overflows the column\n"
+
+	assert.Equal(t, want, buf.String())
+}
+
+// TestUT_DisplayVariables_PromptIsNotSynthesised pins the "no noise" half of
+// #394: GetPrompt would return "Enter value for alpha" for a prompt-less
+// variable, and printing that for every such variable is the thing the ticket
+// rules out. Guards against a later refactor swapping v.Prompt for GetPrompt.
+func TestUT_DisplayVariables_PromptIsNotSynthesised(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	displayVariables(&buf, &scaffold.TemplateConfig{
+		Vars: map[string]scaffold.VariableDef{"alpha": {Type: scaffold.VarTypeString}},
+	})
+
+	assert.NotContains(t, buf.String(), "Enter value for")
+}
+
+// TestUT_DisplayVariables_PromptIsNotAFormatString covers the one way a
+// template author's prompt can corrupt output rather than merely look odd: if
+// the prompt is concatenated into the format string, a "%" in it renders as
+// %!s(MISSING) or similar. It must travel as a %s argument.
+func TestUT_DisplayVariables_PromptIsNotAFormatString(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	displayVariables(&buf, &scaffold.TemplateConfig{
+		Vars: map[string]scaffold.VariableDef{
+			"alpha": {Type: scaffold.VarTypeString, Prompt: "Cache hit rate (%d%%)"},
+		},
+	})
+
+	assert.Contains(t, buf.String(), "Cache hit rate (%d%%)")
+	assert.NotContains(t, buf.String(), "%!")
+}

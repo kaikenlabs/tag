@@ -197,16 +197,27 @@ func displayVariables(w io.Writer, config *scaffold.TemplateConfig) {
 
 	for _, name := range names {
 		v := config.Vars[name]
+		var detail string
 		switch {
 		case v.Type == scaffold.VarTypeChoice:
-			fmt.Fprintf(w, "  %-20s (choice: %s)\n", name, joinOptions(v.Options))
+			detail = fmt.Sprintf("(choice: %s)", joinOptions(v.Options))
 		case v.Type != "" && v.Type != scaffold.VarTypeString:
-			fmt.Fprintf(w, "  %-20s (%s)\n", name, v.Type)
+			detail = fmt.Sprintf("(%s)", v.Type)
 		case v.Default != nil:
-			fmt.Fprintf(w, "  %-20s = %v\n", name, v.Default)
+			detail = fmt.Sprintf("= %v", v.Default)
 		default:
-			fmt.Fprintf(w, "  %-20s (string)\n", name)
+			detail = "(string)"
 		}
+		// v.Prompt, never GetPrompt: its synthesised "Enter value for <name>"
+		// would annotate every prompt-less variable with nothing the reader
+		// cannot already see. The label trails the detail rather than
+		// occupying a padded column because the choice branch is unbounded —
+		// one template with a long options list would push every prompt off
+		// screen, including those of short variables.
+		if v.Prompt != "" {
+			detail += "  — " + v.Prompt
+		}
+		fmt.Fprintf(w, "  %-20s %s\n", name, detail)
 	}
 }
 

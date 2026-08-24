@@ -4,7 +4,7 @@ Description:  Go HTTP API scaffold
 
 Variables:
   license              (choice: [MIT Apache-2.0 GPL-3.0] +1 more)
-  maintainer           (string)
+  maintainer           (string)  — Maintainer
   project_name         = my-app
   use_docker           (boolean)
 
