@@ -28,6 +28,7 @@ type ScannedRef struct {
 // begins on, not the block's start line.
 func ScanRefs(src string) []ScannedRef {
 	var refs []ScannedRef
+	var shadow varsShadow
 	line := 1
 	i := 0
 
@@ -44,7 +45,12 @@ func ScanRefs(src string) []ScannedRef {
 				return refs
 			}
 			block := src[i:end]
-			refs = scanBlockRefs(refs, block, line)
+			// Scanned before observe: the right-hand side of
+			// {% for vars in vars.items %} is evaluated in the enclosing scope.
+			if !shadow.active() {
+				refs = scanBlockRefs(refs, block, line)
+			}
+			shadow.observe(block)
 			line += strings.Count(block, "\n")
 			i = end
 			// A {% raw %} block emits its body literally; skip to {% endraw %}.
@@ -60,7 +66,9 @@ func ScanRefs(src string) []ScannedRef {
 				return refs
 			}
 			block := src[i:end]
-			refs = scanBlockRefs(refs, block, line)
+			if !shadow.active() {
+				refs = scanBlockRefs(refs, block, line)
+			}
 			line += strings.Count(block, "\n")
 			i = end
 
