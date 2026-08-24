@@ -752,6 +752,20 @@ func TestUT_BuildTemplateInfoJSON_FormMetadata(t *testing.T) {
 			private:             true,
 			defaultIsExpression: true,
 		},
+		{
+			name:                "a variable can be both private and derived",
+			varName:             "_build_stamp",
+			def:                 scaffold.VariableDef{Type: scaffold.VarTypeString, Default: "{{ vars.project_name }}"},
+			derived:             true,
+			private:             true,
+			defaultIsExpression: true,
+		},
+		{
+			name:     "non-string default is never an expression",
+			varName:  "port",
+			def:      scaffold.VariableDef{Type: scaffold.VarTypeNumber, Default: 8080},
+			prompted: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -768,19 +782,24 @@ func TestUT_BuildTemplateInfoJSON_FormMetadata(t *testing.T) {
 			assert.Equal(t, tt.derived, dto.Variables[0].Derived, "derived")
 			assert.Equal(t, tt.private, dto.Variables[0].Private, "private")
 			assert.Equal(t, tt.defaultIsExpression, dto.Variables[0].DefaultIsExpression, "default_is_expression")
+			assert.Equal(t, tt.def.Default, dto.Variables[0].Default,
+				"default must be reported verbatim; default_is_expression is what tells a consumer not to render it literally")
 		})
 	}
 }
 
 // TestUT_TemplateInfoJSON_FormMetadataAlwaysSerialised pins the no-omitempty
-// requirement: a form generator must distinguish false from absent, so all
-// four keys must appear on a variable where every one of them is false.
+// requirement: a form generator must distinguish false from absent. No single
+// variable can have all four fields false at once (a variable that is neither
+// private nor derived is prompted), so this uses two — between them every key
+// is observed carrying false, which is the only value omitempty would elide.
 func TestUT_TemplateInfoJSON_FormMetadataAlwaysSerialised(t *testing.T) {
 	t.Parallel()
 
 	config := &scaffold.TemplateConfig{
 		Vars: map[string]scaffold.VariableDef{
-			"_computed": {Type: scaffold.VarTypeString},
+			"_computed":    {Type: scaffold.VarTypeString},
+			"project_name": {Type: scaffold.VarTypeString},
 		},
 	}
 
@@ -791,13 +810,18 @@ func TestUT_TemplateInfoJSON_FormMetadataAlwaysSerialised(t *testing.T) {
 		Variables []map[string]json.RawMessage `json:"variables"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &doc))
-	require.Len(t, doc.Variables, 1)
+	require.Len(t, doc.Variables, 2)
 
-	for _, key := range []string{"prompted", "derived", "private", "default_is_expression"} {
-		assert.Contains(t, doc.Variables[0], key, "key %q must always be serialised", key)
+	want := []map[string]string{
+		{"prompted": "false", "derived": "false", "private": "true", "default_is_expression": "false"},
+		{"prompted": "true", "derived": "false", "private": "false", "default_is_expression": "false"},
 	}
-	assert.JSONEq(t, `false`, string(doc.Variables[0]["prompted"]))
-	assert.JSONEq(t, `false`, string(doc.Variables[0]["derived"]))
-	assert.JSONEq(t, `true`, string(doc.Variables[0]["private"]))
-	assert.JSONEq(t, `false`, string(doc.Variables[0]["default_is_expression"]))
+	for i, entry := range want {
+		for key, value := range entry {
+			require.Contains(t, doc.Variables[i], key,
+				"key %q must always be serialised, on variable %d", key, i)
+			assert.JSONEq(t, value, string(doc.Variables[i][key]),
+				"variable %d, key %q", i, key)
+		}
+	}
 }
