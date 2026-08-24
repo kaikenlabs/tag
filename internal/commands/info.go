@@ -180,7 +180,8 @@ func displayMetadata(w io.Writer, config *scaffold.TemplateConfig) {
 	}
 }
 
-// displayVariables prints the sorted list of template variables with types and defaults.
+// displayVariables prints the sorted list of template variables with their
+// types, defaults and declared prompts.
 func displayVariables(w io.Writer, config *scaffold.TemplateConfig) {
 	if len(config.Vars) == 0 {
 		return
@@ -210,10 +211,9 @@ func displayVariables(w io.Writer, config *scaffold.TemplateConfig) {
 		}
 		// v.Prompt, never GetPrompt: its synthesised "Enter value for <name>"
 		// would annotate every prompt-less variable with nothing the reader
-		// cannot already see. The label trails the detail rather than
-		// occupying a padded column because the choice branch is unbounded —
-		// one template with a long options list would push every prompt off
-		// screen, including those of short variables.
+		// cannot already see. Trailing rather than a padded column because the
+		// choice branch is unbounded — one long options list would push every
+		// prompt off screen, including those of short variables.
 		if v.Prompt != "" {
 			detail += "  — " + v.Prompt
 		}

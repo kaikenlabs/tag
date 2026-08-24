@@ -828,12 +828,12 @@ func TestUT_TemplateInfoJSON_FormMetadataAlwaysSerialised(t *testing.T) {
 
 // --- #394: `prompt` in the text view ----------------------------------------
 
-// TestUT_DisplayVariables_DeclaredPromptOnly asserts the whole variables block
-// by equality rather than with Contains. Column alignment and the absence of a
-// trailing separator on prompt-less lines are both invisible to a substring
-// assertion — they are exactly what a formatting change regresses. The map
-// covers all four switch branches with and without a declared prompt, so a
-// branch that forgets the label fails here.
+// TestUT_DisplayVariables_DeclaredPromptOnly asserts the whole block by
+// equality rather than with Contains: column alignment and a stray trailing
+// separator on prompt-less lines are both invisible to a substring assertion,
+// and are exactly what a formatting change regresses. The prompt-less rows are
+// also what catches a refactor swapping v.Prompt for GetPrompt, whose
+// synthesised "Enter value for <name>" would annotate every one of them.
 func TestUT_DisplayVariables_DeclaredPromptOnly(t *testing.T) {
 	t.Parallel()
 
@@ -868,25 +868,10 @@ func TestUT_DisplayVariables_DeclaredPromptOnly(t *testing.T) {
 	assert.Equal(t, want, buf.String())
 }
 
-// TestUT_DisplayVariables_PromptIsNotSynthesised pins the "no noise" half of
-// #394: GetPrompt would return "Enter value for alpha" for a prompt-less
-// variable, and printing that for every such variable is the thing the ticket
-// rules out. Guards against a later refactor swapping v.Prompt for GetPrompt.
-func TestUT_DisplayVariables_PromptIsNotSynthesised(t *testing.T) {
-	t.Parallel()
-
-	var buf bytes.Buffer
-	displayVariables(&buf, &scaffold.TemplateConfig{
-		Vars: map[string]scaffold.VariableDef{"alpha": {Type: scaffold.VarTypeString}},
-	})
-
-	assert.NotContains(t, buf.String(), "Enter value for")
-}
-
-// TestUT_DisplayVariables_PromptIsNotAFormatString covers the one way a
-// template author's prompt can corrupt output rather than merely look odd: if
-// the prompt is concatenated into the format string, a "%" in it renders as
-// %!s(MISSING) or similar. It must travel as a %s argument.
+// TestUT_DisplayVariables_PromptIsNotAFormatString covers the one way an
+// author's prompt corrupts output rather than merely looking odd: concatenated
+// into the format string, a "%" in it renders as %!s(MISSING). It must travel
+// as an argument.
 func TestUT_DisplayVariables_PromptIsNotAFormatString(t *testing.T) {
 	t.Parallel()
 
