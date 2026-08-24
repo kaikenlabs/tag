@@ -40,6 +40,12 @@ func TestUT_VersionKeys_ScopedToTwoDocuments(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	require.NoError(t, err)
 
+	// Counted per file and asserted below. Without this the whole test is
+	// vacuous in the direction that matters most: the loop only asserts when a
+	// match is found, so deleting both keys from both documents would leave it
+	// green while the contract silently disappeared.
+	found := map[string]int{}
+
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -54,10 +60,17 @@ func TestUT_VersionKeys_ScopedToTwoDocuments(t *testing.T) {
 			if !strings.Contains(src, needle) {
 				continue
 			}
+			found[name]++
 			assert.True(t, versionKeyedDocuments[name],
 				"%s emits %s, but only `template info` and `scaffold` may carry version keys "+
 					"(epic #388). If this is intentional, it is a contract decision: update "+
 					"versionKeyedDocuments and docs/reference/json-contract.md.", name, needle)
 		}
+	}
+
+	for name := range versionKeyedDocuments {
+		assert.Positive(t, found[name],
+			"%s must still emit schema_version/tag_version — epic #388 requires both keys on "+
+				"this document, and removing them is a breaking contract change, not a cleanup", name)
 	}
 }
