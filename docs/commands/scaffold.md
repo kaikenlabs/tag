@@ -211,6 +211,8 @@ tag scaffold --format json ./my-template my-project   # --format works on either
 
 ```json
 {
+  "schema_version": 1,
+  "tag_version": "v2.3.0",
   "output_dir": "/abs/path/my-project",
   "project_root": "/abs/path/my-project",
   "template": "./my-template",
@@ -228,6 +230,9 @@ Bare object, no envelope. `output_dir` and `project_root` are always absolute pa
 `files` is the same list, in the same order, whether `--dry-run` is set or not: both paths record
 an entry at the same point right after a file is processed, and only whether the file actually
 lands on disk differs.
+
+`schema_version` and `tag_version` are covered in full, including the bump policy, in the
+[JSON Contract reference](../reference/json-contract.md).
 
 `project_root` is the directory that actually holds the generated project, and it is the one to
 hand to anything that publishes or `cd`s into the result. It equals `output_dir` for most
@@ -451,3 +456,4 @@ Both `TAG_CACHE_DIR` and `TAG_REPLAY_DIR` are read before `$HOME` is resolved, s
 - [Template Authoring](../templates/authoring.md) - How to create templates
 - [Remote References](../reference/remote-refs.md) - Template source formats
 - [tag.template.json Reference](../reference/tag.template.json.md) - Configuration format
+- [JSON Contract](../reference/json-contract.md) - `--format json` version keys and bump policy

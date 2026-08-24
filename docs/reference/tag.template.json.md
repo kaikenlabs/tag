@@ -35,6 +35,8 @@ For IDE autocompletion, add the `$schema` property:
 | `name` | string | No | Template display name |
 | `description` | string | No | Template description |
 | `version` | string | No | Template version (semver recommended) |
+| `keywords` | string[] | No | Topic keywords for discoverability in `tag lib search`. Mirrors the GitHub topic convention: all lowercase, hyphen-separated |
+| `categories` | string[] | No | High-level buckets for this template (e.g. `"backend"`, `"cli"`, `"data"`) |
 | `vars` | object | No | Variable definitions |
 | `hooks` | object | No | Pre and post scaffold hooks |
 | `test` | object | No | Matrix testing configuration |
@@ -46,6 +48,8 @@ For IDE autocompletion, add the `$schema` property:
   "name": "Go API Template",
   "description": "A production-ready Go API with Docker and CI/CD",
   "version": "1.2.0",
+  "keywords": ["go", "rest", "api"],
+  "categories": ["backend"],
   "vars": {
     "project_name": "my-api",
     "author": "Your Name"
@@ -55,6 +59,10 @@ For IDE autocompletion, add the `$schema` property:
   }
 }
 ```
+
+`keywords` and `categories` are also surfaced by
+[`tag template info --format json`](../commands/template.md#tag-template-info) as `[]` when a
+template declares neither.
 
 ## Variable Definitions
 
@@ -530,3 +538,4 @@ You can also validate your template ahead of time with `tag template lint`, whic
 - [Hooks Guide](../templates/hooks.md) - Hook configuration details
 - [Scaffold Command](../commands/scaffold.md) - Using templates
 - [tag template lint](../commands/template.md#tag-template-lint) - Validate templates
+- [JSON Contract](json-contract.md) - `--format json` version keys and bump policy
