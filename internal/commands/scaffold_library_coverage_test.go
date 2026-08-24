@@ -556,6 +556,7 @@ func TestUT_DisplayScaffoldSummary_NoProjectName_NoVersion(t *testing.T) {
 	var buf bytes.Buffer
 	result := scaffold.ScaffoldResult{
 		OutputDir:   "/tmp/no-proj-name",
+		ProjectRoot: "/tmp/no-proj-name",
 		TemplateDir: t.TempDir(),
 		Vars:        map[string]any{"other_var": 42},
 		Opts: scaffold.Options{
@@ -585,6 +586,7 @@ func TestUT_DisplayScaffoldSummary_WithGeneratorsDir(t *testing.T) {
 	var buf bytes.Buffer
 	result := scaffold.ScaffoldResult{
 		OutputDir:   "/tmp/gen-dir",
+		ProjectRoot: "/tmp/gen-dir",
 		TemplateDir: templateDir,
 		Vars:        map[string]any{},
 		Opts:        scaffold.Options{},

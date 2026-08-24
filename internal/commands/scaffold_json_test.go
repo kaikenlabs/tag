@@ -51,7 +51,7 @@ func TestUT_ScaffoldJSON_DocumentShape(t *testing.T) {
 
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal([]byte(run.Writer), &doc))
-	for _, key := range []string{"output_dir", "template", "files", "created", "dry_run"} {
+	for _, key := range []string{"output_dir", "project_root", "template", "files", "created", "dry_run"} {
 		assert.Contains(t, doc, key)
 	}
 }

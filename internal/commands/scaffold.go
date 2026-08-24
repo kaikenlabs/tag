@@ -199,11 +199,12 @@ type scaffoldFileJSON struct {
 
 // scaffoldDoc is the JSON shape for `scaffold --format json`.
 type scaffoldDoc struct {
-	OutputDir string             `json:"output_dir"`
-	Template  string             `json:"template"`
-	Files     []scaffoldFileJSON `json:"files"`
-	Created   int                `json:"created"`
-	DryRun    bool               `json:"dry_run"`
+	OutputDir   string             `json:"output_dir"`
+	ProjectRoot string             `json:"project_root"`
+	Template    string             `json:"template"`
+	Files       []scaffoldFileJSON `json:"files"`
+	Created     int                `json:"created"`
+	DryRun      bool               `json:"dry_run"`
 }
 
 func newScaffoldDoc(result scaffold.ScaffoldResult) scaffoldDoc {
@@ -213,11 +214,12 @@ func newScaffoldDoc(result scaffold.ScaffoldResult) scaffoldDoc {
 	}
 
 	return scaffoldDoc{
-		OutputDir: result.OutputDir,
-		Template:  result.Opts.TemplateRef,
-		Files:     files,
-		Created:   len(files),
-		DryRun:    result.Opts.DryRun,
+		OutputDir:   result.OutputDir,
+		ProjectRoot: result.ProjectRoot,
+		Template:    result.Opts.TemplateRef,
+		Files:       files,
+		Created:     len(files),
+		DryRun:      result.Opts.DryRun,
 	}
 }
 
@@ -585,14 +587,14 @@ func suggestConvertedTemplateName(templateRef string) string {
 
 // displayScaffoldSummary prints a post-scaffold summary to w.
 func displayScaffoldSummary(w io.Writer, result scaffold.ScaffoldResult) {
-	outputDir := result.OutputDir
+	projectRoot := result.ProjectRoot
 	templateDir := result.TemplateDir
 	vars := result.Vars
 	opts := result.Opts
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Scaffolding complete!")
-	fmt.Fprintf(w, "  Output: %s\n", outputDir)
+	fmt.Fprintf(w, "  Output: %s\n", projectRoot)
 
 	// Show key variables
 	if projectName, ok := vars["project_name"].(string); ok {
@@ -610,7 +612,7 @@ func displayScaffoldSummary(w io.Writer, result scaffold.ScaffoldResult) {
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Next steps:")
-	fmt.Fprintf(w, "  cd %s\n", outputDir)
+	fmt.Fprintf(w, "  cd %s\n", projectRoot)
 
 	// Check if the template has generators
 	hasGenerators := hasSubdirScaffold(templateDir, types.TemplatesDir) || hasSubdirScaffold(templateDir, types.GeneratorsDir)
