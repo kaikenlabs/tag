@@ -326,6 +326,7 @@ tmp/
 - Matched directories are pruned entirely — their contents are not traversed
 - An empty or missing `.tagignore` has no effect
 - Patterns follow [gitignore rules](https://git-scm.com/docs/gitignore): patterns without `/` match at any depth; patterns with `/` anchor to the template root
+- `.tagignore` also decides [project-wrapper detection](../commands/scaffold.md#machine-readable-output): a wrapper only unwraps when it holds *all* of the template's generated content, so an entry matched by `.tagignore` doesn't count as content beside the wrapper. Listing your template-authoring files there is what keeps a wrapper template unwrapping.
 
 ## Hooks
 
