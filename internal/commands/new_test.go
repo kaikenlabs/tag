@@ -1,8 +1,11 @@
 package commands
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -13,6 +16,36 @@ import (
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
+
+// listTreeEntries returns a sorted, root-relative listing of every entry
+// (files AND directories) under root, so a before/after comparison catches
+// both unexpected additions and unexpected content changes at the directory
+// level, not just missing files.
+func listTreeEntries(t *testing.T, root string) []string {
+	t.Helper()
+	var entries []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if rel == "." {
+			return nil
+		}
+		kind := "file"
+		if d.IsDir() {
+			kind = "dir"
+		}
+		entries = append(entries, kind+":"+filepath.ToSlash(rel))
+		return nil
+	})
+	require.NoError(t, err)
+	sort.Strings(entries)
+	return entries
+}
 
 func TestUT_NewAction_MissingGeneratorName(t *testing.T) {
 	tmpDir := setupTempDir(t)
@@ -287,4 +320,136 @@ func TestUT_NewCommand_ReturnsValidCommand(t *testing.T) {
 		}
 	}
 	assert.True(t, hasBundleFlag, "should have bundle flag")
+}
+
+func TestUT_NewAction_BundleDirEscapingBaseIsRejected(t *testing.T) {
+	type escapeCase struct {
+		name               string
+		skipWindows        bool
+		wantNoDoesNotExist bool
+		setup              func(t *testing.T, base, outside string) (bundleSubPath, bundleName, generatorName, canaryPath, wantGenFile, wantGenDirCheck string)
+	}
+
+	cases := []escapeCase{
+		{
+			name: "relative traversal via --bundle-path",
+			setup: func(t *testing.T, base, outside string) (string, string, string, string, string, string) {
+				t.Helper()
+				bundleDir := filepath.Join(outside, "evilbundle")
+				require.NoError(t, os.MkdirAll(bundleDir, 0o750))
+				canary := filepath.Join(bundleDir, "canary.txt")
+				require.NoError(t, os.WriteFile(canary, []byte("canary"), 0o644))
+				genFile := filepath.Join(bundleDir, "mygen", "mygen.go")
+				return "../outside", "evilbundle", "mygen", canary, genFile, filepath.Dir(genFile)
+			},
+		},
+		{
+			name:               "relative traversal to a nonexistent bundle dir",
+			wantNoDoesNotExist: true,
+			setup: func(t *testing.T, base, outside string) (string, string, string, string, string, string) {
+				t.Helper()
+				bundleDir := filepath.Join(outside, "nosuchbundle")
+				genFile := filepath.Join(bundleDir, "mygen", "mygen.go")
+				return "../outside", "nosuchbundle", "mygen", "", genFile, filepath.Dir(genFile)
+			},
+		},
+		{
+			// The ONLY assertion here that would fail a cheaper, WRONG fix such as
+			// a lexical `strings.Contains(bundleSubPath, "..")` guard: bundleSubPath
+			// is the unremarkable default "_bundles", the escape is entirely via a
+			// symlink that os.Stat (and MkdirAll) transparently follow.
+			name:        "symlinked bundle directory",
+			skipWindows: true,
+			setup: func(t *testing.T, base, outside string) (string, string, string, string, string, string) {
+				t.Helper()
+				require.NoError(t, os.MkdirAll(filepath.Join(base, "_bundles"), 0o750))
+				target := filepath.Join(outside, "linkedbundle")
+				require.NoError(t, os.MkdirAll(target, 0o750))
+				canary := filepath.Join(target, "canary.txt")
+				require.NoError(t, os.WriteFile(canary, []byte("canary"), 0o644))
+				require.NoError(t, os.Symlink(target, filepath.Join(base, "_bundles", "linked")))
+				genFile := filepath.Join(target, "mygen", "mygen.go")
+				return "", "linked", "mygen", canary, genFile, filepath.Dir(genFile)
+			},
+		},
+		{
+			// Exercises the SECOND, surviving ValidatePathContainment(basePath, dirPath)
+			// call: bundleDir itself (base/_bundles/realbundle) is genuinely inside
+			// base, so the new pre-Stat check passes here. The escape is a symlinked
+			// generator subdirectory found only by the existing check further down.
+			// This is what stops a future refactor from deleting that second check
+			// as "now redundant".
+			name:        "generator subdir symlinks out of bundle",
+			skipWindows: true,
+			setup: func(t *testing.T, base, outside string) (string, string, string, string, string, string) {
+				t.Helper()
+				realBundle := filepath.Join(base, "_bundles", "realbundle")
+				require.NoError(t, os.MkdirAll(realBundle, 0o750))
+				target := filepath.Join(outside, "genescape")
+				require.NoError(t, os.MkdirAll(target, 0o750))
+				canary := filepath.Join(target, "canary.txt")
+				require.NoError(t, os.WriteFile(canary, []byte("canary"), 0o644))
+				require.NoError(t, os.Symlink(target, filepath.Join(realBundle, "mygen")))
+				genFile := filepath.Join(target, "mygen.go")
+				return "", "realbundle", "mygen", canary, genFile, ""
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.skipWindows && runtime.GOOS == "windows" {
+				t.Skip("symlinks require elevated privileges on windows")
+			}
+
+			parent := setupTempDir(t)
+			base := filepath.Join(parent, "base")
+			outside := filepath.Join(parent, "outside")
+			require.NoError(t, os.MkdirAll(base, 0o750))
+			require.NoError(t, os.MkdirAll(outside, 0o750))
+
+			bundleSubPath, bundleName, generatorName, canaryPath, wantGenFile, wantGenDirCheck := tc.setup(t, base, outside)
+
+			var canaryBefore []byte
+			if canaryPath != "" {
+				var readErr error
+				canaryBefore, readErr = os.ReadFile(canaryPath)
+				require.NoError(t, readErr)
+			}
+			outsideBefore := listTreeEntries(t, outside)
+
+			cfg := createTestConfig(t, base)
+			flagValues := map[string]any{
+				flags.InBundleFlag: bundleName,
+				"package":          "mypackage",
+			}
+			if bundleSubPath != "" {
+				flagValues[flags.BundlePathFlag] = bundleSubPath
+			}
+			ctx := createTestCLIContext(t, []string{generatorName}, flagValues)
+
+			err := newAction(ctx, cfg)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "path safety check failed")
+			assert.Contains(t, err.Error(), "escapes base directory")
+			if tc.wantNoDoesNotExist {
+				assert.NotContains(t, err.Error(), "does not exist")
+			}
+
+			require.NoFileExists(t, wantGenFile)
+			if wantGenDirCheck != "" {
+				require.NoDirExists(t, wantGenDirCheck)
+			}
+
+			if canaryPath != "" {
+				canaryAfter, readErr := os.ReadFile(canaryPath)
+				require.NoError(t, readErr)
+				assert.Equal(t, canaryBefore, canaryAfter)
+			}
+
+			outsideAfter := listTreeEntries(t, outside)
+			assert.Equal(t, outsideBefore, outsideAfter)
+		})
+	}
 }

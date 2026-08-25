@@ -11,6 +11,16 @@ import (
 // Both paths are resolved through filepath.EvalSymlinks (with fallback for
 // non-existent targets) and made absolute before comparison. This prevents
 // path traversal attacks including those using symlinks.
+//
+// This is a validation-time predicate over a PATHNAME, not a binding
+// capability over an open file or directory handle. It protects against
+// traversal and pre-existing symlink escapes at the moment it runs, but does
+// NOT protect against a concurrent process replacing a directory in the
+// resolved path with a symlink between this check and the write that follows
+// it (TOCTOU). The accepted threat model is that tag's destination workspace
+// is not concurrently writable by an attacker while tag runs; if that ever
+// changes, callers must move to rooted-descriptor APIs (e.g. os.Root) instead
+// of re-validating pathnames.
 func ValidatePathContainment(basePath, fullPath string) error {
 	absBase, err := resolveForContainment(basePath)
 	if err != nil {
