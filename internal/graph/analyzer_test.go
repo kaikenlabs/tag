@@ -412,8 +412,11 @@ func TestUT_AnalyzeSkipsTagTemplateJSON(t *testing.T) {
 	report, err := Analyze(root)
 	require.NoError(t, err)
 	require.Len(t, report.Generators, 1)
-	// Only model.go action, not tag.template.json.
+	// Only model.go action, not tag.template.json. The warning assertion is the
+	// load-bearing half: the config file is dropped by the loader, so the only way
+	// its presence could surface in graph output is a spurious malformed_metadata.
 	assert.Len(t, report.Generators[0].Actions, 1)
+	assert.Empty(t, report.Warnings)
 }
 
 func TestUT_FormatJSON(t *testing.T) {

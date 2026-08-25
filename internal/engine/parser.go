@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/kaikenlabs/tag/internal/template"
+	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // NewParserWithExecutor creates a TemplateParser using the provided TemplateExecutor.
@@ -173,7 +174,9 @@ func mergeParserMetadata(cliMeta, templateMeta map[string]string) map[string]str
 	return result
 }
 
-// LoadTemplateFiles loads all files from a directory as templates.
+// LoadTemplateFiles loads all files from a directory as templates, skipping
+// types.TemplateConfigFile: that name is reserved for configuration and carries
+// no frontmatter, so loading it would fail the required 'to' field check.
 func LoadTemplateFiles(dirPath string) (map[string]string, error) {
 	rootTemplates := map[string]string{}
 	files, err := os.ReadDir(dirPath)
@@ -182,7 +185,7 @@ func LoadTemplateFiles(dirPath string) (map[string]string, error) {
 	}
 
 	for _, file := range files {
-		if file.IsDir() {
+		if file.IsDir() || file.Name() == types.TemplateConfigFile {
 			continue
 		}
 		fileLocation := filepath.Join(dirPath, file.Name())

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -13,7 +12,6 @@ import (
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
-	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
@@ -149,20 +147,17 @@ func buildGeneratorInfo(cfg *config.Config, name, genDir string) (generatorInfoJ
 	}
 
 	// Read tag.template.json if present.
-	configPath := filepath.Join(genDir, types.TemplateConfigFile)
-	if data, readErr := os.ReadFile(configPath); readErr == nil {
-		tc, parseErr := tmplconfig.ParseTemplateConfig(data)
-		if parseErr != nil {
-			return generatorInfoJSON{}, app.Errorf("cannot parse template config: %w", parseErr)
-		}
-		info.Description = tc.Description
-		info.Requires = tc.Requires
-		info.Variables = convertVariables(tc.Vars)
-		if tc.Hooks != nil {
-			info.Hooks = &hooksJSON{
-				PreScaffold:  tc.Hooks.PreScaffold,
-				PostScaffold: tc.Hooks.PostScaffold,
-			}
+	tc, cfgErr := readGeneratorConfig(genDir)
+	if cfgErr != nil {
+		return generatorInfoJSON{}, cfgErr
+	}
+	info.Description = tc.Description
+	info.Requires = tc.Requires
+	info.Variables = convertVariables(tc.Vars)
+	if tc.Hooks != nil {
+		info.Hooks = &hooksJSON{
+			PreScaffold:  tc.Hooks.PreScaffold,
+			PostScaffold: tc.Hooks.PostScaffold,
 		}
 	}
 
