@@ -62,17 +62,31 @@ func TestUT_ValidatePathContainment_BaseResolveError(t *testing.T) {
 }
 
 // ===========================================================================
-// path_containment.go — resolveNonExistent: non-NotExist error in walk (line 83-86)
+// path_containment.go — unreadable ancestor fails closed
 // ===========================================================================
 
-// TestUT_ResolveNonExistent_NonExistErrorInWalk exercises resolveNonExistent's
-// fail-closed stat-error branch (#418): an ancestor that exists but cannot be
-// searched (Lstat on a descendant fails with permission-denied, not
-// not-exist) must now abort with an error rather than silently falling back
-// to the unresolved path. chmod 0o000 is a no-op under root (some CI images
-// run as root), so the test probes for real permission enforcement first and
-// skips rather than asserting blindly when it isn't observed.
-func TestUT_ResolveNonExistent_NonExistErrorInWalk(t *testing.T) {
+// TestUT_ValidatePathContainment_UnreadableAncestorFailsClosed asserts that an
+// ancestor which exists but cannot be searched refuses the write rather than
+// falling back to an unresolved path.
+//
+// It does NOT reach resolveNonExistent, despite what this test asserted about
+// itself before #418. Measured: the error is "failed to evaluate symlinks for
+// ...: permission denied", which comes from resolveForContainment's own
+// catch-all — filepath.EvalSymlinks runs on the whole path first, and a
+// permission-denied ancestor makes it fail with an error that is not
+// os.IsNotExist, so resolveNonExistent is never called. That branch is
+// unchanged by #418, so this test passes on both sides of the fix.
+//
+// resolveNonExistent's own stat-error branch has no static test because it is
+// not statically reachable: getting there requires EvalSymlinks to have
+// already walked every ancestor successfully (that is how the error came back
+// as not-exist rather than permission-denied), so the permission must change
+// between the two calls. Do not add a chmod fixture claiming to cover it.
+//
+// chmod 0o000 is a no-op under root (some CI images run as root), so the test
+// probes for real permission enforcement first and skips rather than
+// asserting blindly when it isn't observed.
+func TestUT_ValidatePathContainment_UnreadableAncestorFailsClosed(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission tests unreliable on Windows")
 	}

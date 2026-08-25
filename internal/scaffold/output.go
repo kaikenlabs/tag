@@ -207,25 +207,17 @@ func (w *DefaultOutputWriter) Write(templateRoot, wrapperDir, outputDir string, 
 // walk, and filepath.EvalSymlinks also Cleans, so resolving unconditionally
 // would change the spelling of every non-symlinked root in relPath, outRel
 // and the "skipping symlink" warning text.
+// A stat failure leaves root untouched: only whether resolution is required
+// is being decided here, and an unreadable root is reported by the walk.
 func resolveSymlinkedRoot(root string) (string, error) {
-	if !isSymlink(root) {
-		return root, nil
+	if fi, statErr := os.Lstat(root); statErr == nil && fi.Mode()&os.ModeSymlink != 0 {
+		resolved, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve template root %q: %w", root, err)
+		}
+		return resolved, nil
 	}
-	resolved, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve template root %q: %w", root, err)
-	}
-	return resolved, nil
-}
-
-// isSymlink reports whether path exists and is itself a symlink. A stat
-// failure (including a non-existent path) reports false rather than an
-// error: resolveSymlinkedRoot only needs to know whether resolution is
-// required, and a non-existent or otherwise unreadable root is handled by
-// the normal template-root validation that runs elsewhere.
-func isSymlink(path string) bool {
-	fi, err := os.Lstat(path)
-	return err == nil && fi.Mode()&os.ModeSymlink != 0
+	return root, nil
 }
 
 // processAndRecordFile processes one file and, on success, records it in
