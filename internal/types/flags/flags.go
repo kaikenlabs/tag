@@ -19,6 +19,7 @@ const (
 	AsFlag            = "as"
 	InteractiveFlag   = "interactive"
 	AddToLibFlag      = "add-to-lib"
+	NoLibraryFlag     = "no-library"
 	OpenAPIFlag       = "openapi"
 	OperationFlag     = "operation"
 	OperationsFlag    = "operations"

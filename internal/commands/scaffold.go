@@ -323,12 +323,11 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 	}
 
 	// Decide whether to add the template to the library.
-	// Remote templates are always added; local templates are added when
-	// --add-to-lib is set or the user confirms interactively.
-	addToLib := isRemote
-	if !isRemote {
-		addToLib = resolveAddToLib(c, templateDir, jsonMode)
-	}
+	// --no-library always wins: it suppresses both the unconditional remote
+	// add and the local add-to-lib resolution (including its interactive
+	// prompt). Otherwise, remote templates are always added; local templates
+	// are added when --add-to-lib is set or the user confirms interactively.
+	addToLib := !c.Bool(flags.NoLibraryFlag) && (isRemote || resolveAddToLib(c, templateDir, jsonMode))
 	if addToLib {
 		opts.SkipGeneratorCopy = true
 	}

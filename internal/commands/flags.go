@@ -337,6 +337,10 @@ func commonScaffoldFlags() []cli.Flag {
 			Name:  flags.AddToLibFlag,
 			Usage: "Add the template to the library after scaffolding (enables generator resolution from library)",
 		},
+		&cli.BoolFlag{
+			Name:  flags.NoLibraryFlag,
+			Usage: "Never add the template to the shared library (generators are copied into the project instead)",
+		},
 	}
 }
 
