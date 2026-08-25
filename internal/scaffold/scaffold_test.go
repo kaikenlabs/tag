@@ -601,12 +601,12 @@ func TestUT_ValidateSafeOutputDir(t *testing.T) {
 }
 
 func TestUT_FindProjectWrapper(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		root         func(t *testing.T) string
 		wantWrapper  string
 		wantSiblings []string
-		wantErr      bool
 	}{
 		{
 			name: "wrapper alone with only skipped entries has no siblings",
@@ -719,12 +719,9 @@ func TestUT_FindProjectWrapper(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			dir := tt.root(t)
 			wrapper, siblings, err := findProjectWrapper(dir)
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantWrapper, wrapper)
 			assert.Equal(t, tt.wantSiblings, siblings)
@@ -768,6 +765,9 @@ func TestUT_FindProjectWrapper_SymlinkEntries(t *testing.T) {
 }
 
 func TestUT_FindProjectWrapper_TagignoreReadError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod 000 does not make a file unreadable on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses permission checks, chmod 000 would still be readable")
 	}

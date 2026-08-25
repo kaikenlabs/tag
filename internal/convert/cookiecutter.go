@@ -192,7 +192,14 @@ func writeHooksTagIgnore(destDir string) error {
 	}
 	content += "hooks/\n"
 
-	if err := fileutil.WriteFileAtomic(path, []byte(content), types.FileMode); err != nil {
+	// Rewriting the file must not widen a restrictive mode the source template
+	// chose for its own .tagignore.
+	mode := types.FileMode
+	if info, statErr := os.Stat(path); statErr == nil {
+		mode = info.Mode().Perm()
+	}
+
+	if err := fileutil.WriteFileAtomic(path, []byte(content), mode); err != nil {
 		return fmt.Errorf("failed to write %s: %w", types.TagIgnoreFile, err)
 	}
 	return nil

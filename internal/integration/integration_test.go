@@ -174,6 +174,13 @@ func TestIT_ScaffoldCookiecutter(t *testing.T) {
 
 	// Compare against golden files (walk expected, check in actual)
 	compareDirectories(t, expectedDir, scaffoldDir)
+
+	// compareDirectories only walks expected, so deleting the hooks/ fixture
+	// entry removed an assertion rather than adding one. This is the only test
+	// covering a real converted template with an explicit --output, where the
+	// wrapper is NOT unwrapped and the hook script is kept out of the project
+	// solely by the .tagignore convert writes — assert that directly.
+	assert.NoDirExists(t, filepath.Join(scaffoldDir, "hooks"))
 }
 
 // TestIT_ConvertThenScaffold_ConvertedTemplateStillUnwraps pins #403's convert

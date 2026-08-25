@@ -287,7 +287,7 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 	if len(siblings) > 0 {
 		fmt.Fprintf(s.output,
 			"Warning: template root has content beside the wrapper %q: %s\n"+
-				"  Not unwrapping — all files are written under the output directory.\n"+
+				"  Not unwrapping, so the project directory is nested inside the output directory.\n"+
 				"  Add these entries to .tagignore to restore unwrapping.\n",
 			wrapperDir, strings.Join(siblings, ", "))
 		return nil
@@ -629,27 +629,20 @@ func validateSafeOutputDir(outputDir string) error {
 	return nil
 }
 
-// readDirTolerant reads a directory's entries, reporting failure via ok
-// rather than an error value — the caller treats a missing/unreadable
-// directory as "no entries" rather than a hard failure.
-func readDirTolerant(dir string) (entries []os.DirEntry, ok bool) {
-	entries, err := os.ReadDir(dir)
-	return entries, err == nil
-}
-
 // findProjectWrapper scans the template root for a project wrapper directory.
 // Cookiecutter-style templates wrap all project files in a single directory whose
-// name is a template expression (e.g., "{{ vars.project_name }}"). When detected,
-// the wrapper directory name is returned so callers can use it as the effective
-// template root, avoiding double nesting (e.g., my-service/my-service/).
-// Returns empty string if no single wrapper directory is found.
+// name is a template expression (e.g., "{{ vars.project_name }}"). A wrapper is
+// returned only so callers can use it as the effective template root, avoiding
+// double nesting (e.g., my-service/my-service/); siblings carries every other
+// root entry that would be generated, and unwrapping is only safe when it is
+// empty. Returns an empty wrapper when the root holds no single candidate.
 func findProjectWrapper(templateRoot string) (wrapper string, siblings []string, err error) {
-	// A missing/unreadable template root is tolerated here — loadConfig
-	// already fails the run earlier for that case, so erroring on it in this
-	// helper would be an unrelated behaviour change.
-	entries, ok := readDirTolerant(templateRoot)
-	if !ok {
-		return "", nil, nil
+	// A missing/unreadable template root is tolerated: loadConfig already fails
+	// the run earlier for that case, so erroring here would be an unrelated
+	// behaviour change.
+	var entries []os.DirEntry
+	if read, dirErr := os.ReadDir(templateRoot); dirErr == nil {
+		entries = read
 	}
 
 	ignoreMatcher, err := loadIgnorePatterns(templateRoot)
@@ -667,11 +660,10 @@ func findProjectWrapper(templateRoot string) (wrapper string, siblings []string,
 			continue
 		}
 
-		// os.ReadDir uses lstat, so a symlink to a directory already reports
-		// IsDir() == false; the explicit ModeSymlink check documents that
-		// rather than relying on it silently.
-		isRealDir := e.IsDir() && e.Type()&os.ModeSymlink == 0
-		if isRealDir && strings.Contains(name, "{{") && strings.Contains(name, "}}") {
+		// os.ReadDir is lstat-based, so IsDir() is already false for a symlink
+		// to a directory — a symlink can never be the wrapper, and is counted
+		// as a sibling because the writer refuses to follow it either.
+		if e.IsDir() && strings.Contains(name, "{{") && strings.Contains(name, "}}") {
 			candidates = append(candidates, name)
 			continue
 		}
