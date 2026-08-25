@@ -1,15 +1,53 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/kaikenlabs/tag/internal/tmplconfig"
+	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
 
 // isTruthy returns true if the value is considered "truthy" for prerequisite
 // checking. A value is truthy if it is non-nil, non-empty string, non-zero
 // number, or boolean true. JSON unmarshaling produces float64 for numbers.
+// readGeneratorConfig reads a generator's tag.template.json, returning an empty
+// config when the generator declares none. A missing file is not an error — most
+// generators have none — but anything else is, so a config TAG cannot read or
+// parse can never silently disable the requires gate that same file declares.
+// Before the file was skipped as a template, an unreadable or malformed one
+// aborted the run by accident; the gate must not depend on that.
+func readGeneratorConfig(genDir string) (*tmplconfig.TemplateConfig, error) {
+	data, err := os.ReadFile(filepath.Join(genDir, types.TemplateConfigFile))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return &tmplconfig.TemplateConfig{}, nil
+		}
+		return nil, app.Errorf("cannot read %s: %w", types.TemplateConfigFile, err)
+	}
+
+	config, err := tmplconfig.ParseTemplateConfig(data)
+	if err != nil {
+		return nil, app.Errorf("cannot parse %s: %w", types.TemplateConfigFile, err)
+	}
+	return config, nil
+}
+
+// checkGeneratorRequires enforces the requires gate a generator declares in its
+// own tag.template.json, for both a direct run and a bundled one.
+func checkGeneratorRequires(genDir, name string, vars map[string]any) error {
+	config, err := readGeneratorConfig(genDir)
+	if err != nil {
+		return err
+	}
+	return checkRequirements(name, "generator", config.Requires, vars)
+}
+
 func isTruthy(v any) bool {
 	switch val := v.(type) {
 	case nil:

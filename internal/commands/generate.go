@@ -22,7 +22,6 @@ import (
 	"github.com/kaikenlabs/tag/internal/jsonout"
 	"github.com/kaikenlabs/tag/internal/openapi"
 	"github.com/kaikenlabs/tag/internal/template"
-	"github.com/kaikenlabs/tag/internal/tmplconfig"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/internal/writer"
@@ -521,6 +520,10 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 				}
 			}
 
+			if reqErr := checkGeneratorRequires(genDirPath, generator.Name, mergedVars); reqErr != nil {
+				return total, reqErr
+			}
+
 			gen, genErr := fac.newBundleEngine(tmplEngine, c.Bool(flags.DryRunFlag), genDirPath, sharedPath, rec, engineOut)
 			if genErr != nil {
 				return total, app.Errorf("error creating engine: %w", genErr)
@@ -555,13 +558,8 @@ func generateTemplate(c *cli.Context, cfg *config.Config, fac generatorFactories
 	if cfg.Variables != nil {
 		vars = cfg.Variables
 	}
-	configPath := filepath.Join(dirPath, types.TemplateConfigFile)
-	if data, readErr := os.ReadFile(configPath); readErr == nil {
-		if tc, parseErr := tmplconfig.ParseTemplateConfig(data); parseErr == nil {
-			if reqErr := checkRequirements(generatorName, "generator", tc.Requires, vars); reqErr != nil {
-				return engine.GenerateResult{}, reqErr
-			}
-		}
+	if reqErr := checkGeneratorRequires(dirPath, generatorName, vars); reqErr != nil {
+		return engine.GenerateResult{}, reqErr
 	}
 
 	engineOut := c.App.Writer

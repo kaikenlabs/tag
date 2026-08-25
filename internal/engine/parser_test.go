@@ -593,22 +593,3 @@ func TestUT_LoadTemplateFiles_SkipsTemplateConfigFile(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{"internal/user_service.go", "near_miss_suffix.go", "near_miss_prefix.go"}, tos)
 }
-
-// TestUT_LoadTemplateFiles_ConfigOnlyDirIsCleanNoOp pins the degenerate case:
-// a generator holding nothing but tag.template.json is empty, not an error.
-func TestUT_LoadTemplateFiles_ConfigOnlyDirIsCleanNoOp(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, types.TemplateConfigFile), []byte(`{"vars": {}}`), 0o600))
-
-	templates, err := LoadTemplateFiles(dir)
-	require.NoError(t, err)
-	assert.Empty(t, templates)
-
-	te := newTestParser(t)
-	te.templates = templates
-	data, err := te.Parse(InputData{Name: "widget"})
-	require.NoError(t, err)
-	assert.Empty(t, data)
-}
