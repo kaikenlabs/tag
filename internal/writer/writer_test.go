@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestUT_NewFileWriter_CachesGetwd(t *testing.T) {
 	assert.Equal(t, cwd, w.cwd)
 }
 
-func TestWrite_WriteFile_should_not_return_error(t *testing.T) {
+func TestUT_Write_WriteFile_NoError(t *testing.T) {
 	mockWr := fileReadWriteMock{}
 
 	w := Write{
@@ -429,4 +430,32 @@ func TestWrite_InjectIntoFile_write_file_error_should_return_error(t *testing.T)
 		Clause:  types.InjectBefore,
 	})
 	assert.Error(t, err)
+}
+
+func TestUT_WriteFile_RelativeNameUnderSymlinkedCwd(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Getwd does not consult PWD on Windows, so a symlinked cwd cannot be reproduced")
+	}
+
+	realDir := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(realDir, link))
+
+	t.Chdir(link)
+
+	cwd := testCwd(t)
+	resolved, err := filepath.EvalSymlinks(cwd)
+	require.NoError(t, err)
+	require.NotEqual(t, resolved, cwd, "fixture did not reproduce a symlinked cwd")
+
+	written := false
+	mockWr := fileReadWriteMock{}
+	mockWr.WriteFileFunc = func(name string, data []byte, perm fs.FileMode) error {
+		written = true
+		return nil
+	}
+
+	w := Write{fs: &mockWr, cwd: cwd}
+	require.NoError(t, w.WriteFile("blood", []byte("hello world"), 0o700))
+	assert.True(t, written, "write was blocked by the containment check")
 }

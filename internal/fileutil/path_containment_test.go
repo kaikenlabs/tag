@@ -129,3 +129,75 @@ func TestUT_ValidatePathContainment_TrailingSeparator(t *testing.T) {
 	err := ValidatePathContainment(base+string(filepath.Separator), filepath.Join(base, "file.txt"))
 	assert.NoError(t, err)
 }
+
+func TestUT_ValidatePathContainment_RelativeTargetUnderSymlinkedCwd(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Getwd does not consult PWD on Windows, so a symlinked cwd cannot be reproduced")
+	}
+
+	realDir := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(realDir, link))
+
+	t.Chdir(link)
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	resolved, err := filepath.EvalSymlinks(cwd)
+	require.NoError(t, err)
+	require.NotEqual(t, resolved, cwd, "fixture did not reproduce a symlinked cwd")
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"relative file", "blood"},
+		{"relative nested file", filepath.Join("sub", "dir", "file.txt")},
+		{"relative dot prefix", filepath.Join(".", "blood")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NoError(t, ValidatePathContainment(cwd, tt.path))
+		})
+	}
+}
+
+func TestUT_ValidatePathContainment_RelativeTargetEscapes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Getwd does not consult PWD on Windows, so a symlinked cwd cannot be reproduced")
+	}
+
+	root := t.TempDir()
+	outside := filepath.Join(root, "outside")
+	realDir := filepath.Join(root, "realDir")
+	require.NoError(t, os.MkdirAll(outside, 0o755))
+	require.NoError(t, os.MkdirAll(realDir, 0o755))
+
+	link := filepath.Join(root, "link")
+	require.NoError(t, os.Symlink(realDir, link))
+	require.NoError(t, os.Symlink(outside, filepath.Join(realDir, "abs_escape")))
+	require.NoError(t, os.Symlink(filepath.Join("..", "outside"), filepath.Join(realDir, "rel_escape")))
+
+	t.Chdir(link)
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"relative parent traversal", filepath.Join("..", "outside", "file.txt")},
+		{"ancestor is symlink with absolute body", filepath.Join("abs_escape", "file.txt")},
+		{"ancestor is symlink with relative body", filepath.Join("rel_escape", "file.txt")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePathContainment(cwd, tt.path)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "escapes base directory")
+		})
+	}
+}
