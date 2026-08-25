@@ -242,6 +242,8 @@ func TestUT_BundleAction_SelfContainedFlag(t *testing.T) {
 }
 
 func TestUT_BundleAction_BundlePathEscapingBaseIsRejected(t *testing.T) {
+	// NO-CHANGE GUARD: this test passes on both sides of the #420 fix, because
+	// bundle.go is untouched by it. It is not evidence that #420 was fixed.
 	// Pins the asymmetry with newAction: bundleAction never reassigns its
 	// containment anchor (basePath stays cfg.Env.Path throughout), so
 	// ValidatePathContainment(basePath, dirPath) here was always a real check,

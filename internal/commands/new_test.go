@@ -1,11 +1,9 @@
 package commands
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"testing"
 
@@ -16,36 +14,6 @@ import (
 	"github.com/kaikenlabs/tag/internal/types/flags"
 	"github.com/kaikenlabs/tag/pkg/app"
 )
-
-// listTreeEntries returns a sorted, root-relative listing of every entry
-// (files AND directories) under root, so a before/after comparison catches
-// both unexpected additions and unexpected content changes at the directory
-// level, not just missing files.
-func listTreeEntries(t *testing.T, root string) []string {
-	t.Helper()
-	var entries []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return relErr
-		}
-		if rel == "." {
-			return nil
-		}
-		kind := "file"
-		if d.IsDir() {
-			kind = "dir"
-		}
-		entries = append(entries, kind+":"+filepath.ToSlash(rel))
-		return nil
-	})
-	require.NoError(t, err)
-	sort.Strings(entries)
-	return entries
-}
 
 func TestUT_NewAction_MissingGeneratorName(t *testing.T) {
 	tmpDir := setupTempDir(t)
@@ -327,6 +295,7 @@ func TestUT_NewAction_BundleDirEscapingBaseIsRejected(t *testing.T) {
 		name               string
 		skipWindows        bool
 		wantNoDoesNotExist bool
+		wantSecondCheck    bool
 		setup              func(t *testing.T, base, outside string) (bundleSubPath, bundleName, generatorName, canaryPath, wantGenFile, wantGenDirCheck string)
 	}
 
@@ -373,14 +342,17 @@ func TestUT_NewAction_BundleDirEscapingBaseIsRejected(t *testing.T) {
 			},
 		},
 		{
-			// Exercises the SECOND, surviving ValidatePathContainment(basePath, dirPath)
-			// call: bundleDir itself (base/_bundles/realbundle) is genuinely inside
-			// base, so the new pre-Stat check passes here. The escape is a symlinked
-			// generator subdirectory found only by the existing check further down.
-			// This is what stops a future refactor from deleting that second check
-			// as "now redundant".
-			name:        "generator subdir symlinks out of bundle",
-			skipWindows: true,
+			// NO-CHANGE GUARD: this subtest passes on both sides of the #420 fix.
+			// It exercises the SECOND, surviving ValidatePathContainment(basePath,
+			// dirPath) call, which was already present and is untouched here:
+			// bundleDir (base/_bundles/realbundle) is genuinely inside base, so the
+			// new pre-Stat check passes and the escape is caught only further down.
+			// It is therefore NOT evidence that #420 was fixed — subtests 1-3 are.
+			// It exists so a future refactor cannot delete that second check as
+			// "now redundant". wantSecondCheck asserts which check actually fired.
+			name:            "generator subdir symlinks out of bundle",
+			skipWindows:     true,
+			wantSecondCheck: true,
 			setup: func(t *testing.T, base, outside string) (string, string, string, string, string, string) {
 				t.Helper()
 				realBundle := filepath.Join(base, "_bundles", "realbundle")
@@ -435,6 +407,14 @@ func TestUT_NewAction_BundleDirEscapingBaseIsRejected(t *testing.T) {
 			assert.Contains(t, err.Error(), "escapes base directory")
 			if tc.wantNoDoesNotExist {
 				assert.NotContains(t, err.Error(), "does not exist")
+			}
+			// Both call sites wrap with the identical "path safety check failed:"
+			// text, so only the offending path distinguishes them: the first check
+			// reports bundleDir, the second reports the full generator file path.
+			if tc.wantSecondCheck {
+				assert.Contains(t, err.Error(), generatorName+".go")
+			} else {
+				assert.NotContains(t, err.Error(), generatorName+".go")
 			}
 
 			require.NoFileExists(t, wantGenFile)

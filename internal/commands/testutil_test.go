@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"flag"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/config"
@@ -229,4 +232,35 @@ func setupFakeLibrary(t *testing.T, templateName string) string {
 	})
 
 	return templateDir
+}
+
+// listTreeEntries returns a sorted, root-relative listing of every entry
+// (files AND directories) under root. It observes entry TYPE and PATH only:
+// it detects additions, removals and file/dir kind flips, but NOT a same-path
+// file whose bytes changed. Tests that need to prove content survived must
+// compare the bytes themselves.
+func listTreeEntries(t *testing.T, root string) []string {
+	t.Helper()
+	var entries []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if rel == "." {
+			return nil
+		}
+		kind := "file"
+		if d.IsDir() {
+			kind = "dir"
+		}
+		entries = append(entries, kind+":"+filepath.ToSlash(rel))
+		return nil
+	})
+	require.NoError(t, err)
+	sort.Strings(entries)
+	return entries
 }
