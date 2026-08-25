@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/kaikenlabs/tag/internal/dialect"
+	"github.com/kaikenlabs/tag/internal/fileutil"
 	"github.com/kaikenlabs/tag/internal/schema"
 	"github.com/kaikenlabs/tag/internal/template"
 	"github.com/kaikenlabs/tag/internal/tmplconfig"
@@ -41,6 +42,11 @@ func NewLinter(root string) (*Linter, error) {
 	}
 	if !info.IsDir() {
 		return nil, fmt.Errorf("path is not a directory: %s", root)
+	}
+
+	absRoot, err = fileutil.ResolveSymlinkedRoot(absRoot)
+	if err != nil {
+		return nil, err
 	}
 
 	configPath := filepath.Join(absRoot, types.TemplateConfigFile)

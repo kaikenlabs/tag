@@ -2049,7 +2049,7 @@ func TestUT_Write_Unwrapped_DryRunMatchesRealRunAndWritesNothing(t *testing.T) {
 
 // TestUT_Write_DanglingSymlinkRoot_ErrorsInsteadOfWritingNothing pins the
 // in-process behaviour when the template root itself is a dangling symlink:
-// resolveSymlinkedRoot must surface the EvalSymlinks failure rather than
+// fileutil.ResolveSymlinkedRoot must surface the EvalSymlinks failure rather than
 // letting Write proceed and silently produce zero files at exit 0. The CLI
 // itself rejects a dangling root earlier (during template resolution), so
 // this path is only reachable calling Write directly.
