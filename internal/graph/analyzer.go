@@ -43,6 +43,11 @@ func Analyze(root string) (*GraphReport, error) {
 		return nil, fmt.Errorf("path is not a directory: %s", root)
 	}
 
+	absRoot, err = fileutil.ResolveSymlinkedRoot(absRoot)
+	if err != nil {
+		return nil, err
+	}
+
 	report := &GraphReport{}
 
 	// Scan generators from .tag/ directory.

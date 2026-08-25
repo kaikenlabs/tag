@@ -37,6 +37,11 @@ func Analyze(root string) (*Report, error) {
 		return nil, fmt.Errorf("path is not a directory: %s", root)
 	}
 
+	absRoot, err = fileutil.ResolveSymlinkedRoot(absRoot)
+	if err != nil {
+		return nil, err
+	}
+
 	// Parse root config.
 	rootConfig, err := loadConfig(absRoot)
 	if err != nil {
