@@ -676,7 +676,7 @@ tag template rename-var old_name new_name --dry-run   # Flags may come before or
 
 Rewrites the declaration in `tag.template.json`, derived defaults, hook commands, bundle and generator `requires` entries, all `{{ vars.* }}` / `{% ... vars.* ... %}` expressions, and file/directory name placeholders (renamed on disk).
 
-Left untouched: plain text, comments (`{# ... #}`), the body of `{% raw %}` blocks (the opening `{% raw %}` tag itself is an ordinary block and is rewritten normally), string literals inside expressions, `.tagignore`d files, `_dialects/`, symlinks, and binary files. `_generators/` and `.tag/` are included.
+Left untouched: plain text, comments (`{# ... #}`), the body of `{% raw %}` blocks (the opening `{% raw %}` tag itself is an ordinary block and is rewritten normally), string literals inside expressions, `.tagignore`d files, `_dialects/`, symlinks *inside the template*, and binary files. `_generators/` and `.tag/` are included.
 
 Planning is read-only, so `--dry-run` cannot write. A failed apply rolls back every file and path already changed.
 

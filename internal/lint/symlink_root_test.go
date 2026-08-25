@@ -187,9 +187,14 @@ func TestUT_NewLinter_DanglingSymlinkRoot_StillReportsPreExistingMessage(t *test
 	assert.Contains(t, err.Error(), "path does not exist:")
 }
 
-// TestUT_NewLinter_SymlinkToFile_StillReportsPreExistingMessage is the
-// second placement-guard row: a symlink whose target is a FILE keeps the
-// existing "path is not a directory" message.
+// TestUT_NewLinter_SymlinkToFile_StillReportsPreExistingMessage pins the shipped
+// "path is not a directory" message for a symlink whose target is a FILE.
+// Unlike its dangling-symlink sibling this is a NO-CHANGE GUARD, not a
+// placement guard: os.Stat follows the link either way and the message
+// prints the root as the user typed it, so moving ResolveSymlinkedRoot
+// ahead of the Stat produces byte-identical output here. Verified by
+// moving the call: this test passes on both placements, the dangling one
+// fails. Do not "tighten" it to assert placement — it cannot.
 func TestUT_NewLinter_SymlinkToFile_StillReportsPreExistingMessage(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink tests unreliable on Windows")

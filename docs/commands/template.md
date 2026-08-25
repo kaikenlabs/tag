@@ -478,7 +478,7 @@ If `[path]` is omitted, the current directory is used. Flags may appear before o
 - Comments (`{# ... #}`)
 - The body of a `{% raw %}...{% endraw %}` block, whose contents are emitted literally — the opening `{% raw %}` tag itself is an ordinary block and is rewritten like any other
 - String literals inside an expression, such as `{{ "vars.old_name" }}`
-- Files excluded by `.tagignore`, the `_dialects/` tree, symlinks, and binary files
+- Files excluded by `.tagignore`, the `_dialects/` tree, symlinks *inside the template*, and binary files
 
 `_generators/` and `.tag/` **are** included, because generators inherit root-level variables and bundle manifests reference them by name.
 
