@@ -31,28 +31,36 @@ func ValidatePathContainment(basePath, fullPath string) error {
 }
 
 // resolveForContainment resolves a path for containment checking.
-// It attempts filepath.EvalSymlinks; if the path doesn't exist, it walks up
-// the directory tree to find the nearest existing ancestor, resolves that
-// through EvalSymlinks, and appends the remaining path segments. This handles
-// systems where temp directories involve symlinks (e.g., macOS /var -> /private/var).
+// The path is made absolute BEFORE symlink resolution: filepath.EvalSymlinks
+// returns a relative result for a relative argument (EvalSymlinks(".") is "."),
+// so resolving first and calling filepath.Abs afterwards would reintroduce the
+// unresolved working directory reported by os.Getwd. That asymmetry made a
+// relative target escape an absolute base whenever the working directory itself
+// sat under a symlink (e.g. macOS /var -> /private/var).
+// If the absolute path doesn't exist, it walks up the directory tree to find the
+// nearest existing ancestor, resolves that through EvalSymlinks, and appends the
+// remaining path segments.
 func resolveForContainment(path string) (string, error) {
-	cleaned := filepath.Clean(path)
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to make path absolute for %q: %w", path, err)
+	}
 
 	// Try full resolution first
-	resolved, err := filepath.EvalSymlinks(cleaned)
+	resolved, err := filepath.EvalSymlinks(abs)
 	if err == nil {
-		return filepath.Abs(resolved)
+		return resolved, nil
 	}
 
 	// If path doesn't exist, walk up to find existing ancestor
 	if os.IsNotExist(err) {
-		return resolveNonExistent(cleaned)
+		return resolveNonExistent(abs)
 	}
 
 	return "", fmt.Errorf("failed to evaluate symlinks for %q: %w", path, err)
 }
 
-// resolveNonExistent resolves a non-existent path by walking up the directory
+// resolveNonExistent resolves a non-existent absolute path by walking up the directory
 // tree to find the nearest existing ancestor, resolving it through EvalSymlinks,
 // and appending the remaining segments.
 func resolveNonExistent(cleaned string) (string, error) {
