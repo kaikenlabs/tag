@@ -322,10 +322,11 @@ tmp/
 
 ### Behavior
 
-- `.tagignore` itself is always excluded from output (like `tag.template.json`)
+- Only the template root's `.tagignore` is read for patterns, and only the root copy is excluded from output (like `tag.template.json`). A `.tagignore` placed inside a [project-wrapper](../commands/scaffold.md#machine-readable-output) directory instead is not read as ignore rules at all — it is ordinary content and gets generated into the project.
 - Matched directories are pruned entirely — their contents are not traversed
 - An empty or missing `.tagignore` has no effect
 - Patterns follow [gitignore rules](https://git-scm.com/docs/gitignore): patterns without `/` match at any depth; patterns with `/` anchor to the template root
+- Patterns are always matched against paths relative to the template root, even when a project wrapper unwraps. An anchored pattern like `/README.md` does not reach a file inside the wrapper unless it names the wrapper segment (`{{ vars.project_name }}/README.md`); an unanchored one like `*.tmp` still matches at any depth, wrapper included.
 - `.tagignore` also decides [project-wrapper detection](../commands/scaffold.md#machine-readable-output): a wrapper only unwraps when it holds *all* of the template's generated content, so an entry matched by `.tagignore` doesn't count as content beside the wrapper. Listing your template-authoring files there is what keeps a wrapper template unwrapping.
 
 ## Hooks
