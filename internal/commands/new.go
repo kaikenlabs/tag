@@ -118,6 +118,9 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 			bundleSubPath = types.BundlesDir
 		}
 		bundleDir := filepath.Join(basePath, bundleSubPath, bundleName)
+		if err = fileutil.ValidatePathContainment(basePath, bundleDir); err != nil {
+			return app.Errorf("path safety check failed: %w", err)
+		}
 		if _, statErr := os.Stat(bundleDir); statErr != nil {
 			return app.Errorf("bundle directory %q does not exist; create it first with 'tag template new bundle %s'",
 				bundleDir, bundleName)

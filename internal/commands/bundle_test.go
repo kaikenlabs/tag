@@ -240,3 +240,37 @@ func TestUT_BundleAction_SelfContainedFlag(t *testing.T) {
 	assert.Equal(t, "mybundle", bundle.Name)
 	assert.True(t, bundle.SelfContained)
 }
+
+func TestUT_BundleAction_BundlePathEscapingBaseIsRejected(t *testing.T) {
+	// NO-CHANGE GUARD: this test passes on both sides of the #420 fix, because
+	// bundle.go is untouched by it. It is not evidence that #420 was fixed.
+	// Pins the asymmetry with newAction: bundleAction never reassigns its
+	// containment anchor (basePath stays cfg.Env.Path throughout), so
+	// ValidatePathContainment(basePath, dirPath) here was always a real check,
+	// unlike newAction's pre-fix tautology. A future "unify these two"
+	// refactor must not flatten this correct shape onto newAction's broken one.
+	parent := setupTempDir(t)
+	base := filepath.Join(parent, "base")
+	outside := filepath.Join(parent, "outside")
+	require.NoError(t, os.MkdirAll(base, 0o750))
+	require.NoError(t, os.MkdirAll(outside, 0o750))
+
+	outsideBefore := listTreeEntries(t, outside)
+
+	cfg := createTestConfig(t, base)
+	ctx := createTestCLIContext(t, []string{"mybundle"}, map[string]any{
+		flags.BundlePathFlag: "../outside",
+	})
+
+	err := bundleAction(ctx, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path safety check failed")
+	assert.Contains(t, err.Error(), "escapes base directory")
+
+	require.NoFileExists(t, filepath.Join(outside, "mybundle", "mybundle.json"))
+	require.NoDirExists(t, filepath.Join(outside, "mybundle"))
+
+	outsideAfter := listTreeEntries(t, outside)
+	assert.Equal(t, outsideBefore, outsideAfter)
+}
