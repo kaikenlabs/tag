@@ -110,7 +110,7 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	}
 
 	// 7. Walk and convert template files
-	err = c.processTemplateFiles(templateDir, destDir, result, opts.DryRun)
+	err = c.processTemplateFiles(templateDir, destDir, result, opts.DryRun, remote.IsLocal(opts.Source))
 	if err != nil {
 		return nil, err
 	}
@@ -227,15 +227,27 @@ func (c *Converter) resolveSource(ctx context.Context, source string) (string, e
 
 // processTemplateFiles walks the template directory and converts files.
 // Uses filepath.WalkDir instead of filepath.Walk to avoid following symlinked directories.
-func (c *Converter) processTemplateFiles(srcDir, destDir string, result *Result, dryRun bool) error {
-	// Resolved here rather than in resolveSource: Convert derives the default
-	// destination from filepath.Base(templateDir), so resolving earlier would
-	// turn `tag convert cookiecutter ./linked` output from linked-tag into
-	// <target>-tag. Everything else under templateDir reaches through the
-	// symlink as an intermediate component and already works.
-	srcDir, err := fileutil.ResolveSymlinkedRoot(srcDir)
-	if err != nil {
-		return err
+// processTemplateFiles walks srcDir and converts the files beneath it.
+//
+// resolveRoot must be set only for a source the user named on their own
+// filesystem. filepath.WalkDir does not descend into a symlinked root, so
+// without it a symlinked local template converts to nothing at exit 0. It is
+// off for a fetched source because a repository can commit its subpath as a
+// symlink pointing anywhere, and following that would copy the target into the
+// converted template.
+//
+// The resolve lives here rather than in resolveSource because Convert derives
+// the default destination from filepath.Base(templateDir); resolving earlier
+// would turn `tag convert cookiecutter ./linked` output from linked-tag into
+// <target>-tag. Everything else under templateDir reaches through the symlink
+// as an intermediate component and already works.
+func (c *Converter) processTemplateFiles(srcDir, destDir string, result *Result, dryRun, resolveRoot bool) error {
+	if resolveRoot {
+		resolved, err := fileutil.ResolveSymlinkedRoot(srcDir)
+		if err != nil {
+			return err
+		}
+		srcDir = resolved
 	}
 
 	return c.walkTemplateFiles(srcDir, destDir, result, dryRun)

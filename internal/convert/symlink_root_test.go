@@ -125,9 +125,9 @@ func TestUT_Convert_SymlinkedRoot_MatchesDirectRoot(t *testing.T) {
 // TestUT_Convert_SymlinkedRoot_PreservesDefaultDestination is why the resolve
 // call sits in processTemplateFiles and not in resolveSource: Convert derives
 // the default destination from filepath.Base(templateDir), so resolving
-// earlier would silently turn `./linked` into `cc-tag`. This passes on both
-// sides of the fix — it discriminates against the rejected placement, not
-// against a revert.
+// earlier would silently turn `./linked` into `cc-tag`. Its FilesProcessed
+// assertion also fails on a revert, so it discriminates against both the
+// rejected placement and the unfixed walk.
 func TestUT_Convert_SymlinkedRoot_PreservesDefaultDestination(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink tests unreliable on Windows")
@@ -151,4 +151,44 @@ func readFileString(t *testing.T, path string) string {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return string(data)
+}
+
+// TestUT_ProcessTemplateFiles_FetchedRootIsNotFollowed pins the local/remote
+// split. A fetched source can commit its subpath as a symlink pointing
+// anywhere, so resolveRoot is off for one: the walk must see nothing rather
+// than copy the link's target into the converted template. This mirrors the
+// remote.IsLocal gate on the same fix in library.Add.
+func TestUT_ProcessTemplateFiles_FetchedRootIsNotFollowed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	base, realDir, link := symlinkedFixtureRoots(t)
+
+	c, err := NewConverter()
+	require.NoError(t, err)
+
+	// Positive control: with resolveRoot set, the same link converts the tree.
+	local := &Result{Warnings: []string{}, Files: []PathConversion{}}
+	outLocal := filepath.Join(base, "out-local")
+	require.NoError(t, c.processTemplateFiles(link, outLocal, local, false, true))
+	require.Equal(t, 1, local.FilesProcessed, "positive control")
+	require.Equal(t, []string{
+		"{{vars.project_slug}}/README.md",
+	}, listTree(t, outLocal), "positive control")
+
+	fetched := &Result{Warnings: []string{}, Files: []PathConversion{}}
+	outFetched := filepath.Join(base, "out-fetched")
+	require.NoError(t, c.processTemplateFiles(link, outFetched, fetched, false, false))
+
+	assert.Equal(t, 0, fetched.FilesProcessed,
+		"a fetched root must not be followed out of the tree it was fetched into")
+	assert.NoDirExists(t, outFetched)
+
+	// A fetched root reached WITHOUT a symlink is unaffected.
+	direct := &Result{Warnings: []string{}, Files: []PathConversion{}}
+	outDirect := filepath.Join(base, "out-fetched-direct")
+	require.NoError(t, c.processTemplateFiles(realDir, outDirect, direct, false, false))
+	assert.Equal(t, 1, direct.FilesProcessed)
+	assert.Equal(t, []string{"{{vars.project_slug}}/README.md"}, listTree(t, outDirect))
 }
