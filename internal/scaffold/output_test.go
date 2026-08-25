@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -116,6 +117,17 @@ func mustNewOutputWriter(t *testing.T) *DefaultOutputWriter {
 	engine := mustNewEngine(t)
 	pathProcessor := NewPathProcessor(engine)
 	return NewOutputWriter(engine, pathProcessor, io.Discard)
+}
+
+// mustNewOutputWriterCapturing is a sibling of mustNewOutputWriter for tests
+// that need to assert on the writer's warning output (e.g. the "skipping
+// symlink" message), rather than discarding it.
+func mustNewOutputWriterCapturing(t *testing.T) (*DefaultOutputWriter, *bytes.Buffer) {
+	t.Helper()
+	engine := mustNewEngine(t)
+	pathProcessor := NewPathProcessor(engine)
+	var buf bytes.Buffer
+	return NewOutputWriter(engine, pathProcessor, &buf), &buf
 }
 
 func TestUT_Write_TemplateRendering(t *testing.T) {
@@ -2033,6 +2045,120 @@ func TestUT_Write_Unwrapped_DryRunMatchesRealRunAndWritesNothing(t *testing.T) {
 
 	assert.Equal(t, realFiles, dryFiles)
 	assert.Equal(t, before, listTree(t, dryOutputDir), "a dry run must write nothing to the output dir")
+}
+
+// TestUT_Write_DanglingSymlinkRoot_ErrorsInsteadOfWritingNothing pins the
+// in-process behaviour when the template root itself is a dangling symlink:
+// resolveSymlinkedRoot must surface the EvalSymlinks failure rather than
+// letting Write proceed and silently produce zero files at exit 0. The CLI
+// itself rejects a dangling root earlier (during template resolution), so
+// this path is only reachable calling Write directly.
+func TestUT_Write_DanglingSymlinkRoot_ErrorsInsteadOfWritingNothing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	danglingLink := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(filepath.Join(t.TempDir(), "does-not-exist"), danglingLink))
+
+	writer := mustNewOutputWriter(t)
+	outputDir := t.TempDir()
+
+	_, err := writer.Write(danglingLink, "", outputDir, map[string]any{})
+	require.Error(t, err)
+	assert.Empty(t, listTree(t, outputDir), "a failed root resolution must not write partial output")
+}
+
+// TestUT_Write_SymlinkedTemplateRoot_ScaffoldsIdenticallyToDirectRoot pins
+// #414: filepath.WalkDir does not descend into a symlinked root — it yields
+// the root itself as a symlink entry, which Write's own anti-exfiltration
+// guard then skips, so a template referenced through a symlinked root wrote
+// zero files at exit 0 before this fix. Comparing against a direct-root run
+// (with an explicit expected tree, so two empty runs cannot compare equal)
+// proves the fix restores identical behaviour rather than merely "some
+// files".
+func TestUT_Write_SymlinkedTemplateRoot_ScaffoldsIdenticallyToDirectRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	realDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(realDir, "README.md"), []byte("# {{ vars.project_name }}"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(realDir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(realDir, "src", "main.go"), []byte("package main // {{ vars.project_name }}"), 0o644))
+
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(realDir, link))
+
+	vars := map[string]any{"project_name": "demo"}
+
+	directWriter := mustNewOutputWriter(t)
+	directOut := t.TempDir()
+	directFiles, err := directWriter.Write(realDir, "", directOut, vars)
+	require.NoError(t, err)
+	require.NotEmpty(t, directFiles, "direct-root run must actually write files, or the comparison below is vacuous")
+
+	expectedTree := []string{"README.md", "src", filepath.Join("src", "main.go")}
+	sort.Strings(expectedTree)
+	assert.Equal(t, expectedTree, listTree(t, directOut))
+
+	symlinkWriter := mustNewOutputWriter(t)
+	symlinkOut := t.TempDir()
+	symlinkFiles, err := symlinkWriter.Write(link, "", symlinkOut, vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, directFiles, symlinkFiles)
+	assert.Equal(t, listTree(t, directOut), listTree(t, symlinkOut))
+
+	directReadme, err := os.ReadFile(filepath.Join(directOut, "README.md"))
+	require.NoError(t, err)
+	symlinkReadme, err := os.ReadFile(filepath.Join(symlinkOut, "README.md"))
+	require.NoError(t, err)
+	assert.Equal(t, directReadme, symlinkReadme)
+
+	directMain, err := os.ReadFile(filepath.Join(directOut, "src", "main.go"))
+	require.NoError(t, err)
+	symlinkMain, err := os.ReadFile(filepath.Join(symlinkOut, "src", "main.go"))
+	require.NoError(t, err)
+	assert.Equal(t, directMain, symlinkMain)
+}
+
+// TestUT_Write_SymlinkedRoot_StillRefusesSymlinkInsideTheTemplate fails in
+// both directions: on the pre-#414 writer keep.txt itself is missing
+// (WalkDir never descends past the symlinked root at all); on an
+// over-corrected writer that switches to a symlink-following walk, leak.txt
+// and leakdir's contents would appear, which is exactly the exfiltration the
+// in-walk guard exists to prevent. Only the root being a symlink should
+// change; an ordinary symlink INSIDE the (now-resolved) template must still
+// be skipped and warned about.
+func TestUT_Write_SymlinkedRoot_StillRefusesSymlinkInsideTheTemplate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	realDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(realDir, "keep.txt"), []byte("kept"), 0o644))
+
+	externalFile := filepath.Join(t.TempDir(), "outside.txt")
+	require.NoError(t, os.WriteFile(externalFile, []byte("outside"), 0o644))
+	require.NoError(t, os.Symlink(externalFile, filepath.Join(realDir, "leak.txt")))
+
+	externalDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(externalDir, "secret.txt"), []byte("secret"), 0o644))
+	require.NoError(t, os.Symlink(externalDir, filepath.Join(realDir, "leakdir")))
+
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(realDir, link))
+
+	writer, buf := mustNewOutputWriterCapturing(t)
+	outputDir := t.TempDir()
+
+	_, err := writer.Write(link, "", outputDir, map[string]any{})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"keep.txt"}, listTree(t, outputDir))
+	assert.Contains(t, buf.String(), "Warning: skipping symlink")
+	assert.Contains(t, buf.String(), "leak.txt")
 }
 
 // --- test helpers ---

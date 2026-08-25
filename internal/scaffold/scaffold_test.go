@@ -1427,3 +1427,111 @@ func TestUT_PlanOutput_MixedRootWarnsNamingSiblings(t *testing.T) {
 		assert.Empty(t, out.String())
 	})
 }
+
+// symlinkedWrapperTemplate builds a minimal wrapper-style template
+// (tag.template.json + "{{ vars.project_name }}"/README.md) under a real
+// directory, then returns a symlink pointing at it — so callers exercise
+// #414's fix through the full Scaffold.Run path, not just DefaultOutputWriter.Write.
+// When withSibling is true, a "hooks/" directory is added beside the
+// wrapper, which #403 makes findProjectWrapper treat as a mixed root
+// (suppressing unwrapping).
+func symlinkedWrapperTemplate(t *testing.T, withSibling bool) string {
+	t.Helper()
+
+	realDir := t.TempDir()
+	config := map[string]any{
+		"name": "wrapper-template",
+		"vars": map[string]any{
+			"project_name": map[string]any{"type": "string", "default": "demo"},
+		},
+	}
+	data, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(realDir, "tag.template.json"), data, 0o644))
+
+	wrapperDir := filepath.Join(realDir, "{{ vars.project_name }}")
+	require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "README.md"), []byte("# {{ vars.project_name }}"), 0o644))
+
+	if withSibling {
+		hooksDir := filepath.Join(realDir, "hooks")
+		require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "pre.sh"), []byte("#!/bin/sh\n"), 0o644))
+	}
+
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(realDir, link))
+	return link
+}
+
+// TestUT_Scaffold_SymlinkedRoot_WrapperDetectionAndWriterAgree drives
+// Scaffold.Run end to end with a symlinked template root, across the three
+// wrapper-detection outcomes planOutput can produce (see
+// TestUT_PlanOutput_MixedRootSuppressesUnwrapping). Every row was measured
+// against a pre-#414 build; row (a) already passed because findProjectWrapper
+// uses os.ReadDir (which follows a symlinked root normally) rather than
+// filepath.WalkDir, and the writer's walkRoot for that case
+// (filepath.Join(link, wrapperDir)) has a real directory as its final path
+// component — only rows (b) and (c), whose walkRoot IS the symlinked root
+// itself, hit the WalkDir-does-not-descend-into-a-symlinked-root bug.
+func TestUT_Scaffold_SymlinkedRoot_WrapperDetectionAndWriterAgree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	t.Run("clean wrapper, no --output: unwraps (NO-CHANGE GUARD, passes on main)", func(t *testing.T) {
+		templateDir := symlinkedWrapperTemplate(t, false)
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+
+		opts := Options{TemplateDir: templateDir, ProjectName: "demo", NoInput: true, NoSave: true}
+		s, err := NewScaffold(opts)
+		require.NoError(t, err)
+
+		result, err := s.Run(opts)
+		require.NoError(t, err)
+
+		readme, err := os.ReadFile(filepath.Join(result.ProjectRoot, "README.md"))
+		require.NoError(t, err)
+		assert.Equal(t, "# demo", string(readme))
+	})
+
+	t.Run("clean wrapper with --output: REGRESSION PIN (main exits 1: failed to write tagconfig)", func(t *testing.T) {
+		templateDir := symlinkedWrapperTemplate(t, false)
+		outputDir := filepath.Join(t.TempDir(), "out")
+
+		opts := Options{TemplateDir: templateDir, ProjectName: "demo", OutputDir: outputDir, NoInput: true, NoSave: true}
+		s, err := NewScaffold(opts)
+		require.NoError(t, err)
+
+		result, err := s.Run(opts)
+		require.NoError(t, err)
+
+		assert.FileExists(t, filepath.Join(result.ProjectRoot, ".tagconfig.json"))
+		readme, err := os.ReadFile(filepath.Join(result.ProjectRoot, "README.md"))
+		require.NoError(t, err)
+		assert.Equal(t, "# demo", string(readme))
+	})
+
+	t.Run("mixed root (sibling hooks/): STRONGEST PIN (main: files [], created 0, exit 0)", func(t *testing.T) {
+		templateDir := symlinkedWrapperTemplate(t, true)
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+
+		var out bytes.Buffer
+		opts := Options{TemplateDir: templateDir, ProjectName: "demo", NoInput: true, NoSave: true}
+		s, err := NewScaffold(opts, WithOutput(&out), WithIsTTY(false))
+		require.NoError(t, err)
+
+		result, err := s.Run(opts)
+		require.NoError(t, err)
+
+		readme, err := os.ReadFile(filepath.Join(result.ProjectRoot, "demo", "README.md"))
+		require.NoError(t, err)
+		assert.Equal(t, "# demo", string(readme))
+
+		warning := out.String()
+		assert.Contains(t, warning, "hooks")
+		assert.Contains(t, warning, ".tagignore")
+	})
+}

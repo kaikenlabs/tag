@@ -60,45 +60,47 @@ func resolveForContainment(path string) (string, error) {
 	return "", fmt.Errorf("failed to evaluate symlinks for %q: %w", path, err)
 }
 
-// resolveNonExistent resolves a non-existent absolute path by walking up the directory
-// tree to find the nearest existing ancestor, resolving it through EvalSymlinks,
-// and appending the remaining segments.
+// resolveNonExistent resolves a non-existent absolute path by walking up the
+// directory tree to find the nearest existing ancestor, resolving it through
+// EvalSymlinks, and appending the remaining segments.
+//
+// This fails CLOSED: any ancestor that cannot be conclusively resolved (a
+// stat error other than not-exist, or a symlink EvalSymlinks cannot follow —
+// most commonly a dangling symlink) returns an error rather than the
+// unresolved input path. A predicate that cannot resolve a path has no basis
+// to grant permission, and every caller of ValidatePathContainment treats a
+// nil error as authorization to write. Before this, an unresolvable ancestor
+// silently fell back to the caller-supplied path, which — because that path
+// is already prefixed with the base directory by construction — satisfied
+// the containment check even when it pointed (via a dangling symlink)
+// somewhere ValidatePathContainment could not actually verify.
 func resolveNonExistent(cleaned string) (string, error) {
-	// Collect non-existent segments from bottom up
 	current := cleaned
 	var segments []string
 
 	for {
-		_, err := os.Lstat(current)
-		if err == nil {
-			// Found existing ancestor; resolve it
-			resolved, evalErr := filepath.EvalSymlinks(current)
-			if evalErr != nil {
-				return filepath.Abs(cleaned)
+		if _, err := os.Lstat(current); err != nil {
+			if !os.IsNotExist(err) {
+				return "", fmt.Errorf("failed to stat ancestor %q of %q: %w", current, cleaned, err)
 			}
-			absResolved, absErr := filepath.Abs(resolved)
-			if absErr != nil {
-				return filepath.Abs(cleaned)
+			parent := filepath.Dir(current)
+			if parent == current {
+				return "", fmt.Errorf("no existing ancestor for %q", cleaned)
 			}
-			// Append the collected non-existent segments
-			result := absResolved
-			for i := len(segments) - 1; i >= 0; i-- {
-				result = filepath.Join(result, segments[i])
-			}
-			return result, nil
+			segments = append(segments, filepath.Base(current))
+			current = parent
+			continue
 		}
 
-		if !os.IsNotExist(err) {
-			// Some other error (permission, etc.)
-			return filepath.Abs(cleaned)
+		resolved, evalErr := filepath.EvalSymlinks(current)
+		if evalErr != nil {
+			return "", fmt.Errorf("failed to evaluate symlinks for ancestor %q of %q: %w", current, cleaned, evalErr)
 		}
 
-		parent := filepath.Dir(current)
-		if parent == current {
-			// Reached root without finding existing ancestor
-			return filepath.Abs(cleaned)
+		result := resolved
+		for i := len(segments) - 1; i >= 0; i-- {
+			result = filepath.Join(result, segments[i])
 		}
-		segments = append(segments, filepath.Base(current))
-		current = parent
+		return result, nil
 	}
 }

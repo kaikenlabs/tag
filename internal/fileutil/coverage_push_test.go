@@ -36,28 +36,6 @@ func TestUT_ResolveForContainment_PermissionError(t *testing.T) {
 }
 
 // ===========================================================================
-// path_containment.go — resolveNonExistent: EvalSymlinks error on ancestor (line 68-70)
-// ===========================================================================
-
-func TestUT_ResolveNonExistent_AncestorEvalSymlinksError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission tests unreliable on Windows")
-	}
-
-	dir := t.TempDir()
-	// Create a path structure, make the existing ancestor's symlink resolution fail
-	existingDir := filepath.Join(dir, "parent")
-	require.NoError(t, os.MkdirAll(existingDir, 0o755))
-
-	// The path extends beyond the existing ancestor
-	nonExistentPath := filepath.Join(existingDir, "child", "grandchild", "file.txt")
-
-	// This should succeed with normal resolution
-	err := ValidatePathContainment(dir, nonExistentPath)
-	assert.NoError(t, err)
-}
-
-// ===========================================================================
 // path_containment.go — resolveForContainment base error (line 16-18)
 // ===========================================================================
 
@@ -84,10 +62,31 @@ func TestUT_ValidatePathContainment_BaseResolveError(t *testing.T) {
 }
 
 // ===========================================================================
-// path_containment.go — resolveNonExistent: non-NotExist error in walk (line 83-86)
+// path_containment.go — unreadable ancestor fails closed
 // ===========================================================================
 
-func TestUT_ResolveNonExistent_NonExistErrorInWalk(t *testing.T) {
+// TestUT_ValidatePathContainment_UnreadableAncestorFailsClosed asserts that an
+// ancestor which exists but cannot be searched refuses the write rather than
+// falling back to an unresolved path.
+//
+// It does NOT reach resolveNonExistent, despite what this test asserted about
+// itself before #418. Measured: the error is "failed to evaluate symlinks for
+// ...: permission denied", which comes from resolveForContainment's own
+// catch-all — filepath.EvalSymlinks runs on the whole path first, and a
+// permission-denied ancestor makes it fail with an error that is not
+// os.IsNotExist, so resolveNonExistent is never called. That branch is
+// unchanged by #418, so this test passes on both sides of the fix.
+//
+// resolveNonExistent's own stat-error branch has no static test because it is
+// not statically reachable: getting there requires EvalSymlinks to have
+// already walked every ancestor successfully (that is how the error came back
+// as not-exist rather than permission-denied), so the permission must change
+// between the two calls. Do not add a chmod fixture claiming to cover it.
+//
+// chmod 0o000 is a no-op under root (some CI images run as root), so the test
+// probes for real permission enforcement first and skips rather than
+// asserting blindly when it isn't observed.
+func TestUT_ValidatePathContainment_UnreadableAncestorFailsClosed(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission tests unreliable on Windows")
 	}
@@ -96,21 +95,20 @@ func TestUT_ResolveNonExistent_NonExistErrorInWalk(t *testing.T) {
 	restrictedParent := filepath.Join(dir, "noperm")
 	require.NoError(t, os.MkdirAll(restrictedParent, 0o755))
 
-	// Create a child that will be made inaccessible
 	child := filepath.Join(restrictedParent, "child")
 	require.NoError(t, os.MkdirAll(child, 0o755))
 
-	// Make child unreadable
 	require.NoError(t, os.Chmod(child, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(child, 0o755) })
 
-	// Try a path that goes through the unreadable child
+	if _, err := os.Lstat(filepath.Join(child, "probe")); !os.IsPermission(err) {
+		t.Skip("permission enforcement not observed (likely running as root); cannot exercise the stat-error branch")
+	}
+
 	deepPath := filepath.Join(child, "sub", "file.txt")
 
 	err := ValidatePathContainment(dir, deepPath)
-	// May or may not error depending on platform behavior,
-	// but should not panic
-	_ = err
+	require.Error(t, err, "an unreadable ancestor must fail closed rather than silently falling back to the unresolved path")
 }
 
 // ===========================================================================
