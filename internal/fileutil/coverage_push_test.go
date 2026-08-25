@@ -36,28 +36,6 @@ func TestUT_ResolveForContainment_PermissionError(t *testing.T) {
 }
 
 // ===========================================================================
-// path_containment.go — resolveNonExistent: EvalSymlinks error on ancestor (line 68-70)
-// ===========================================================================
-
-func TestUT_ResolveNonExistent_AncestorEvalSymlinksError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission tests unreliable on Windows")
-	}
-
-	dir := t.TempDir()
-	// Create a path structure, make the existing ancestor's symlink resolution fail
-	existingDir := filepath.Join(dir, "parent")
-	require.NoError(t, os.MkdirAll(existingDir, 0o755))
-
-	// The path extends beyond the existing ancestor
-	nonExistentPath := filepath.Join(existingDir, "child", "grandchild", "file.txt")
-
-	// This should succeed with normal resolution
-	err := ValidatePathContainment(dir, nonExistentPath)
-	assert.NoError(t, err)
-}
-
-// ===========================================================================
 // path_containment.go — resolveForContainment base error (line 16-18)
 // ===========================================================================
 
@@ -87,6 +65,13 @@ func TestUT_ValidatePathContainment_BaseResolveError(t *testing.T) {
 // path_containment.go — resolveNonExistent: non-NotExist error in walk (line 83-86)
 // ===========================================================================
 
+// TestUT_ResolveNonExistent_NonExistErrorInWalk exercises resolveNonExistent's
+// fail-closed stat-error branch (#418): an ancestor that exists but cannot be
+// searched (Lstat on a descendant fails with permission-denied, not
+// not-exist) must now abort with an error rather than silently falling back
+// to the unresolved path. chmod 0o000 is a no-op under root (some CI images
+// run as root), so the test probes for real permission enforcement first and
+// skips rather than asserting blindly when it isn't observed.
 func TestUT_ResolveNonExistent_NonExistErrorInWalk(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission tests unreliable on Windows")
@@ -96,21 +81,20 @@ func TestUT_ResolveNonExistent_NonExistErrorInWalk(t *testing.T) {
 	restrictedParent := filepath.Join(dir, "noperm")
 	require.NoError(t, os.MkdirAll(restrictedParent, 0o755))
 
-	// Create a child that will be made inaccessible
 	child := filepath.Join(restrictedParent, "child")
 	require.NoError(t, os.MkdirAll(child, 0o755))
 
-	// Make child unreadable
 	require.NoError(t, os.Chmod(child, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(child, 0o755) })
 
-	// Try a path that goes through the unreadable child
+	if _, err := os.Lstat(filepath.Join(child, "probe")); !os.IsPermission(err) {
+		t.Skip("permission enforcement not observed (likely running as root); cannot exercise the stat-error branch")
+	}
+
 	deepPath := filepath.Join(child, "sub", "file.txt")
 
 	err := ValidatePathContainment(dir, deepPath)
-	// May or may not error depending on platform behavior,
-	// but should not panic
-	_ = err
+	require.Error(t, err, "an unreadable ancestor must fail closed rather than silently falling back to the unresolved path")
 }
 
 // ===========================================================================

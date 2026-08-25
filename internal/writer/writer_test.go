@@ -459,3 +459,32 @@ func TestUT_WriteFile_RelativeNameUnderSymlinkedCwd(t *testing.T) {
 	require.NoError(t, w.WriteFile("blood", []byte("hello world"), 0o700))
 	assert.True(t, written, "write was blocked by the containment check")
 }
+
+// TestUT_WriteFile_DanglingSymlinkTargetIsRefused proves that #418's
+// fail-closed ValidatePathContainment verdict is what authorizes (or
+// refuses) a real write: a name that is a dangling symlink pointing outside
+// cwd used to resolve with a nil error, and WriteFile then genuinely wrote
+// through the symlink into the outside file. The PRIMARY oracle is that the
+// outside file never gets created — os.WriteFile follows a symlink by
+// default, so on unfixed code this test creates and populates a file the
+// containment check was supposed to block.
+func TestUT_WriteFile_DanglingSymlinkTargetIsRefused(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+
+	evilLink := filepath.Join(base, "evil.txt")
+	outsideTarget := filepath.Join(outside, "pwned.txt")
+	require.NoError(t, os.Symlink(outsideTarget, evilLink))
+
+	w := Write{fs: &fileWrite{}, cwd: base}
+	writeErr := w.WriteFile(evilLink, []byte("payload"), 0o644)
+
+	assert.NoFileExists(t, outsideTarget, "write must not escape cwd through a dangling symlink")
+	assert.Error(t, writeErr)
+}

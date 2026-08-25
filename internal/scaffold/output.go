@@ -90,6 +90,11 @@ var _ OutputWriter = (*DefaultOutputWriter)(nil)
 func (w *DefaultOutputWriter) Write(templateRoot, wrapperDir, outputDir string, vars map[string]any) ([]FileEntry, error) {
 	w.files = make([]FileEntry, 0)
 
+	templateRoot, err := resolveSymlinkedRoot(templateRoot)
+	if err != nil {
+		return nil, err
+	}
+
 	// Escape non-derived variable values to prevent SSTI in file content.
 	// When allowRecursiveRender is false (default), template delimiters in
 	// user-provided values are replaced with sentinel tokens before rendering.
@@ -193,6 +198,34 @@ func (w *DefaultOutputWriter) Write(templateRoot, wrapperDir, outputDir string, 
 		return w.processAndRecordFile(srcPath, destPath, processedPath, ctx, d)
 	})
 	return w.files, walkErr
+}
+
+// resolveSymlinkedRoot resolves root when root itself is a symlink.
+// filepath.WalkDir does not descend into a symlinked root: it yields the
+// root as a symlink entry, which Write's own anti-exfiltration guard then
+// skips, leaving zero files. Only a symlinked FINAL component breaks the
+// walk, and filepath.EvalSymlinks also Cleans, so resolving unconditionally
+// would change the spelling of every non-symlinked root in relPath, outRel
+// and the "skipping symlink" warning text.
+func resolveSymlinkedRoot(root string) (string, error) {
+	if !isSymlink(root) {
+		return root, nil
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve template root %q: %w", root, err)
+	}
+	return resolved, nil
+}
+
+// isSymlink reports whether path exists and is itself a symlink. A stat
+// failure (including a non-existent path) reports false rather than an
+// error: resolveSymlinkedRoot only needs to know whether resolution is
+// required, and a non-existent or otherwise unreadable root is handled by
+// the normal template-root validation that runs elsewhere.
+func isSymlink(path string) bool {
+	fi, err := os.Lstat(path)
+	return err == nil && fi.Mode()&os.ModeSymlink != 0
 }
 
 // processAndRecordFile processes one file and, on success, records it in

@@ -163,6 +163,109 @@ func TestUT_ValidatePathContainment_RelativeTargetUnderSymlinkedCwd(t *testing.T
 	}
 }
 
+func mustEvalSymlinks(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	require.NoError(t, err)
+	return resolved
+}
+
+// TestUT_ValidatePathContainment_DanglingSymlinkFailsClosed pins the #418
+// fix: a path that resolveNonExistent cannot fully resolve now fails CLOSED
+// (an error) instead of silently returning the unresolved path with a nil
+// error. The NotContains assertion on "escapes base directory" is load-
+// bearing: it proves the rejection comes from the new fail-closed resolve
+// error, not from a coincidental containment-check mismatch (see the
+// mis-fixture note on TestUT_ValidatePathContainment_RelativeTargetEscapes).
+func TestUT_ValidatePathContainment_DanglingSymlinkFailsClosed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, base, outside string) (target string)
+	}{
+		{
+			name: "nearest existing ancestor is a dangling symlink",
+			setup: func(t *testing.T, base, outside string) string {
+				t.Helper()
+				require.NoError(t, os.Symlink(filepath.Join(outside, "nodir"), filepath.Join(base, "linkdir")))
+				return filepath.Join(base, "linkdir", "child")
+			},
+		},
+		{
+			name: "target itself is a dangling symlink pointing outside base",
+			setup: func(t *testing.T, base, outside string) string {
+				t.Helper()
+				link := filepath.Join(base, "evil")
+				require.NoError(t, os.Symlink(filepath.Join(outside, "pwned"), link))
+				return link
+			},
+		},
+		{
+			name: "target itself is a dangling symlink pointing inside base",
+			setup: func(t *testing.T, base, _ string) string {
+				t.Helper()
+				link := filepath.Join(base, "selfdangle")
+				require.NoError(t, os.Symlink(filepath.Join(base, "never-created"), link))
+				return link
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := mustEvalSymlinks(t, t.TempDir())
+			require.Equal(t, base, mustEvalSymlinks(t, base), "fixture base must resolve to itself or the prefix comparison fails for the wrong reason")
+			outside := mustEvalSymlinks(t, t.TempDir())
+
+			target := tt.setup(t, base, outside)
+
+			err := ValidatePathContainment(base, target)
+			require.Error(t, err)
+			assert.NotContains(t, err.Error(), "escapes base directory")
+		})
+	}
+}
+
+// TestUT_ValidatePathContainment_FailClosedStillAllowsOrdinaryTargets is the
+// positive-control counterpart to the fail-closed test above: an ordinary
+// non-existent path (no symlinks involved) must still resolve, and a LIVE
+// (non-dangling) escaping symlink must still be rejected with the original
+// "escapes base directory" wording — proving the escape verdict was not
+// silently relabelled as a generic resolve failure.
+func TestUT_ValidatePathContainment_FailClosedStillAllowsOrdinaryTargets(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests unreliable on Windows")
+	}
+
+	base := mustEvalSymlinks(t, t.TempDir())
+	require.Equal(t, base, mustEvalSymlinks(t, base), "fixture base must resolve to itself or the prefix comparison fails for the wrong reason")
+
+	t.Run("ordinary non-existent nested path", func(t *testing.T) {
+		err := ValidatePathContainment(base, filepath.Join(base, "sub", "deep", "file.txt"))
+		assert.NoError(t, err)
+	})
+
+	t.Run("ordinary deep non-existent path", func(t *testing.T) {
+		err := ValidatePathContainment(base, filepath.Join(base, "a", "b", "c", "d", "e", "f", "g.txt"))
+		assert.NoError(t, err)
+	})
+
+	t.Run("live escaping symlink is still rejected with escape wording", func(t *testing.T) {
+		outside := mustEvalSymlinks(t, t.TempDir())
+		require.NoError(t, os.WriteFile(filepath.Join(outside, "target.txt"), []byte("x"), 0o644))
+
+		link := filepath.Join(base, "live_escape")
+		require.NoError(t, os.Symlink(outside, link))
+
+		err := ValidatePathContainment(base, filepath.Join(link, "target.txt"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "escapes base directory")
+	})
+}
+
 func TestUT_ValidatePathContainment_RelativeTargetEscapes(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("os.Getwd does not consult PWD on Windows, so a symlinked cwd cannot be reproduced")
