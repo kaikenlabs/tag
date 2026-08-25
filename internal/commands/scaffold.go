@@ -315,7 +315,11 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 	opts := buildScaffoldOpts(c, templateDir, projectName, meta, jsonMode)
 	opts.TemplateRef = templateRef
 	opts.IsRemote = isRemote
-	if isRemote {
+	noLibrary := c.Bool(flags.NoLibraryFlag)
+	// Recording a library name would defeat the flag: generator resolution is
+	// library-first on that name, so an unrelated template sharing the derived
+	// basename would win over the generators copied into this project.
+	if isRemote && !noLibrary {
 		opts.TemplateName = remote.DeriveName(templateRef)
 	}
 	if jsonMode {
@@ -323,11 +327,9 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 	}
 
 	// Decide whether to add the template to the library.
-	// --no-library always wins: it suppresses both the unconditional remote
-	// add and the local add-to-lib resolution (including its interactive
-	// prompt). Otherwise, remote templates are always added; local templates
-	// are added when --add-to-lib is set or the user confirms interactively.
-	addToLib := !c.Bool(flags.NoLibraryFlag) && (isRemote || resolveAddToLib(c, templateDir, jsonMode))
+	// --no-library short-circuits resolveAddToLib entirely, so it also
+	// suppresses that function's interactive "Add template to library?" prompt.
+	addToLib := !noLibrary && (isRemote || resolveAddToLib(c, templateDir, jsonMode))
 	if addToLib {
 		opts.SkipGeneratorCopy = true
 	}

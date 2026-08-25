@@ -187,14 +187,7 @@ func createSharedDir(t *testing.T, basePath string) {
 func setupFakeLibrary(t *testing.T, templateName string) string {
 	t.Helper()
 
-	// Isolate HOME as well as the library dir. A scaffold driven through
-	// scaffoldAction ends in replay.Save, whose getReplayDir resolves
-	// os.UserHomeDir() directly (internal/replay/save.go) — with the real HOME
-	// every such test dropped a file into the developer's ~/.tag/replay, which
-	// is how hundreds accumulated there.
-	t.Setenv("HOME", t.TempDir())
-
-	dataDir := t.TempDir()
+	dataDir := isolateLibrary(t)
 
 	// Create template directory on disk
 	templateDir := filepath.Join(dataDir, "templates", templateName)
@@ -222,16 +215,30 @@ func setupFakeLibrary(t *testing.T, templateName string) string {
 		t.Fatalf("failed to write registry: %v", err)
 	}
 
-	// Substitute newLocalLibrary
+	return templateDir
+}
+
+// isolateLibrary points newLocalLibrary at a fresh, empty library dir and
+// returns it.
+//
+// HOME is isolated as well as the library dir: a scaffold driven through
+// scaffoldAction ends in replay.Save, whose getReplayDir resolves
+// os.UserHomeDir() directly (internal/replay/save.go) — with the real HOME
+// every such test dropped a file into the developer's ~/.tag/replay, which is
+// how hundreds accumulated there.
+//
+// Callers must not use t.Parallel: this substitutes package-level state.
+func isolateLibrary(t *testing.T) string {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+
+	dataDir := t.TempDir()
 	orig := newLocalLibrary
 	newLocalLibrary = func() (*library.Library, error) {
 		return library.NewLocal(dataDir), nil
 	}
-	t.Cleanup(func() {
-		newLocalLibrary = orig
-	})
-
-	return templateDir
+	t.Cleanup(func() { newLocalLibrary = orig })
+	return dataDir
 }
 
 // listTreeEntries returns a sorted, root-relative listing of every entry

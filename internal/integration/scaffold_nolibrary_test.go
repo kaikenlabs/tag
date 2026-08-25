@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/remote"
 )
@@ -73,9 +75,14 @@ func seedRemoteCache(t *testing.T, cacheDir, ref, templateDir string) string {
 	return remote.DeriveName(ref)
 }
 
-// snapshotTree hashes every file under root (relative path -> sha256 hex) so
-// a before/after comparison via assert.Equal catches additions, removals AND
-// in-place rewrites. A root that does not exist yet snapshots as empty.
+// snapshotTree records every entry under root (relative path -> sha256 of the
+// contents, or "<dir>") so a before/after comparison via assert.Equal catches
+// additions, removals, in-place rewrites AND bare directory creation. A root
+// that does not exist yet snapshots as empty.
+//
+// It deliberately does NOT observe permission bits or symlink identity: no
+// code path reachable under --no-library mutates either, so recording them
+// would be speculative. Widen it here if that stops being true.
 func snapshotTree(t *testing.T, root string) map[string]string {
 	t.Helper()
 	snap := make(map[string]string)
@@ -87,6 +94,9 @@ func snapshotTree(t *testing.T, root string) map[string]string {
 			return err
 		}
 		if d.IsDir() {
+			if rel, relErr := filepath.Rel(root, path); relErr == nil && rel != "." {
+				snap[rel+"/"] = "<dir>"
+			}
 			return nil
 		}
 		rel, relErr := filepath.Rel(root, path)
@@ -119,6 +129,19 @@ func dirEntryNames(t *testing.T, dir string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// tagConfigTemplate reads the template origin block a scaffold run wrote into
+// the generated project's .tagconfig.json.
+func tagConfigTemplate(t *testing.T, projectRoot string) config.TemplateOrigin {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(projectRoot, ".tagconfig.json"))
+	require.NoError(t, err)
+
+	var cfg config.Config
+	require.NoError(t, json.Unmarshal(data, &cfg))
+	require.NotNil(t, cfg.Template, "scaffold must always write a template origin block")
+	return *cfg.Template
 }
 
 // noLibrarySandbox isolates every piece of global state a scaffold run can
@@ -192,22 +215,19 @@ func TestIT_Scaffold_NoLibrary_LeavesGlobalStateAlone(t *testing.T) {
 		seedRemoteCache(t, sandbox.cacheDir, noLibraryFixtureRef, templateSrc)
 
 		libBefore := snapshotTree(t, sandbox.libraryDataDir())
-		replayBefore := snapshotTree(t, sandbox.replayDir)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		// --no-save is required here too: replay writes are gated by
-		// --no-save, not --no-library (that split is the ticket's premise),
-		// so without it the replay snapshot would legitimately change and
-		// this assertion would be pinning behaviour that was never promised.
+		// Deliberately WITHOUT --no-save: replay writes are gated by --no-save,
+		// not by --no-library, so this asserts only what --no-library alone
+		// promises. B4 covers the two flags together.
 		outDir := filepath.Join(sandbox.workDir, "project")
 		stdout, stderr, err := runTagSubprocessEnv(t, ctx, sandbox.workDir, sandbox.env(),
-			"scaffold", "--no-library", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input", "--no-save")
+			"scaffold", "--no-library", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input")
 		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
 
 		assert.Equal(t, libBefore, snapshotTree(t, sandbox.libraryDataDir()))
-		assert.Equal(t, replayBefore, snapshotTree(t, sandbox.replayDir))
 	})
 
 	t.Run("B3 --no-library after positionals leaves library and replay untouched", func(t *testing.T) {
@@ -216,18 +236,16 @@ func TestIT_Scaffold_NoLibrary_LeavesGlobalStateAlone(t *testing.T) {
 		seedRemoteCache(t, sandbox.cacheDir, noLibraryFixtureRef, templateSrc)
 
 		libBefore := snapshotTree(t, sandbox.libraryDataDir())
-		replayBefore := snapshotTree(t, sandbox.replayDir)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		outDir := filepath.Join(sandbox.workDir, "project")
 		stdout, stderr, err := runTagSubprocessEnv(t, ctx, sandbox.workDir, sandbox.env(),
-			"scaffold", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input", "--no-save", "--no-library")
+			"scaffold", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input", "--no-library")
 		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
 
 		assert.Equal(t, libBefore, snapshotTree(t, sandbox.libraryDataDir()))
-		assert.Equal(t, replayBefore, snapshotTree(t, sandbox.replayDir))
 	})
 
 	t.Run("B4 --no-save --no-library: only the project dir and .tag/lock.json are new under workDir", func(t *testing.T) {
@@ -246,6 +264,10 @@ func TestIT_Scaffold_NoLibrary_LeavesGlobalStateAlone(t *testing.T) {
 			"scaffold", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input", "--no-save", "--no-library")
 		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
 
+		// This listing passes with or without the --no-library fix -- it is a
+		// characterization guard over the pre-existing lockfile write below,
+		// not regression coverage for the flag. The library/replay snapshots
+		// at the end of this subtest are what detect a regression.
 		assert.Equal(t, []string{".tag", "project"}, dirEntryNames(t, sandbox.workDir),
 			"the only new top-level entries under workDir must be the project dir and .tag/")
 
@@ -262,6 +284,42 @@ func TestIT_Scaffold_NoLibrary_LeavesGlobalStateAlone(t *testing.T) {
 		assert.Equal(t, replayBefore, snapshotTree(t, sandbox.replayDir))
 	})
 
+	// B6 pins the READ half of the flag's contract. Suppressing the library
+	// write is not enough on its own: .tagconfig.json's template.name drives
+	// library-FIRST generator resolution (config.HasTemplateOrigin ->
+	// resolveGeneratorPaths), so a recorded name would let an unrelated
+	// template that happens to share the derived basename win over the
+	// generators copied into this project -- reinstating exactly the silent
+	// cross-org collision this flag exists to prevent.
+	t.Run("B6 --no-library records no library name in .tagconfig.json", func(t *testing.T) {
+		sandbox := newNoLibrarySandbox(t)
+		templateSrc := noLibraryFixtureTemplate(t)
+		seedRemoteCache(t, sandbox.cacheDir, noLibraryFixtureRef, templateSrc)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		outDir := filepath.Join(sandbox.workDir, "project")
+		stdout, stderr, err := runTagSubprocessEnv(t, ctx, sandbox.workDir, sandbox.env(),
+			"scaffold", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input", "--no-save", "--no-library")
+		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
+
+		assert.Empty(t, tagConfigTemplate(t, outDir).Name,
+			"--no-library must not record a library name to resolve generators from")
+
+		// Positive control: without the flag the name IS recorded, so the
+		// assertion above cannot pass merely because the field moved or the
+		// fixture stopped producing a template origin at all.
+		control := newNoLibrarySandbox(t)
+		seedRemoteCache(t, control.cacheDir, noLibraryFixtureRef, noLibraryFixtureTemplate(t))
+		controlOut := filepath.Join(control.workDir, "project")
+		stdout, stderr, err = runTagSubprocessEnv(t, ctx, control.workDir, control.env(),
+			"scaffold", noLibraryFixtureRef, "generated", "--output", controlOut, "--no-input", "--no-save")
+		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
+
+		assert.NotEmpty(t, tagConfigTemplate(t, controlOut).Name)
+	})
+
 	t.Run("B5 --no-library copies generators into the project", func(t *testing.T) {
 		sandbox := newNoLibrarySandbox(t)
 		templateSrc := noLibraryFixtureTemplate(t)
@@ -272,7 +330,7 @@ func TestIT_Scaffold_NoLibrary_LeavesGlobalStateAlone(t *testing.T) {
 
 		outDir := filepath.Join(sandbox.workDir, "project")
 		stdout, stderr, err := runTagSubprocessEnv(t, ctx, sandbox.workDir, sandbox.env(),
-			"scaffold", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input", "--no-library")
+			"scaffold", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input", "--no-save", "--no-library")
 		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
 
 		content, readErr := os.ReadFile(filepath.Join(outDir, ".tag", "nolibgen", "generator.go"))
