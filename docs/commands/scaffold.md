@@ -243,6 +243,10 @@ deliberately does not unwrap, so the files land one level down and `output_dir` 
 Without `--output` the wrapper is unwrapped instead (to avoid `my-project/my-project` nesting) and
 the two are equal again.
 
+Only files at the template root count as TAG metadata. A `tag.template.json`, `.tagignore` or
+`_meta.json` sitting inside the wrapper directory is ordinary content: it is generated into the
+project like any other file, whether or not the wrapper unwraps.
+
 `files[].path` stays relative to `output_dir` in both shapes, so for a wrapper template it already
 carries the project directory as a prefix. Join file paths onto `output_dir`, never onto
 `project_root`. Under `--dry-run`, `project_root` names the directory the run *would* create;
@@ -380,7 +384,7 @@ CLAUDE.md
 *.log
 ```
 
-The `.tagignore` file itself is always excluded from output. See [Template Authoring](../templates/authoring.md#excluding-files-with-tagignore) for full documentation.
+The template root's `.tagignore` file is always excluded from output, and its patterns match against paths relative to the template root — including the wrapper segment of a [project-wrapper](#machine-readable-output) template. A `.tagignore` placed inside the wrapper instead of at the template root is not read for patterns; it is generated into the project like any other file. See [Template Authoring](../templates/authoring.md#excluding-files-with-tagignore) for full documentation.
 
 ## Hook Security
 

@@ -123,16 +123,16 @@ func NewScaffold(opts Options, fopts ...ScaffoldOption) (*Scaffold, error) {
 
 // runContext holds shared state across scaffolding phases.
 type runContext struct {
-	opts                 Options
-	cwd                  string
-	config               *TemplateConfig
-	templateDirAbs       string
-	hooksAllowed         bool
-	vars                 map[string]any
-	outputDir            string
-	effectiveTemplateDir string
-	projectRoot          string // actual project directory (may differ from outputDir when wrapper + explicit --output-dir)
-	hookEnv              []string
+	opts           Options
+	cwd            string
+	config         *TemplateConfig
+	templateDirAbs string
+	hooksAllowed   bool
+	vars           map[string]any
+	outputDir      string
+	unwrapDir      string
+	projectRoot    string // actual project directory (may differ from outputDir when wrapper + explicit --output-dir)
+	hookEnv        []string
 }
 
 // Run executes the scaffolding process.
@@ -272,7 +272,6 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 	// is set, the output dir is derived from project_name, which would create
 	// project_name/project_name nesting. Unwrap by using the wrapper as the
 	// effective template root for Write().
-	ctx.effectiveTemplateDir = ctx.opts.TemplateDir
 	wrapperDir, siblings, err := findProjectWrapper(ctx.opts.TemplateDir)
 	if err != nil {
 		return err
@@ -295,7 +294,7 @@ func (s *Scaffold) planOutput(ctx *runContext) error {
 
 	if ctx.opts.OutputDir == "" {
 		// No explicit output dir — unwrap to avoid double nesting
-		ctx.effectiveTemplateDir = filepath.Join(ctx.opts.TemplateDir, wrapperDir)
+		ctx.unwrapDir = wrapperDir
 		return nil
 	}
 
@@ -363,7 +362,7 @@ func (s *Scaffold) executeScaffold(ctx *runContext) (ScaffoldResult, error) {
 		}()
 	}
 
-	files, err := s.writer.Write(ctx.effectiveTemplateDir, ctx.outputDir, ctx.vars)
+	files, err := s.writer.Write(ctx.opts.TemplateDir, ctx.unwrapDir, ctx.outputDir, ctx.vars)
 	if err != nil {
 		return ScaffoldResult{}, fmt.Errorf("failed to process template: %w", err)
 	}
@@ -422,7 +421,7 @@ func (s *Scaffold) finalizeRun(ctx *runContext, renderedHooks *types.HooksConfig
 		// hook commands to absolute paths so they are found correctly while
 		// still executing with workDir=projectRoot.
 		postHooks := renderedHooks
-		if ctx.effectiveTemplateDir != ctx.opts.TemplateDir && renderedHooks != nil {
+		if ctx.unwrapDir != "" && renderedHooks != nil {
 			postHooks = hooks.ResolveHookPaths(renderedHooks, ctx.templateDirAbs)
 		}
 		hooks.RunPostScaffoldHooks(s.hookRunner, postHooks, ctx.projectRoot, ctx.hookEnv, s.output)
@@ -653,7 +652,7 @@ func findProjectWrapper(templateRoot string) (wrapper string, siblings []string,
 	var candidates []string
 	for _, e := range entries {
 		name := e.Name()
-		if isSkippedEntry(name, name) {
+		if isRootMetadataFile(name, name) || isInternalTree(name) {
 			continue
 		}
 		if ignoreMatcher != nil && ignoreMatcher.Match([]string{name}, e.IsDir()) {

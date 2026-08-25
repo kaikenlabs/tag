@@ -24,8 +24,10 @@ import (
 // OutputWriter handles file generation and copying during scaffolding.
 type OutputWriter interface {
 	// Write processes a template directory and writes output, returning the
-	// files it wrote (or, in dry-run, would have written).
-	Write(templateRoot, outputDir string, vars map[string]any) ([]FileEntry, error)
+	// files it wrote (or, in dry-run, would have written). wrapperDir is the
+	// relative, single-path-element project wrapper directory to walk instead
+	// of templateRoot, or "" when the template is not being unwrapped.
+	Write(templateRoot, wrapperDir, outputDir string, vars map[string]any) ([]FileEntry, error)
 }
 
 // DefaultOutputWriter implements OutputWriter.
@@ -85,7 +87,7 @@ var _ OutputWriter = (*DefaultOutputWriter)(nil)
 // paths append at the same point below, right after processFile succeeds.
 //
 //nolint:gocognit // file processing with multiple format-dependent branches
-func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[string]any) ([]FileEntry, error) {
+func (w *DefaultOutputWriter) Write(templateRoot, wrapperDir, outputDir string, vars map[string]any) ([]FileEntry, error) {
 	w.files = make([]FileEntry, 0)
 
 	// Escape non-derived variable values to prevent SSTI in file content.
@@ -99,14 +101,20 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 	// Build template context with (possibly escaped) vars
 	ctx := buildTemplateContext(safeVars)
 
-	// Load .tagignore patterns (nil matcher if file absent or empty)
+	// Load .tagignore patterns from the template root — not the walk root, so
+	// a root-level .tagignore is still honoured when unwrapping a wrapper.
 	ignoreMatcher, err := loadIgnorePatterns(templateRoot)
 	if err != nil {
 		return nil, fmt.Errorf("load ignore patterns: %w", err)
 	}
 
-	// Walk the template directory
-	walkErr := filepath.WalkDir(templateRoot, func(srcPath string, d fs.DirEntry, err error) error {
+	walkRoot := templateRoot
+	if wrapperDir != "" {
+		walkRoot = filepath.Join(templateRoot, wrapperDir)
+	}
+
+	// Walk the effective root (the wrapper, when unwrapping)
+	walkErr := filepath.WalkDir(walkRoot, func(srcPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -120,38 +128,33 @@ func (w *DefaultOutputWriter) Write(templateRoot, outputDir string, vars map[str
 			return nil
 		}
 
-		// Get relative path from template root
+		// relPath anchors at the template root (the author's own tree, used for
+		// root-metadata detection and .tagignore matching); outRel anchors at
+		// the walk root (used for output paths and internal-tree detection).
 		relPath, err := filepath.Rel(templateRoot, srcPath)
 		if err != nil {
 			return fmt.Errorf("failed to get relative path: %w", err)
 		}
+		outRel, err := filepath.Rel(walkRoot, srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path: %w", err)
+		}
 
-		// Skip the root directory itself
-		if relPath == "." {
+		// Skip the walk root itself. filepath.SkipDir here would end the whole
+		// traversal rather than just this entry.
+		if outRel == "." {
 			return nil
 		}
 
-		// Skip TAG-internal files and directories
-		if isSkippedEntry(relPath, d.Name()) {
+		if skipEntry(relPath, outRel, d.Name(), d.IsDir(), ignoreMatcher) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
-		// Apply .tagignore patterns
-		if ignoreMatcher != nil {
-			pathComponents := strings.Split(relPath, string(filepath.Separator))
-			if ignoreMatcher.Match(pathComponents, d.IsDir()) {
-				if d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-		}
-
 		// Process path placeholders
-		processedPath, err := w.pathProcessor.ProcessPath(relPath, vars)
+		processedPath, err := w.pathProcessor.ProcessPath(outRel, vars)
 		if err != nil {
 			return NewPathError(relPath, "failed to process path", err)
 		}
@@ -405,29 +408,45 @@ func validatePathWithinDir(path, baseDir string) error {
 	return fileutil.ValidatePathContainment(baseDir, path)
 }
 
-// isSkippedEntry returns true for TAG-internal files/directories that should
-// never appear in scaffold output: tag.template.json, .tagignore, _meta.json
-// (all at root), and _generators/ and .tag/ directories at any depth.
-func isSkippedEntry(relPath, name string) bool {
-	atRoot := filepath.Dir(relPath) == "."
-
-	// Root-only files
-	if atRoot && (name == types.TemplateConfigFile || name == types.CacheMetaFile || name == types.TagIgnoreFile) {
+// skipEntry reports whether an entry must not appear in scaffold output, either
+// because it is TAG's own metadata or because .tagignore excludes it. relPath
+// anchors at the template root, outRel at the walk root; see the two predicates
+// below for why the anchors differ.
+func skipEntry(relPath, outRel, name string, isDir bool, ignore gitignore.Matcher) bool {
+	if isRootMetadataFile(relPath, name) || isInternalTree(outRel) {
 		return true
 	}
+	return ignore != nil && ignore.Match(strings.Split(relPath, string(filepath.Separator)), isDir)
+}
 
+// isRootMetadataFile reports whether relPath, relative to the template root,
+// names one of the TAG metadata files that are metadata only at that root.
+// A file with the same name deeper in the tree is ordinary content.
+func isRootMetadataFile(relPath, name string) bool {
+	if filepath.Dir(relPath) != "." {
+		return false
+	}
+	return name == types.TemplateConfigFile || name == types.CacheMetaFile || name == types.TagIgnoreFile
+}
+
+// isInternalTree reports whether outRel, relative to the walk root, is inside
+// one of TAG's internal directory trees. This is anchored at the walk root, not
+// the template root, so a wrapper-level .tag/ is still skipped and cannot
+// collide with the history manifest and copied generators that finalizeRun
+// writes into the same directory.
+func isInternalTree(outRel string) bool {
 	// _generators directory tree
-	if relPath == types.GeneratorsDir || strings.HasPrefix(relPath, types.GeneratorsDir+string(filepath.Separator)) {
+	if outRel == types.GeneratorsDir || strings.HasPrefix(outRel, types.GeneratorsDir+string(filepath.Separator)) {
 		return true
 	}
 
 	// _dialects directory tree
-	if relPath == types.DialectsDir || strings.HasPrefix(relPath, types.DialectsDir+string(filepath.Separator)) {
+	if outRel == types.DialectsDir || strings.HasPrefix(outRel, types.DialectsDir+string(filepath.Separator)) {
 		return true
 	}
 
 	// .tag directory tree
-	if relPath == types.TemplatesDir || strings.HasPrefix(relPath, types.TemplatesDir+string(filepath.Separator)) {
+	if outRel == types.TemplatesDir || strings.HasPrefix(outRel, types.TemplatesDir+string(filepath.Separator)) {
 		return true
 	}
 

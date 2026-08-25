@@ -319,7 +319,8 @@ CLAUDE.md
 ```
 
 - Standard gitignore patterns (globs, `**/`, negation with `!`)
-- `.tagignore` itself is always excluded from output
+- Only the template root's `.tagignore` is read and excluded from output; patterns match against paths relative to the template root, including the wrapper segment of a project-wrapper template
+- A `.tagignore`, `tag.template.json` or `_meta.json` placed inside the wrapper instead of at the template root is content, not metadata — it gets generated into the project
 - Directories matching a pattern are pruned entirely
 
 ### Bundled Generators
