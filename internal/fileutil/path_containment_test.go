@@ -183,6 +183,9 @@ func TestUT_ValidatePathContainment_RelativeTargetEscapes(t *testing.T) {
 
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
+	resolved, err := filepath.EvalSymlinks(cwd)
+	require.NoError(t, err)
+	require.NotEqual(t, resolved, cwd, "fixture did not reproduce a symlinked cwd")
 
 	tests := []struct {
 		name string
@@ -196,7 +199,7 @@ func TestUT_ValidatePathContainment_RelativeTargetEscapes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidatePathContainment(cwd, tt.path)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Contains(t, err.Error(), "escapes base directory")
 		})
 	}
