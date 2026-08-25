@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -173,6 +174,63 @@ func TestIT_ScaffoldCookiecutter(t *testing.T) {
 
 	// Compare against golden files (walk expected, check in actual)
 	compareDirectories(t, expectedDir, scaffoldDir)
+
+	// compareDirectories only walks expected, so deleting the hooks/ fixture
+	// entry removed an assertion rather than adding one. This is the only test
+	// covering a real converted template with an explicit --output, where the
+	// wrapper is NOT unwrapped and the hook script is kept out of the project
+	// solely by the .tagignore convert writes — assert that directly.
+	assert.NoDirExists(t, filepath.Join(scaffoldDir, "hooks"))
+}
+
+// TestIT_ConvertThenScaffold_ConvertedTemplateStillUnwraps pins #403's convert
+// side: every template `tag convert` emits puts hooks/ beside the wrapper
+// directory, and without the .tagignore convert now writes, that root would
+// be "mixed" and stop unwrapping (see writeHooksTagIgnore in
+// internal/convert/cookiecutter.go). Driven WITHOUT --output — unlike
+// TestIT_ScaffoldCookiecutter, which passes an explicit OutputDir and so never
+// exercises unwrapping at all — through the shipped binary so both the
+// .tagignore write and planOutput's mixed-root detection are exercised
+// end-to-end.
+func TestIT_ConvertThenScaffold_ConvertedTemplateStillUnwraps(t *testing.T) {
+	testdataDir := getTestdataDir()
+	srcDir := filepath.Join(testdataDir, "cookiecutter-fullstack")
+	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+		t.Skipf("testdata not found at %s", srcDir)
+	}
+
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, stderr, runErr := runTagSubprocess(t, ctx, dir, "convert", "cookiecutter", srcDir, "-o", "./converted")
+	require.NoError(t, runErr, "stderr: %s", stderr)
+
+	require.FileExists(t, filepath.Join(dir, "converted", ".tagignore"))
+
+	stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+		"scaffold", "./converted", "myproj",
+		"-m", "project_name=myproj",
+		"-m", "author=Test Author",
+		"-m", "description=A short description",
+		"-m", "license=MIT",
+		"-m", "use_docker=true",
+		"-m", "port=8080",
+		"--format", "json")
+	require.NoError(t, runErr, "stderr: %s", stderr)
+
+	var doc scaffoldJSONDoc
+	require.NoError(t, json.Unmarshal(stdout, &doc))
+
+	wantRoot := filepath.Join(dir, "myproj")
+	assert.Equal(t, wantRoot, doc.OutputDir, "unwrapping must make the wrapper the effective template root")
+	assert.Equal(t, doc.OutputDir, doc.ProjectRoot)
+
+	require.FileExists(t, filepath.Join(doc.ProjectRoot, "README.md"))
+	assert.NoDirExists(t, filepath.Join(doc.ProjectRoot, "hooks"),
+		"the hook script must not leak into the generated project")
 }
 
 // --- Generate integration test helpers ---

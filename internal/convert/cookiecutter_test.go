@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -498,4 +499,95 @@ func TestUT_ConvertInPlace_WithHooks(t *testing.T) {
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(hooksDir, "post_gen_project.sh"))
 	require.NoError(t, err)
+}
+
+func TestUT_Convert_WritesTagignoreForCopiedHooks(t *testing.T) {
+	newSrcWithHooks := func(t *testing.T) string {
+		t.Helper()
+		srcDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(srcDir, "cookiecutter.json"), []byte(`{"name": "test"}`), 0o644))
+		hooksDir := filepath.Join(srcDir, "hooks")
+		require.NoError(t, os.MkdirAll(hooksDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "post_gen_project.sh"), []byte("#!/bin/bash"), 0o755))
+		return srcDir
+	}
+
+	t.Run("writes .tagignore with hooks/ when at least one hook is copied", func(t *testing.T) {
+		srcDir := newSrcWithHooks(t)
+		destDir := filepath.Join(t.TempDir(), "output")
+
+		converter, err := NewConverter()
+		require.NoError(t, err)
+		result, err := converter.Convert(context.Background(), Options{Source: srcDir, Destination: destDir})
+		require.NoError(t, err)
+		require.Equal(t, 1, result.HooksCopied)
+
+		content, readErr := os.ReadFile(filepath.Join(destDir, types.TagIgnoreFile))
+		require.NoError(t, readErr)
+		assert.Contains(t, string(content), "hooks/")
+	})
+
+	t.Run("writes no .tagignore when zero hooks are copied", func(t *testing.T) {
+		srcDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(srcDir, "cookiecutter.json"), []byte(`{"name": "test"}`), 0o644))
+		destDir := filepath.Join(t.TempDir(), "output")
+
+		converter, err := NewConverter()
+		require.NoError(t, err)
+		result, err := converter.Convert(context.Background(), Options{Source: srcDir, Destination: destDir})
+		require.NoError(t, err)
+		require.Equal(t, 0, result.HooksCopied)
+
+		_, statErr := os.Stat(filepath.Join(destDir, types.TagIgnoreFile))
+		assert.True(t, os.IsNotExist(statErr))
+	})
+
+	t.Run("writes nothing under DryRun", func(t *testing.T) {
+		srcDir := newSrcWithHooks(t)
+		destDir := filepath.Join(t.TempDir(), "output")
+
+		converter, err := NewConverter()
+		require.NoError(t, err)
+		result, err := converter.Convert(context.Background(), Options{Source: srcDir, Destination: destDir, DryRun: true})
+		require.NoError(t, err)
+		require.Equal(t, 1, result.HooksCopied)
+
+		assert.NoDirExists(t, destDir)
+	})
+
+	t.Run("appends hooks/ to an existing .tagignore rather than clobbering it", func(t *testing.T) {
+		// Convert() (re)creates destDir itself, so the only realistic source
+		// of a pre-existing .tagignore by the time hooks are processed is one
+		// the SOURCE template ships and processTemplateFiles copies over.
+		srcDir := newSrcWithHooks(t)
+		require.NoError(t, os.WriteFile(filepath.Join(srcDir, types.TagIgnoreFile), []byte("dist/\n"), 0o644))
+		destDir := filepath.Join(t.TempDir(), "output")
+
+		converter, err := NewConverter()
+		require.NoError(t, err)
+		result, err := converter.Convert(context.Background(), Options{Source: srcDir, Destination: destDir})
+		require.NoError(t, err)
+		require.Equal(t, 1, result.HooksCopied)
+
+		content, readErr := os.ReadFile(filepath.Join(destDir, types.TagIgnoreFile))
+		require.NoError(t, readErr)
+		assert.Contains(t, string(content), "dist/")
+		assert.Contains(t, string(content), "hooks/")
+	})
+
+	t.Run("does not duplicate hooks/ when already present", func(t *testing.T) {
+		srcDir := newSrcWithHooks(t)
+		require.NoError(t, os.WriteFile(filepath.Join(srcDir, types.TagIgnoreFile), []byte("hooks/\n"), 0o644))
+		destDir := filepath.Join(t.TempDir(), "output")
+
+		converter, err := NewConverter()
+		require.NoError(t, err)
+		result, err := converter.Convert(context.Background(), Options{Source: srcDir, Destination: destDir})
+		require.NoError(t, err)
+		require.Equal(t, 1, result.HooksCopied)
+
+		content, readErr := os.ReadFile(filepath.Join(destDir, types.TagIgnoreFile))
+		require.NoError(t, readErr)
+		assert.Equal(t, 1, strings.Count(string(content), "hooks/"))
+	})
 }

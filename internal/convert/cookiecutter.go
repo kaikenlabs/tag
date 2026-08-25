@@ -69,26 +69,9 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	result.Destination = destDir
 
 	// 4. Check if output exists
-	//nolint:nestif // dry-run branching requires nested conditions for file operations
 	if !opts.DryRun {
-		// Safety check: prevent dangerous --force operations
-		var absDestDir string
-		absDestDir, err = filepath.Abs(destDir)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve output path: %w", err)
-		}
-		if absDestDir == "/" || absDestDir == "." || destDir == "" {
-			return nil, fmt.Errorf("unsafe output directory: %s", destDir)
-		}
-
-		if info, err := os.Stat(destDir); err == nil && info.IsDir() { //nolint:govet // shadow in if-init is idiomatic
-			if !opts.Force {
-				return nil, fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, destDir)
-			}
-			// Remove existing if force
-			if err := os.RemoveAll(destDir); err != nil {
-				return nil, fmt.Errorf("failed to remove existing output: %w", err)
-			}
+		if prepErr := prepareDestDir(destDir, opts.Force); prepErr != nil {
+			return nil, prepErr
 		}
 	}
 
@@ -132,6 +115,17 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 		return nil, err
 	}
 
+	// Every converted template puts hooks/ beside the wrapper directory, so
+	// without excluding it a scaffold run would treat the root as "mixed" and
+	// stop unwrapping (#403) — and the hook script would leak into the
+	// generated project. This runs after the walk so it appends to (rather
+	// than gets clobbered by) a .tagignore the source template already ships.
+	if !opts.DryRun && len(hookFindings) > 0 {
+		if err := writeHooksTagIgnore(destDir); err != nil {
+			return nil, err
+		}
+	}
+
 	// 8. Write tag.template.json
 	if !opts.DryRun {
 		// Ensure destination directory exists
@@ -151,6 +145,64 @@ func (c *Converter) Convert(ctx context.Context, opts Options) (*Result, error) 
 	}
 
 	return result, nil
+}
+
+// prepareDestDir validates and, when force is set, clears an existing
+// destination directory before a real (non-dry-run) conversion.
+func prepareDestDir(destDir string, force bool) error {
+	absDestDir, err := filepath.Abs(destDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve output path: %w", err)
+	}
+	if absDestDir == "/" || absDestDir == "." || destDir == "" {
+		return fmt.Errorf("unsafe output directory: %s", destDir)
+	}
+
+	if info, statErr := os.Stat(destDir); statErr == nil && info.IsDir() {
+		if !force {
+			return fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, destDir)
+		}
+		if err := os.RemoveAll(destDir); err != nil {
+			return fmt.Errorf("failed to remove existing output: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// writeHooksTagIgnore ensures destDir/.tagignore excludes the hooks/
+// directory that CopyHooks just populated, appending to an existing file
+// rather than clobbering it.
+func writeHooksTagIgnore(destDir string) error {
+	path := filepath.Join(destDir, types.TagIgnoreFile)
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read %s: %w", types.TagIgnoreFile, err)
+	}
+
+	for line := range strings.SplitSeq(string(existing), "\n") {
+		if strings.TrimSpace(line) == "hooks/" {
+			return nil
+		}
+	}
+
+	content := string(existing)
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	content += "hooks/\n"
+
+	// Rewriting the file must not widen a restrictive mode the source template
+	// chose for its own .tagignore.
+	mode := types.FileMode
+	if info, statErr := os.Stat(path); statErr == nil {
+		mode = info.Mode().Perm()
+	}
+
+	if err := fileutil.WriteFileAtomic(path, []byte(content), mode); err != nil {
+		return fmt.Errorf("failed to write %s: %w", types.TagIgnoreFile, err)
+	}
+	return nil
 }
 
 // resolveSource resolves a source reference to a local directory.

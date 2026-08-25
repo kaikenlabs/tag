@@ -103,11 +103,11 @@ Hooks receive all template variables as environment variables:
 | Environment Variable | Description |
 |---------------------|-------------|
 | `TAG_TEMPLATE_DIR` | Absolute path to the template directory |
-| `TAG_OUTPUT_DIR` | Absolute path to the project root directory (inside the wrapper directory when the template uses one) |
+| `TAG_OUTPUT_DIR` | Absolute path to the project root directory (inside the wrapper directory when the template uses one and it unwraps) |
 | `TAG_PROJECT_NAME` | Value of the `project_name` variable |
 | `TAG_VAR_<NAME>` | Each variable as `TAG_VAR_` + uppercase name |
 
-Despite the name, `TAG_OUTPUT_DIR` matches `project_root` from [`tag scaffold --format json`](../commands/scaffold.md#machine-readable-output), not `output_dir` — hooks run inside the wrapper directory when the template has one, same as the project root the JSON document reports.
+Despite the name, `TAG_OUTPUT_DIR` matches `project_root` from [`tag scaffold --format json`](../commands/scaffold.md#machine-readable-output), not `output_dir` — hooks run inside the wrapper directory when the template has one and it unwraps, same as the project root the JSON document reports. A wrapper only unwraps when it holds all of the template's generated content; for a mixed root, `project_root` is the output directory itself, and hooks run there, one level above the wrapper.
 
 ### Variable Name Transformation
 
