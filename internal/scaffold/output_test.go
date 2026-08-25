@@ -134,7 +134,7 @@ func TestUT_Write_TemplateRendering(t *testing.T) {
 	require.NoError(t, err)
 
 	vars := map[string]any{"name": "World"}
-	_, err = writer.Write(templateDir, outputDir, vars)
+	_, err = writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Verify rendered content
@@ -155,7 +155,7 @@ func TestUT_Write_BinaryFilePassthrough(t *testing.T) {
 	require.NoError(t, err)
 
 	vars := map[string]any{"x": "should_not_appear"}
-	_, err = writer.Write(templateDir, outputDir, vars)
+	_, err = writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Binary file should be copied as-is, not template-processed
@@ -176,7 +176,7 @@ func TestUT_Write_DirectoryCreation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(nestedDir, "file.txt"), []byte("content"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Verify directory was created and file exists
@@ -209,7 +209,7 @@ func TestUT_Write_SkipsTagTemplateJSON(t *testing.T) {
 	))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// tag.template.json should NOT exist in output
@@ -236,7 +236,7 @@ func TestUT_Write_SkipsGeneratorsDir(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// _generators should NOT exist in output
@@ -263,7 +263,7 @@ func TestUT_Write_SkipsTagTemplatesDir(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// .tag should NOT exist in output
@@ -299,7 +299,7 @@ func TestUT_Write_SkipsCacheMetaFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Root _meta.json should NOT exist in output
@@ -331,7 +331,7 @@ func TestUT_Write_PathPlaceholders(t *testing.T) {
 	))
 
 	vars := map[string]any{"project_name": "myapp"}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Verify placeholder was resolved in path and content
@@ -359,7 +359,7 @@ func TestUT_Write_SymlinkSkipping(t *testing.T) {
 	require.NoError(t, os.Symlink(targetFile, filepath.Join(templateDir, "link.txt")))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Real file should exist
@@ -387,7 +387,7 @@ func TestUT_Write_ConditionalFileExclusion(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "always.txt"), []byte("always"), 0o644))
 
 	vars := map[string]any{"include": "no"}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Conditional file should NOT exist
@@ -413,7 +413,7 @@ func TestUT_Write_PathTraversalViaPlaceholder(t *testing.T) {
 	))
 
 	vars := map[string]any{"out": "../escape.txt"}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.Error(t, err)
 
 	var pathErr *PathError
@@ -444,7 +444,7 @@ func TestUT_Write_SymlinkDirSkipping(t *testing.T) {
 	require.NoError(t, os.Symlink(externalDir, filepath.Join(templateDir, "linked_dir")))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Real file should exist
@@ -466,7 +466,7 @@ func TestUT_Write_EmptyTemplate(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "empty.txt"), []byte(""), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "empty.txt"))
@@ -1089,7 +1089,7 @@ func TestUT_Write_LargeBinaryFileStreaming(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "large.bin"), binaryContent, 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// Verify content matches exactly
@@ -1100,38 +1100,24 @@ func TestUT_Write_LargeBinaryFileStreaming(t *testing.T) {
 
 // --- isSkippedEntry ---
 
-func TestUT_IsSkippedEntry(t *testing.T) {
+func TestUT_IsRootMetadataFile(t *testing.T) {
 	tests := []struct {
 		name    string
 		relPath string
 		entName string
 		want    bool
 	}{
-		// Root-only files (should be skipped)
+		// Root-only files (should be treated as metadata)
 		{"tag.template.json at root", "tag.template.json", "tag.template.json", true},
 		{"_meta.json at root", "_meta.json", "_meta.json", true},
 		{".tagignore at root", ".tagignore", ".tagignore", true},
 
-		// Same files in subdirectories (should NOT be skipped)
+		// Same files in subdirectories (should NOT be treated as metadata)
 		{"tag.template.json in subdir", "sub/tag.template.json", "tag.template.json", false},
 		{"_meta.json in subdir", "sub/_meta.json", "_meta.json", false},
 		{".tagignore in subdir", "sub/.tagignore", ".tagignore", false},
 
-		// _generators directory tree
-		{"_generators root", "_generators", "_generators", true},
-		{"nested in _generators", "_generators/handler/handler.go", "handler.go", true},
-		{"_generators deep nested", "_generators/a/b/c.go", "c.go", true},
-		{"_generatorsx no match", "_generatorsx", "_generatorsx", false},
-		{"_generators- no match", "_generators-old", "_generators-old", false},
-
-		// .tag directory tree
-		{".tag root", ".tag", ".tag", true},
-		{"nested in .tag", ".tag/service/service.go", "service.go", true},
-		{".tag deep nested", ".tag/a/b/c.go", "c.go", true},
-		{".tagx no match", ".tagx", ".tagx", false},
-		{".tag-old no match", ".tag-old", ".tag-old", false},
-
-		// Regular files (should NOT be skipped)
+		// Regular files (should NOT be treated as metadata)
 		{"regular file at root", "main.go", "main.go", false},
 		{"regular file in subdir", "cmd/server/main.go", "main.go", false},
 		{"README at root", "README.md", "README.md", false},
@@ -1139,7 +1125,45 @@ func TestUT_IsSkippedEntry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isSkippedEntry(tt.relPath, tt.entName)
+			got := isRootMetadataFile(tt.relPath, tt.entName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestUT_IsInternalTree(t *testing.T) {
+	tests := []struct {
+		name   string
+		outRel string
+		want   bool
+	}{
+		// _generators directory tree
+		{"_generators root", "_generators", true},
+		{"nested in _generators", "_generators/handler/handler.go", true},
+		{"_generators deep nested", "_generators/a/b/c.go", true},
+		{"_generatorsx no match", "_generatorsx", false},
+		{"_generators- no match", "_generators-old", false},
+
+		// _dialects directory tree
+		{"_dialects root", "_dialects", true},
+		{"nested in _dialects", "_dialects/a/b.go", true},
+		{"_dialectsx no match", "_dialectsx", false},
+
+		// .tag directory tree
+		{".tag root", ".tag", true},
+		{"nested in .tag", ".tag/service/service.go", true},
+		{".tag deep nested", ".tag/a/b/c.go", true},
+		{".tagx no match", ".tagx", false},
+		{".tag-old no match", ".tag-old", false},
+
+		// Regular entries (should NOT be internal)
+		{"regular file at root", "main.go", false},
+		{"regular file in subdir", "cmd/server/main.go", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isInternalTree(tt.outRel)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -1313,7 +1337,7 @@ func TestUT_Write_SkipsTagIgnoreFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// .tagignore should NOT exist in output
@@ -1336,7 +1360,7 @@ func TestUT_Write_TagIgnoreExcludesFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
@@ -1359,7 +1383,7 @@ func TestUT_Write_TagIgnoreExcludesDirectory(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "temp"))
@@ -1385,7 +1409,7 @@ func TestUT_Write_TagIgnoreGlobPattern(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(nested, "file.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "sub", "deep", "file.tmp"))
@@ -1406,7 +1430,7 @@ func TestUT_Write_TagIgnoreNegation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.log"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
@@ -1428,7 +1452,7 @@ func TestUT_Write_TagIgnoreCommentsAndBlanks(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "keep.txt"), []byte("kept"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "app.log"))
@@ -1449,7 +1473,7 @@ func TestUT_Write_TagIgnoreMissing(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "file.log"), []byte("log"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(outputDir, "file.txt"))
@@ -1471,7 +1495,7 @@ func TestUT_Write_TagIgnoreEmpty(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "file.log"), []byte("log"), 0o644))
 
 	vars := map[string]any{}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	// .tagignore itself should not be in output
@@ -1502,7 +1526,7 @@ func TestUT_Write_SSTIBlocked_TemplateSyntaxInVarIsLiteral(t *testing.T) {
 
 	// User provides template syntax as variable value (SSTI attack)
 	vars := map[string]any{"name": "{{ range(999) }}x{{ endfor }}"}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "readme.txt"))
@@ -1524,7 +1548,7 @@ func TestUT_Write_SSTIBlocked_NormalVarsStillWork(t *testing.T) {
 	))
 
 	vars := map[string]any{"name": "World", "version": "1.0"}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
@@ -1546,7 +1570,7 @@ func TestUT_Write_SSTIBlocked_StmtAndCommentSyntax(t *testing.T) {
 
 	// User tries {% %} and {# #} injection
 	vars := map[string]any{"input": "{% if true %}pwned{% endif %}{# comment #}"}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
@@ -1574,7 +1598,7 @@ func TestUT_Write_SSTIAllowRecursiveRender(t *testing.T) {
 	// template syntax in the value is output literally — but without any
 	// escape/unescape round-trip.
 	vars := map[string]any{"expr": "{{ 1 + 1 }}"}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
@@ -1603,7 +1627,7 @@ func TestUT_Write_SSTIDerivedVarsNotEscaped(t *testing.T) {
 		"greeting": "Hello!",
 		"input":    "{{ malicious }}",
 	}
-	_, err := writer.Write(templateDir, outputDir, vars)
+	_, err := writer.Write(templateDir, "", outputDir, vars)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "file.txt"))
@@ -1648,7 +1672,7 @@ func TestUT_OutputWriter_Write_ReturnsCreatedFiles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(templateDir, "sub"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "sub", "b.txt"), []byte("b"), 0o644))
 
-	files, err := writer.Write(templateDir, outputDir, map[string]any{})
+	files, err := writer.Write(templateDir, "", outputDir, map[string]any{})
 	require.NoError(t, err)
 
 	assert.ElementsMatch(t, []FileEntry{
@@ -1664,12 +1688,12 @@ func TestUT_OutputWriter_DryRunFileListMatchesRealRun(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "sub", "b.bin"), []byte{0x00, 0x01, 0x02}, 0o644))
 
 	realWriter := mustNewOutputWriter(t)
-	realFiles, err := realWriter.Write(templateDir, t.TempDir(), map[string]any{})
+	realFiles, err := realWriter.Write(templateDir, "", t.TempDir(), map[string]any{})
 	require.NoError(t, err)
 
 	dryWriter := mustNewOutputWriter(t)
 	dryWriter.SetDryRun(true)
-	dryFiles, err := dryWriter.Write(templateDir, t.TempDir(), map[string]any{})
+	dryFiles, err := dryWriter.Write(templateDir, "", t.TempDir(), map[string]any{})
 	require.NoError(t, err)
 
 	assert.Equal(t, realFiles, dryFiles)
@@ -1687,7 +1711,7 @@ func TestUT_OutputWriter_ConditionalEmptyFilenameAbsentFromFiles(t *testing.T) {
 	))
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "always.txt"), []byte("always"), 0o644))
 
-	files, err := writer.Write(templateDir, outputDir, map[string]any{"include": "no"})
+	files, err := writer.Write(templateDir, "", outputDir, map[string]any{"include": "no"})
 	require.NoError(t, err)
 
 	assert.Equal(t, []FileEntry{{Path: "always.txt", Action: fileaction.ActionCreate}}, files)
@@ -1703,7 +1727,7 @@ func TestUT_OutputWriter_SkippedEntriesAbsentFromFiles(t *testing.T) {
 	for _, dryRun := range []bool{false, true} {
 		writer := mustNewOutputWriter(t)
 		writer.SetDryRun(dryRun)
-		files, err := writer.Write(templateDir, t.TempDir(), map[string]any{})
+		files, err := writer.Write(templateDir, "", t.TempDir(), map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, []FileEntry{{Path: "keep.txt", Action: fileaction.ActionCreate}}, files, "dryRun=%v", dryRun)
 	}
@@ -1720,10 +1744,295 @@ func TestUT_OutputWriter_DryRunLinesGoToInjectedWriter(t *testing.T) {
 	outputDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "a.txt"), []byte("hello"), 0o644))
 
-	_, err := writer.Write(templateDir, outputDir, map[string]any{})
+	_, err := writer.Write(templateDir, "", outputDir, map[string]any{})
 	require.NoError(t, err)
 
 	assert.Contains(t, buf.String(), "(dry-run) would write:")
+}
+
+// --- unwrap (wrapperDir) ---
+
+func TestUT_Write_Unwrapped_RootTagignoreExcludesWrapperContent(t *testing.T) {
+	wrapperName := "{{ vars.project_name }}"
+
+	tests := []struct {
+		name         string
+		ignoreLines  string
+		setup        func(t *testing.T, wrapperDir string)
+		excludedPath string
+		keptPath     string
+	}{
+		{
+			name:        "plain filename",
+			ignoreLines: "secret.txt\n",
+			setup: func(t *testing.T, wrapperDir string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "secret.txt"), []byte("s"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "keep.txt"), []byte("k"), 0o644))
+			},
+			excludedPath: "secret.txt",
+			keptPath:     "keep.txt",
+		},
+		{
+			name:        "*.tmp glob",
+			ignoreLines: "*.tmp\n",
+			setup: func(t *testing.T, wrapperDir string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "scratch.tmp"), []byte("s"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "keep.txt"), []byte("k"), 0o644))
+			},
+			excludedPath: "scratch.tmp",
+			keptPath:     "keep.txt",
+		},
+		{
+			name:        "temp/ directory pruned entirely",
+			ignoreLines: "temp/\n",
+			setup: func(t *testing.T, wrapperDir string) {
+				t.Helper()
+				tempDir := filepath.Join(wrapperDir, "temp")
+				require.NoError(t, os.MkdirAll(tempDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(tempDir, "data.txt"), []byte("d"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "keep.txt"), []byte("k"), 0o644))
+			},
+			excludedPath: filepath.Join("temp", "data.txt"),
+			keptPath:     "keep.txt",
+		},
+		{
+			name:        "negation does not resurrect root metadata",
+			ignoreLines: "*.log\n!keep.log\n!tag.template.json\n",
+			setup: func(t *testing.T, wrapperDir string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "app.log"), []byte("a"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "keep.log"), []byte("k"), 0o644))
+			},
+			excludedPath: "app.log",
+			keptPath:     "keep.log",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := mustNewOutputWriter(t)
+			templateDir := t.TempDir()
+			outputDir := t.TempDir()
+
+			require.NoError(t, os.WriteFile(filepath.Join(templateDir, types.TagIgnoreFile), []byte(tt.ignoreLines), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(templateDir, types.TemplateConfigFile), []byte(`{"vars":{}}`), 0o644))
+
+			wrapperDir := filepath.Join(templateDir, wrapperName)
+			require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+			tt.setup(t, wrapperDir)
+
+			_, err := writer.Write(templateDir, wrapperName, outputDir, map[string]any{"project_name": "demo"})
+			require.NoError(t, err)
+
+			_, statErr := os.Stat(filepath.Join(outputDir, tt.excludedPath))
+			assert.True(t, os.IsNotExist(statErr), "%s should be excluded by the root .tagignore", tt.excludedPath)
+
+			_, err = os.Stat(filepath.Join(outputDir, tt.keptPath))
+			assert.NoError(t, err, "%s should be kept", tt.keptPath)
+
+			// A negation pattern must never resurrect root metadata: that check
+			// runs before the .tagignore matcher, regardless of what the file says.
+			_, err = os.Stat(filepath.Join(outputDir, types.TemplateConfigFile))
+			assert.True(t, os.IsNotExist(err), "root tag.template.json must never appear in output")
+		})
+	}
+}
+
+func TestUT_Write_Unwrapped_WrapperLevelMetadataIsContent(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	wrapperName := "{{ vars.project_name }}"
+	wrapperDir := filepath.Join(templateDir, wrapperName)
+	require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, types.TemplateConfigFile), []byte(`{"inner":true}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, types.TagIgnoreFile), []byte("node_modules/\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, types.CacheMetaFile), []byte(`{"nested":true}`), 0o644))
+
+	files, err := writer.Write(templateDir, wrapperName, outputDir, map[string]any{"project_name": "demo"})
+	require.NoError(t, err)
+
+	assert.Equal(t, []FileEntry{
+		{Path: types.TagIgnoreFile, Action: fileaction.ActionCreate},
+		{Path: types.CacheMetaFile, Action: fileaction.ActionCreate},
+		{Path: types.TemplateConfigFile, Action: fileaction.ActionCreate},
+	}, files)
+
+	tagTemplateContent, err := os.ReadFile(filepath.Join(outputDir, types.TemplateConfigFile))
+	require.NoError(t, err)
+	assert.Equal(t, `{"inner":true}`, string(tagTemplateContent))
+
+	tagIgnoreContent, err := os.ReadFile(filepath.Join(outputDir, types.TagIgnoreFile))
+	require.NoError(t, err)
+	assert.Equal(t, "node_modules/\n", string(tagIgnoreContent))
+
+	cacheMetaContent, err := os.ReadFile(filepath.Join(outputDir, types.CacheMetaFile))
+	require.NoError(t, err)
+	assert.Equal(t, `{"nested":true}`, string(cacheMetaContent))
+}
+
+func TestUT_Write_TemplateRootMetadataStillSkipped(t *testing.T) {
+	tests := []struct {
+		name       string
+		wrapperDir string
+	}{
+		{"no unwrap", ""},
+		{"unwrapped", "{{ vars.project_name }}"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := mustNewOutputWriter(t)
+			templateDir := t.TempDir()
+			outputDir := t.TempDir()
+
+			require.NoError(t, os.WriteFile(filepath.Join(templateDir, types.TemplateConfigFile), []byte(`{}`), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(templateDir, types.TagIgnoreFile), []byte("*.log\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(templateDir, types.CacheMetaFile), []byte(`{}`), 0o644))
+
+			contentDir := templateDir
+			if tt.wrapperDir != "" {
+				contentDir = filepath.Join(templateDir, tt.wrapperDir)
+				require.NoError(t, os.MkdirAll(contentDir, 0o755))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(contentDir, "keep.txt"), []byte("k"), 0o644))
+
+			files, err := writer.Write(templateDir, tt.wrapperDir, outputDir, map[string]any{"project_name": "demo"})
+			require.NoError(t, err)
+
+			assert.Equal(t, []FileEntry{{Path: "keep.txt", Action: fileaction.ActionCreate}}, files)
+
+			for _, name := range []string{types.TemplateConfigFile, types.TagIgnoreFile, types.CacheMetaFile} {
+				_, statErr := os.Stat(filepath.Join(outputDir, name))
+				assert.True(t, os.IsNotExist(statErr), "%s at the template root must stay skipped", name)
+			}
+		})
+	}
+}
+
+func TestUT_Write_Unwrapped_InternalDirsAtWrapperLevel(t *testing.T) {
+	writer := mustNewOutputWriter(t)
+	templateDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	wrapperName := "{{ vars.project_name }}"
+	wrapperDir := filepath.Join(templateDir, wrapperName)
+	require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(wrapperDir, types.GeneratorsDir, "handler"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, types.GeneratorsDir, "handler", "handler.go"), []byte("g"), 0o644))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(wrapperDir, types.DialectsDir), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, types.DialectsDir, "go.json"), []byte("d"), 0o644))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(wrapperDir, types.TemplatesDir, "component"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, types.TemplatesDir, "component", "main.go.tmpl"), []byte("t"), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "keep.txt"), []byte("k"), 0o644))
+
+	files, err := writer.Write(templateDir, wrapperName, outputDir, map[string]any{"project_name": "demo"})
+	require.NoError(t, err)
+
+	assert.Equal(t, []FileEntry{{Path: "keep.txt", Action: fileaction.ActionCreate}}, files)
+
+	for _, dir := range []string{types.GeneratorsDir, types.DialectsDir, types.TemplatesDir} {
+		_, statErr := os.Stat(filepath.Join(outputDir, dir))
+		assert.True(t, os.IsNotExist(statErr), "%s at wrapper level must stay skipped", dir)
+	}
+}
+
+// TestUT_Write_Unwrapped_TagignoreAnchoredPatternIsTemplateRootRelative pins D2:
+// .tagignore patterns are matched against the path relative to the TEMPLATE
+// ROOT, wrapper segment included — not the walk root. A leading-slash pattern
+// like "/docs/" is anchored to that root (docs/templates/authoring.md:328) and
+// therefore only matches a docs/ directory that sits directly at the template
+// root; to exclude a docs/ directory inside the wrapper, the pattern must
+// spell out the wrapper segment. An unanchored glob like "*.tmp" has no slash
+// to anchor on and still matches at any depth.
+func TestUT_Write_Unwrapped_TagignoreAnchoredPatternIsTemplateRootRelative(t *testing.T) {
+	wrapperName := "{{ vars.project_name }}"
+
+	tests := []struct {
+		name     string
+		ignore   string
+		filePath string
+		wantKept bool
+	}{
+		{
+			name:     "root-anchored /docs/ does not match inside the wrapper",
+			ignore:   "/docs/\n",
+			filePath: filepath.Join("docs", "api", "index.md"),
+			wantKept: true,
+		},
+		{
+			name:     "wrapper-qualified docs/ pattern does match",
+			ignore:   wrapperName + "/docs/\n",
+			filePath: filepath.Join("docs", "api", "index.md"),
+			wantKept: false,
+		},
+		{
+			name:     "unanchored *.tmp matches at any depth",
+			ignore:   "*.tmp\n",
+			filePath: filepath.Join("nested", "deep.tmp"),
+			wantKept: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := mustNewOutputWriter(t)
+			templateDir := t.TempDir()
+			outputDir := t.TempDir()
+			wrapperDir := filepath.Join(templateDir, wrapperName)
+			require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(templateDir, types.TagIgnoreFile), []byte(tt.ignore), 0o644))
+
+			fullPath := filepath.Join(wrapperDir, tt.filePath)
+			require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+			require.NoError(t, os.WriteFile(fullPath, []byte("content"), 0o644))
+
+			_, err := writer.Write(templateDir, wrapperName, outputDir, map[string]any{"project_name": "demo"})
+			require.NoError(t, err)
+
+			_, statErr := os.Stat(filepath.Join(outputDir, tt.filePath))
+			if tt.wantKept {
+				assert.NoError(t, statErr)
+			} else {
+				assert.True(t, os.IsNotExist(statErr))
+			}
+		})
+	}
+}
+
+func TestUT_Write_Unwrapped_DryRunMatchesRealRunAndWritesNothing(t *testing.T) {
+	templateDir := t.TempDir()
+	wrapperName := "{{ vars.project_name }}"
+	wrapperDir := filepath.Join(templateDir, wrapperName)
+	require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "README.md"), []byte("# {{ vars.project_name }}"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, types.TemplateConfigFile), []byte(`{"inner":true}`), 0o644))
+
+	vars := map[string]any{"project_name": "demo"}
+
+	realWriter := mustNewOutputWriter(t)
+	realFiles, err := realWriter.Write(templateDir, wrapperName, t.TempDir(), vars)
+	require.NoError(t, err)
+	require.NotEmpty(t, realFiles)
+
+	dryWriter := mustNewOutputWriter(t)
+	dryWriter.SetDryRun(true)
+	dryOutputDir := t.TempDir()
+	before := listTree(t, dryOutputDir)
+
+	dryFiles, err := dryWriter.Write(templateDir, wrapperName, dryOutputDir, vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, realFiles, dryFiles)
+	assert.Equal(t, before, listTree(t, dryOutputDir), "a dry run must write nothing to the output dir")
 }
 
 // --- test helpers ---

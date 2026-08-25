@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1112,6 +1113,79 @@ func TestIT_Scaffold_TagConfigDefaultOutputDir(t *testing.T) {
 	assert.FileExists(t, filepath.Join(outputDir, ".tagconfig.json"))
 }
 
+// TestIT_Scaffold_WrapperDetectionAndWriterAgreeOnTagignore pins agreement
+// between findProjectWrapper (scaffold.go) and Write's walk (output.go): both
+// read the same root .tagignore, but no unit test on either side alone can
+// observe whether the two decisions stay consistent with each other.
+func TestIT_Scaffold_WrapperDetectionAndWriterAgreeOnTagignore(t *testing.T) {
+	tests := []struct {
+		name       string
+		tagignore  string
+		createDocs bool
+		wantFiles  []string
+	}{
+		{
+			name:       "root .tagignore names the wrapper itself",
+			tagignore:  "{{ vars.project_name }}/\n",
+			createDocs: false,
+			wantFiles:  nil,
+		},
+		{
+			name:       "root .tagignore names a sibling",
+			tagignore:  "docs/\n",
+			createDocs: true,
+			wantFiles:  []string{"README.md"},
+		},
+		{
+			name:       "neither",
+			tagignore:  "",
+			createDocs: false,
+			wantFiles:  []string{"README.md"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			templateDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"),
+				[]byte(`{"name":"t","vars":{"project_name":{"type":"string","default":"demo"}}}`), 0o644))
+
+			wrapperDir := filepath.Join(templateDir, "{{ vars.project_name }}")
+			require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "README.md"), []byte("hi"), 0o644))
+
+			if tt.createDocs {
+				require.NoError(t, os.MkdirAll(filepath.Join(templateDir, "docs"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(templateDir, "docs", "guide.md"), []byte("g"), 0o644))
+			}
+			if tt.tagignore != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(templateDir, ".tagignore"), []byte(tt.tagignore), 0o644))
+			}
+
+			outputDir := filepath.Join(t.TempDir(), "out")
+			opts := Options{
+				TemplateDir: templateDir,
+				ProjectName: outputDir,
+				Meta:        map[string]string{"project_name": "demo"},
+				NoInput:     true,
+			}
+
+			s, err := NewScaffold(opts)
+			require.NoError(t, err)
+
+			result, err := s.Run(opts)
+			require.NoError(t, err)
+
+			var got []string
+			for _, f := range result.Files {
+				got = append(got, f.Path)
+			}
+			sort.Strings(got)
+			assert.Equal(t, tt.wantFiles, got)
+		})
+	}
+}
+
 func TestUT_ResolveOutputDir_TraversalBlocked(t *testing.T) {
 	cwd := t.TempDir()
 
@@ -1281,9 +1355,9 @@ func TestUT_PlanOutput_MixedRootSuppressesUnwrapping(t *testing.T) {
 			require.NoError(t, err)
 
 			if tt.wantEffectiveIsWrapperDir {
-				assert.Equal(t, wrapperDir, ctx.effectiveTemplateDir)
+				assert.Equal(t, "{{ vars.project_name }}", ctx.unwrapDir)
 			} else {
-				assert.Equal(t, templateDir, ctx.effectiveTemplateDir)
+				assert.Equal(t, "", ctx.unwrapDir)
 			}
 
 			if tt.wantProjectRootIsOutput {

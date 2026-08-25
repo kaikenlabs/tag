@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -25,8 +26,12 @@ type scaffoldJSONDoc struct {
 }
 
 // writeScaffoldTemplate writes a minimal template under dir/name. When wrapped,
-// the single content file sits inside a "{{ vars.project_name }}" directory,
-// which is what makes findProjectWrapper treat it as a project wrapper.
+// the content sits inside a "{{ vars.project_name }}" directory, which is what
+// makes findProjectWrapper treat it as a project wrapper. The wrapped fixture
+// additionally carries a root .tagignore (excluding *.tmp) and a wrapper-level
+// tag.template.json, so #412's two behaviors — a root-level .tagignore still
+// applying when unwrapping, and wrapper-level metadata being ordinary content —
+// are exercised through the shipped binary, not just in-process.
 func writeScaffoldTemplate(t *testing.T, dir, name string, wrapped bool) {
 	t.Helper()
 
@@ -40,10 +45,145 @@ func writeScaffoldTemplate(t *testing.T, dir, name string, wrapped bool) {
 	if wrapped {
 		contentDir = filepath.Join(root, "{{ vars.project_name }}")
 		require.NoError(t, os.MkdirAll(contentDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(root, ".tagignore"), []byte("*.tmp\n"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(contentDir, "tag.template.json"), []byte(
+			`{"inner":true}`,
+		), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(contentDir, "scratch.tmp"), []byte(
+			"should be excluded by the root .tagignore\n",
+		), 0o600))
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(contentDir, "README.md"), []byte(
 		"hello {{ vars.project_name }}\n",
 	), 0o600))
+}
+
+// TestIT_Scaffold_UnwrappedTemplate_NothingUnderTheWrapperIsSilentlyDropped is
+// the ticket's mandated regression test for #412: unwrapping a project-wrapper
+// template silently dropped files two different ways — a root-level
+// .tagignore was never consulted while walking the wrapper (files it should
+// exclude were generated anyway), and TAG metadata files sitting INSIDE the
+// wrapper (tag.template.json, .tagignore) were wrongly treated as
+// template-root metadata and vanished from both disk and files[] at exit 0.
+//
+// The oracle is a full listing of the output directory, cross-checked against
+// files[] in both directions (nothing missing, nothing extra), plus byte
+// assertions on every expected file's rendered content.
+func TestIT_Scaffold_UnwrappedTemplate_NothingUnderTheWrapperIsSilentlyDropped(t *testing.T) {
+	tests := []struct {
+		name        string
+		build       func(t *testing.T, root, wrapper string)
+		wantTree    []string
+		wantContent map[string]string
+	}{
+		{
+			name: "root .tagignore excludes a wrapper-level scratch file",
+			build: func(t *testing.T, root, wrapper string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(root, ".tagignore"), []byte("*.tmp\n"), 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(wrapper, "scratch.tmp"), []byte("should not appear\n"), 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(wrapper, "README.md"), []byte("hello {{ vars.project_name }}\n"), 0o600))
+			},
+			wantTree: []string{".tag/history.json", ".tagconfig.json", "README.md"},
+			wantContent: map[string]string{
+				"README.md": "hello my-proj\n",
+			},
+		},
+		{
+			name: "wrapper-level tag.template.json and .tagignore are content, not metadata",
+			build: func(t *testing.T, root, wrapper string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(wrapper, "tag.template.json"), []byte(`{"inner":true}`), 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(wrapper, ".tagignore"), []byte("node_modules/\n"), 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(wrapper, "README.md"), []byte("hello {{ vars.project_name }}\n"), 0o600))
+			},
+			wantTree: []string{".tag/history.json", ".tagconfig.json", ".tagignore", "README.md", "tag.template.json"},
+			wantContent: map[string]string{
+				"README.md":         "hello my-proj\n",
+				"tag.template.json": `{"inner":true}`,
+				".tagignore":        "node_modules/\n",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+
+			root := filepath.Join(dir, "tmpl")
+			require.NoError(t, os.MkdirAll(root, 0o750))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "tag.template.json"), []byte(
+				`{"name":"t","description":"d","vars":{"project_name":"my_project"}}`,
+			), 0o600))
+
+			wrapper := filepath.Join(root, "{{ vars.project_name }}")
+			require.NoError(t, os.MkdirAll(wrapper, 0o750))
+
+			tt.build(t, root, wrapper)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			stdout, stderr, runErr := runTagSubprocess(t, ctx, dir,
+				"scaffold", "./tmpl", "my-proj", "-m", "project_name=my-proj", "--format", "json")
+			require.NoError(t, ctx.Err(), "subprocess did not terminate before the deadline")
+			require.NoError(t, runErr, "stderr: %s", stderr)
+
+			dec := json.NewDecoder(bytes.NewReader(stdout))
+			var doc scaffoldJSONDoc
+			require.NoError(t, dec.Decode(&doc))
+			_, err = dec.Token()
+			require.ErrorIs(t, err, io.EOF, "stdout carried more than one JSON document")
+
+			var gotTree []string
+			walkErr := filepath.Walk(doc.OutputDir, func(path string, info os.FileInfo, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if info.IsDir() {
+					return nil
+				}
+				rel, relErr := filepath.Rel(doc.OutputDir, path)
+				if relErr != nil {
+					return relErr
+				}
+				gotTree = append(gotTree, filepath.ToSlash(rel))
+				return nil
+			})
+			require.NoError(t, walkErr)
+			sort.Strings(gotTree)
+
+			wantTree := append([]string(nil), tt.wantTree...)
+			sort.Strings(wantTree)
+			assert.Equal(t, wantTree, gotTree, "on-disk tree must match exactly — nothing missing, nothing extra")
+
+			var docFiles []string
+			for _, f := range doc.Files {
+				docFiles = append(docFiles, f.Path)
+			}
+			sort.Strings(docFiles)
+
+			var wantFiles []string
+			for _, p := range wantTree {
+				if p == ".tagconfig.json" || strings.HasPrefix(p, ".tag/") {
+					continue
+				}
+				wantFiles = append(wantFiles, p)
+			}
+			sort.Strings(wantFiles)
+			assert.Equal(t, wantFiles, docFiles, "files[] must match exactly — nothing missing, nothing extra")
+
+			for relPath, want := range tt.wantContent {
+				got, readErr := os.ReadFile(filepath.Join(doc.OutputDir, relPath))
+				require.NoError(t, readErr)
+				assert.Equal(t, want, string(got))
+			}
+
+			_, statErr := os.Stat(filepath.Join(doc.OutputDir, "scratch.tmp"))
+			assert.True(t, os.IsNotExist(statErr), "scratch.tmp must never appear in output")
+		})
+	}
 }
 
 // TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree pins the #390 contract
@@ -61,6 +201,7 @@ func TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree(t *testing.T) {
 		wantSeparate  bool
 		wantOutputDir string
 		wantFirstFile string
+		wantFileCount int
 	}{
 		{
 			name:          "plain template with --output",
@@ -69,22 +210,32 @@ func TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree(t *testing.T) {
 			wantSeparate:  false,
 			wantOutputDir: "out/proj",
 			wantFirstFile: "README.md",
+			wantFileCount: 1,
 		},
 		{
+			// The wrapped fixture also carries a wrapper-level tag.template.json
+			// (#412: content, not metadata, at that depth) — README.md still
+			// sorts first.
 			name:          "wrapper template with --output does not unwrap",
 			wrapped:       true,
 			useOutputFlag: true,
 			wantSeparate:  true,
 			wantOutputDir: "out/proj",
 			wantFirstFile: "my-proj/README.md",
+			wantFileCount: 2,
 		},
 		{
+			// #412: the root .tagignore's *.tmp pattern must still exclude
+			// scratch.tmp when unwrapping, and the wrapper-level
+			// tag.template.json must survive as content — both silently
+			// broken before the fix.
 			name:          "wrapper template without --output unwraps",
 			wrapped:       true,
 			useOutputFlag: false,
 			wantSeparate:  false,
 			wantOutputDir: "my-proj",
 			wantFirstFile: "README.md",
+			wantFileCount: 2,
 		},
 	}
 
@@ -119,7 +270,7 @@ func TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree(t *testing.T) {
 			assert.Equal(t, filepath.Join(dir, tt.wantOutputDir), doc.OutputDir)
 			assert.True(t, filepath.IsAbs(doc.ProjectRoot), "project_root must be absolute")
 
-			require.Len(t, doc.Files, 1)
+			require.Len(t, doc.Files, tt.wantFileCount)
 			assert.Equal(t, tt.wantFirstFile, doc.Files[0].Path)
 
 			// files[].path is relative to output_dir in BOTH shapes, so this is
