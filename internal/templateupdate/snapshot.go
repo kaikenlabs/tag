@@ -16,6 +16,15 @@ import (
 // It skips the .tag/ directory, .git/, and the .tagconfig.json file itself.
 // Binary detection uses the same heuristic as template rendering.
 func ReadProjectFiles(projectDir string) (map[string]*RenderedFile, error) {
+	// filepath.WalkDir does not descend into a symlinked root, so a symlinked
+	// project dir used to snapshot zero files with a nil error and make the
+	// 3-way merge treat every file as deleted. Map keys stay relative, so
+	// resolving here is invisible to every consumer.
+	projectDir, resolveErr := fileutil.ResolveSymlinkedRoot(projectDir)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+
 	files := make(map[string]*RenderedFile)
 
 	err := filepath.WalkDir(projectDir, func(path string, d fs.DirEntry, walkErr error) error {
