@@ -1098,7 +1098,7 @@ func TestUT_Write_LargeBinaryFileStreaming(t *testing.T) {
 	assert.Equal(t, binaryContent, outputContent)
 }
 
-// --- isSkippedEntry ---
+// --- isRootMetadataFile / isInternalTree ---
 
 func TestUT_IsRootMetadataFile(t *testing.T) {
 	tests := []struct {

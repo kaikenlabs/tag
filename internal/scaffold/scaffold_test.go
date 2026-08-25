@@ -1117,18 +1117,24 @@ func TestIT_Scaffold_TagConfigDefaultOutputDir(t *testing.T) {
 // between findProjectWrapper (scaffold.go) and Write's walk (output.go): both
 // read the same root .tagignore, but no unit test on either side alone can
 // observe whether the two decisions stay consistent with each other.
+//
+// The load-bearing row is the last one, where a single .tagignore drives BOTH
+// decisions in one run: it hides a sibling (so detection unwraps) and matches
+// a file inside the wrapper (so the writer must honour the same file). A row
+// whose ignored entry sits only beside the wrapper cannot observe the writer's
+// anchor at all, because the unwrapped walk never visits it.
 func TestIT_Scaffold_WrapperDetectionAndWriterAgreeOnTagignore(t *testing.T) {
 	tests := []struct {
-		name       string
-		tagignore  string
-		createDocs bool
-		wantFiles  []string
+		name         string
+		tagignore    string
+		createDocs   bool
+		wrapperExtra string
+		wantFiles    []string
 	}{
 		{
-			name:       "root .tagignore names the wrapper itself",
-			tagignore:  "{{ vars.project_name }}/\n",
-			createDocs: false,
-			wantFiles:  nil,
+			name:      "root .tagignore names the wrapper itself",
+			tagignore: "{{ vars.project_name }}/\n",
+			wantFiles: nil,
 		},
 		{
 			name:       "root .tagignore names a sibling",
@@ -1137,10 +1143,15 @@ func TestIT_Scaffold_WrapperDetectionAndWriterAgreeOnTagignore(t *testing.T) {
 			wantFiles:  []string{"README.md"},
 		},
 		{
-			name:       "neither",
-			tagignore:  "",
-			createDocs: false,
-			wantFiles:  []string{"README.md"},
+			name:      "neither",
+			wantFiles: []string{"README.md"},
+		},
+		{
+			name:         "one .tagignore hides a sibling and excludes inside the wrapper",
+			tagignore:    "docs/\n*.log\n",
+			createDocs:   true,
+			wrapperExtra: "debug.log",
+			wantFiles:    []string{"README.md"},
 		},
 	}
 
@@ -1154,6 +1165,9 @@ func TestIT_Scaffold_WrapperDetectionAndWriterAgreeOnTagignore(t *testing.T) {
 			require.NoError(t, os.MkdirAll(wrapperDir, 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "README.md"), []byte("hi"), 0o644))
 
+			if tt.wrapperExtra != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, tt.wrapperExtra), []byte("x"), 0o644))
+			}
 			if tt.createDocs {
 				require.NoError(t, os.MkdirAll(filepath.Join(templateDir, "docs"), 0o755))
 				require.NoError(t, os.WriteFile(filepath.Join(templateDir, "docs", "guide.md"), []byte("g"), 0o644))

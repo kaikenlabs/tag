@@ -200,8 +200,7 @@ func TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree(t *testing.T) {
 		useOutputFlag bool
 		wantSeparate  bool
 		wantOutputDir string
-		wantFirstFile string
-		wantFileCount int
+		wantFiles     []string
 	}{
 		{
 			name:          "plain template with --output",
@@ -209,33 +208,31 @@ func TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree(t *testing.T) {
 			useOutputFlag: true,
 			wantSeparate:  false,
 			wantOutputDir: "out/proj",
-			wantFirstFile: "README.md",
-			wantFileCount: 1,
+			wantFiles:     []string{"README.md"},
 		},
 		{
-			// The wrapped fixture also carries a wrapper-level tag.template.json
-			// (#412: content, not metadata, at that depth) — README.md still
-			// sorts first.
+			// The wrapped fixture also carries a wrapper-level tag.template.json,
+			// which #412 makes content rather than metadata at that depth.
 			name:          "wrapper template with --output does not unwrap",
 			wrapped:       true,
 			useOutputFlag: true,
 			wantSeparate:  true,
 			wantOutputDir: "out/proj",
-			wantFirstFile: "my-proj/README.md",
-			wantFileCount: 2,
+			wantFiles:     []string{"my-proj/README.md", "my-proj/tag.template.json"},
 		},
 		{
 			// #412: the root .tagignore's *.tmp pattern must still exclude
 			// scratch.tmp when unwrapping, and the wrapper-level
-			// tag.template.json must survive as content — both silently
-			// broken before the fix.
+			// tag.template.json must survive as content. Asserting the whole
+			// set matters — under the original bug those two defects cancel in
+			// a count (one file wrongly dropped, one wrongly kept) and leave
+			// the alphabetically-first entry unchanged.
 			name:          "wrapper template without --output unwraps",
 			wrapped:       true,
 			useOutputFlag: false,
 			wantSeparate:  false,
 			wantOutputDir: "my-proj",
-			wantFirstFile: "README.md",
-			wantFileCount: 2,
+			wantFiles:     []string{"README.md", "tag.template.json"},
 		},
 	}
 
@@ -270,8 +267,12 @@ func TestIT_ScaffoldJSON_ProjectRootNamesTheGeneratedTree(t *testing.T) {
 			assert.Equal(t, filepath.Join(dir, tt.wantOutputDir), doc.OutputDir)
 			assert.True(t, filepath.IsAbs(doc.ProjectRoot), "project_root must be absolute")
 
-			require.Len(t, doc.Files, tt.wantFileCount)
-			assert.Equal(t, tt.wantFirstFile, doc.Files[0].Path)
+			gotFiles := make([]string, 0, len(doc.Files))
+			for _, f := range doc.Files {
+				gotFiles = append(gotFiles, f.Path)
+			}
+			sort.Strings(gotFiles)
+			require.Equal(t, tt.wantFiles, gotFiles, "files[] must match exactly — nothing missing, nothing extra")
 
 			// files[].path is relative to output_dir in BOTH shapes, so this is
 			// where the generated file really is.
