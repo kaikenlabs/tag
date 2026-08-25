@@ -115,11 +115,6 @@ func extractGeneratorActions(genName, genDir string) ([]ActionInfo, []Warning) {
 	var warnings []Warning
 
 	for filePath, content := range templates {
-		// Skip tag.template.json — not a template file.
-		if filepath.Base(filePath) == types.TemplateConfigFile {
-			continue
-		}
-
 		action, warn := parseTemplateAction(genName, filePath, content)
 		if warn != nil {
 			warnings = append(warnings, *warn)

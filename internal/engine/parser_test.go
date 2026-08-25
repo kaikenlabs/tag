@@ -2,6 +2,8 @@ package engine
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -551,4 +553,62 @@ func TestUT_Parse_EmptyGeneratorDir(t *testing.T) {
 	data, err := te.Parse(InputData{Name: "test"})
 	require.NoError(t, err)
 	assert.Empty(t, data, "empty directory should produce no parsed templates")
+}
+
+// TestUT_LoadTemplateFiles_SkipsTemplateConfigFile pins #335: a generator that
+// ships its own tag.template.json must still generate. The config file is skipped
+// as a template while every real template — including near-miss filenames — loads.
+func TestUT_LoadTemplateFiles_SkipsTemplateConfigFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write := func(name, content string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+	write(types.TemplateConfigFile, `{"vars": {"port": {"type": "string", "default": "8080"}}}`)
+	write("handler.tmpl", "---\nto: internal/{{ name | snake_case }}.go\n---\npackage internal\n")
+	// Near-miss names are ordinary templates; the skip must key on the exact base name.
+	write("tag.template.json.tmpl", "---\nto: near_miss_suffix.go\n---\nbody\n")
+	write("my.tag.template.json", "---\nto: near_miss_prefix.go\n---\nbody\n")
+
+	templates, err := LoadTemplateFiles(dir)
+	require.NoError(t, err)
+
+	loaded := make([]string, 0, len(templates))
+	for path := range templates {
+		loaded = append(loaded, filepath.Base(path))
+	}
+	assert.ElementsMatch(t, []string{"handler.tmpl", "tag.template.json.tmpl", "my.tag.template.json"}, loaded)
+
+	// The whole point of #335: Parse no longer aborts on the config file.
+	te := newTestParser(t)
+	te.templates = templates
+	data, err := te.Parse(InputData{Name: "UserService"})
+	require.NoError(t, err)
+
+	tos := make([]string, 0, len(data))
+	for _, d := range data {
+		tos = append(tos, d.To)
+	}
+	assert.ElementsMatch(t, []string{"internal/user_service.go", "near_miss_suffix.go", "near_miss_prefix.go"}, tos)
+}
+
+// TestUT_LoadTemplateFiles_ConfigOnlyDirIsCleanNoOp pins the degenerate case:
+// a generator holding nothing but tag.template.json is empty, not an error.
+func TestUT_LoadTemplateFiles_ConfigOnlyDirIsCleanNoOp(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, types.TemplateConfigFile), []byte(`{"vars": {}}`), 0o600))
+
+	templates, err := LoadTemplateFiles(dir)
+	require.NoError(t, err)
+	assert.Empty(t, templates)
+
+	te := newTestParser(t)
+	te.templates = templates
+	data, err := te.Parse(InputData{Name: "widget"})
+	require.NoError(t, err)
+	assert.Empty(t, data)
 }
