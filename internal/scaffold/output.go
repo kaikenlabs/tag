@@ -108,7 +108,10 @@ func (w *DefaultOutputWriter) Write(templateRoot, wrapperDir, outputDir string, 
 		return nil, fmt.Errorf("load ignore patterns: %w", err)
 	}
 
-	walkRoot := filepath.Join(templateRoot, wrapperDir)
+	walkRoot := templateRoot
+	if wrapperDir != "" {
+		walkRoot = filepath.Join(templateRoot, wrapperDir)
+	}
 
 	// Walk the effective root (the wrapper, when unwrapping)
 	walkErr := filepath.WalkDir(walkRoot, func(srcPath string, d fs.DirEntry, err error) error {
