@@ -109,6 +109,19 @@ func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 		resolvedDir = resolveResult.Path
 	}
 
+	// filepath.WalkDir does not descend into a symlinked root, so CopyDir used
+	// to store an empty template at exit 0 for `tag lib add ./a-symlink`. Only
+	// a local, user-supplied ref is resolved: a remote ref's resolvedDir holds
+	// fetched content, where a repository can commit its subpath as a symlink
+	// pointing outside the tree. Resolution happens after name derivation, so
+	// the derived name and the recorded Source keep the ref's own spelling.
+	if remote.IsLocal(opts.Ref) {
+		resolvedDir, err = fileutil.ResolveSymlinkedRoot(resolvedDir)
+		if err != nil {
+			return nil, &LibraryError{Name: name, Operation: "add", Err: err}
+		}
+	}
+
 	destPath := filepath.Join(l.dataDir, templatesDir, name)
 
 	// Store template (convert if Cookiecutter, copy if TAG)
