@@ -777,6 +777,7 @@ func TestUT_ResolveGeneratorPaths_LocalFallback(t *testing.T) {
 	// Create a local generator
 	genDir := filepath.Join(tmpDir, "myGen")
 	require.NoError(t, os.MkdirAll(genDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "gen.tmpl"), []byte("content"), 0o644))
 
 	cfg := &config.Config{
 		Env: config.Env{Path: tmpDir},
@@ -1123,7 +1124,9 @@ func TestUT_GenerateList_LocalGenerators(t *testing.T) {
 
 	// Create local generators
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "component"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "component", "gen.tmpl"), []byte("content"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "page"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "page", "gen.tmpl"), []byte("content"), 0o644))
 	// Create _shared (should be excluded from listing)
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "_shared"), 0o750))
 
@@ -1201,6 +1204,7 @@ func TestUT_ScanGenerators_SkipsReserved(t *testing.T) {
 
 	// Create generators and reserved dirs
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "component"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "component", "gen.tmpl"), []byte("content"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "_shared"), 0o750))
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "_bundles"), 0o750))
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".hidden"), 0o750))
@@ -1335,6 +1339,7 @@ func TestUT_ResolveGeneratorPaths_LibraryFirst(t *testing.T) {
 	// Create generator inside the library template's .tag dir
 	genDir := filepath.Join(templateDir, ".tag", "component")
 	require.NoError(t, os.MkdirAll(genDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "gen.tmpl"), []byte("content"), 0o644))
 
 	cfg := createTestConfigWithLib(t, t.TempDir(), "my-template")
 
@@ -1356,6 +1361,7 @@ func TestUT_ResolveGeneratorPaths_LibraryFallbackToLocal(t *testing.T) {
 	tmpDir := setupTempDir(t)
 	localGenDir := filepath.Join(tmpDir, "component")
 	require.NoError(t, os.MkdirAll(localGenDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(localGenDir, "gen.tmpl"), []byte("content"), 0o644))
 
 	cfg := createTestConfigWithLib(t, tmpDir, "my-template")
 

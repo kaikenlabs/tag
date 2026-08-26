@@ -185,7 +185,7 @@ func LoadTemplateFiles(dirPath string) (map[string]string, error) {
 	}
 
 	for _, file := range files {
-		if file.IsDir() || file.Name() == types.TemplateConfigFile {
+		if !isTemplateFileEntry(file) {
 			continue
 		}
 		fileLocation := filepath.Join(dirPath, file.Name())
@@ -198,6 +198,27 @@ func LoadTemplateFiles(dirPath string) (map[string]string, error) {
 		rootTemplates[fileLocation] = string(data)
 	}
 	return rootTemplates, nil
+}
+
+// isTemplateFileEntry reports whether entry is a file LoadTemplateFiles would
+// load: not a directory, and not the reserved types.TemplateConfigFile.
+func isTemplateFileEntry(entry os.DirEntry) bool {
+	return !entry.IsDir() && entry.Name() != types.TemplateConfigFile
+}
+
+// HasTemplateFiles reports whether dir holds at least one file LoadTemplateFiles
+// would load. It is what distinguishes a generator directory from an empty
+// directory that merely shares a generator's name.
+//
+// It reports true when the directory cannot be read: an unreadable generator
+// directory fails loudly today, and reporting false would make resolution skip
+// it and silently fall through to a same-named bundle instead.
+func HasTemplateFiles(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return true
+	}
+	return slices.ContainsFunc(entries, isTemplateFileEntry)
 }
 
 // orderTemplateData sorts templates by action: Create → OpenAPI → Inject → Append.

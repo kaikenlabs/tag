@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,7 +37,9 @@ func descriptionsByName(infos []GeneratorInfo, name string) []string {
 func TestUT_GenerateList_ScansBothLibraryRoots(t *testing.T) {
 	setupLibEntryRoots(t, "roots-t6", map[string]string{
 		filepath.Join(types.TemplatesDir, "dupgen", types.TemplateConfigFile):                       `{"description":"tag-desc"}`,
+		filepath.Join(types.TemplatesDir, "dupgen", "gen.tmpl"):                                     "content",
 		filepath.Join(types.GeneratorsDir, "dupgen", types.TemplateConfigFile):                      `{"description":"generators-desc"}`,
+		filepath.Join(types.GeneratorsDir, "dupgen", "gen.tmpl"):                                    "content",
 		filepath.Join(types.TemplatesDir, "onlyTag", "gen.go"):                                      "package main\n",
 		filepath.Join(types.GeneratorsDir, "onlyGenerators", "gen.go"):                              "package main\n",
 		filepath.Join(types.TemplatesDir, types.BundlesDir, "dupbundle", "dupbundle.json"):          `{"description":"tag-bundle-desc","generators":[{"name":"g1"}]}`,
@@ -69,4 +72,87 @@ func TestUT_GenerateList_ScansBothLibraryRoots(t *testing.T) {
 	assert.Contains(t, descriptionsByName(doc.Bundles, "dupbundle"), "tag-bundle-desc")
 	assert.Equal(t, 1, countByName(doc.Bundles, "onlyTagBundle"))
 	assert.Equal(t, 1, countByName(doc.Bundles, "onlyGenBundle"))
+}
+
+// TestUT_GenerateList_OmitsEmptyGeneratorDirs pins #436: an empty generator
+// directory must not appear in `tag generate list`. The positive half is
+// mandatory — a bare absence assertion would pass for free if the library
+// entry never resolved at all.
+func TestUT_GenerateList_OmitsEmptyGeneratorDirs(t *testing.T) {
+	templateDir := setupLibEntryRoots(t, "roots-t436-g", map[string]string{
+		filepath.Join(types.GeneratorsDir, "populated", "gen.tmpl"): "content",
+	})
+	emptyDir := filepath.Join(templateDir, types.GeneratorsDir, "empty")
+	require.NoError(t, os.MkdirAll(emptyDir, 0o750))
+	entries, err := os.ReadDir(emptyDir)
+	require.NoError(t, err)
+	require.Empty(t, entries, "fixture invariant: generator dir must actually be empty")
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "roots-t436-g")
+
+	var buf bytes.Buffer
+	err = generateList(cfg, true, &buf, formatJSON)
+	require.NoError(t, err)
+
+	var doc generatorListJSON
+	dec := json.NewDecoder(&buf)
+	require.NoError(t, dec.Decode(&doc))
+
+	assert.Equal(t, 0, countByName(doc.Generators, "empty"), "an empty generator dir must not be listed")
+	assert.Equal(t, 1, countByName(doc.Generators, "populated"), "a populated sibling must still be listed")
+}
+
+// TestUT_GenerateList_EmptyTagDirDoesNotHideGeneratorsRootEntry catches an
+// implementation that filters empty directories AFTER appendNewByName's
+// name-keyed dedup instead of before it: an empty .tag/foo would claim the
+// name "foo" on collision, get dropped for being empty, and hide the real
+// generator sitting in _generators/foo.
+func TestUT_GenerateList_EmptyTagDirDoesNotHideGeneratorsRootEntry(t *testing.T) {
+	const marker = "generators-root-desc-t436"
+	templateDir := setupLibEntryRoots(t, "roots-t436-h", map[string]string{
+		filepath.Join(types.GeneratorsDir, "foo", types.TemplateConfigFile): `{"description":"` + marker + `"}`,
+		filepath.Join(types.GeneratorsDir, "foo", "gen.tmpl"):               "content",
+	})
+	tagFooDir := filepath.Join(templateDir, types.TemplatesDir, "foo")
+	require.NoError(t, os.MkdirAll(tagFooDir, 0o750))
+	entries, err := os.ReadDir(tagFooDir)
+	require.NoError(t, err)
+	require.Empty(t, entries, "fixture invariant: .tag/foo must actually be empty")
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "roots-t436-h")
+
+	var buf bytes.Buffer
+	err = generateList(cfg, true, &buf, formatJSON)
+	require.NoError(t, err)
+
+	var doc generatorListJSON
+	dec := json.NewDecoder(&buf)
+	require.NoError(t, dec.Decode(&doc))
+
+	assert.Equal(t, 1, countByName(doc.Generators, "foo"), "foo must still be listed from _generators/")
+	assert.Contains(t, descriptionsByName(doc.Generators, "foo"), marker)
+}
+
+// TestUT_CompleteGeneratorNames_OmitsEmptyGeneratorDirs is the shell
+// completion analog of TestUT_GenerateList_OmitsEmptyGeneratorDirs. A
+// listing that disagrees with what `generate` actually runs is worse than
+// either bug alone.
+func TestUT_CompleteGeneratorNames_OmitsEmptyGeneratorDirs(t *testing.T) {
+	templateDir := setupLibEntryRoots(t, "roots-t436-i", map[string]string{
+		filepath.Join(types.GeneratorsDir, "populated", "gen.tmpl"): "content",
+	})
+	emptyDir := filepath.Join(templateDir, types.GeneratorsDir, "empty")
+	require.NoError(t, os.MkdirAll(emptyDir, 0o750))
+	entries, err := os.ReadDir(emptyDir)
+	require.NoError(t, err)
+	require.Empty(t, entries, "fixture invariant: generator dir must actually be empty")
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "roots-t436-i")
+
+	var buf bytes.Buffer
+	completeGeneratorNames(cfg, &buf)
+
+	names := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	assert.NotContains(t, names, "empty")
+	assert.Contains(t, names, "populated")
 }

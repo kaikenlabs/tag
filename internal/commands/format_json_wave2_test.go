@@ -44,6 +44,7 @@ func seedGeneratorsWithBundleMembers(t *testing.T) *config.Config {
 	writeJSONFixture(t, filepath.Join(genDir, types.TemplateConfigFile), map[string]any{
 		"description": "A test generator",
 	})
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "gen.tmpl"), []byte("content"), 0o644))
 
 	gatedDir := filepath.Join(tagDir, "gatedgen")
 	require.NoError(t, os.MkdirAll(gatedDir, 0o750))
@@ -51,6 +52,7 @@ func seedGeneratorsWithBundleMembers(t *testing.T) *config.Config {
 		"description": "Needs a flag that is not set",
 		"requires":    []string{"use_db"},
 	})
+	require.NoError(t, os.WriteFile(filepath.Join(gatedDir, "gen.tmpl"), []byte("content"), 0o644))
 
 	bundleDir := filepath.Join(tagDir, "_bundles", "mybundle")
 	require.NoError(t, os.MkdirAll(bundleDir, 0o750))

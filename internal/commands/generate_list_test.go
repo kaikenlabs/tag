@@ -31,6 +31,7 @@ func TestUT_ScanDirEntries_SkipsDotAndUnderscorePrefixed(t *testing.T) {
 	for _, name := range []string{"_private", ".hidden", "visible"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o750))
 	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "visible", "gen.tmpl"), []byte("content"), 0o644))
 
 	result := scanDirEntries(dir)
 	require.Len(t, result, 1)
@@ -46,6 +47,7 @@ func TestUT_ScanDirEntries_SkipsHistory(t *testing.T) {
 	for _, name := range []string{"history", "realgen"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o750))
 	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "realgen", "gen.tmpl"), []byte("content"), 0o644))
 
 	result := scanDirEntries(dir)
 	require.Len(t, result, 1)
@@ -58,6 +60,7 @@ func TestUT_ScanDirEntries_SkipsFiles(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "notadir.go"), []byte("x"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "realgen"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "realgen", "gen.tmpl"), []byte("content"), 0o644))
 
 	result := scanDirEntries(dir)
 	require.Len(t, result, 1)
@@ -77,6 +80,7 @@ func TestUT_ScanDirEntries_ReadsTemplateConfig(t *testing.T) {
 	data, err := json.Marshal(tc)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(genDir, types.TemplateConfigFile), data, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "gen.tmpl"), []byte("content"), 0o644))
 
 	result := scanDirEntries(dir)
 	require.Len(t, result, 1)
@@ -286,6 +290,7 @@ func TestUT_GenerateList_WithTemplateOriginHeader(t *testing.T) {
 
 	// Create a local generator so the list isn't empty
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "svc"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "svc", "gen.tmpl"), []byte("content"), 0o644))
 
 	var buf bytes.Buffer
 	err := generateList(cfg, false, &buf, formatText)
@@ -311,6 +316,7 @@ func TestUT_GenerateList_TemplateOriginNoVersion(t *testing.T) {
 	}
 
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "svc"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "svc", "gen.tmpl"), []byte("content"), 0o644))
 
 	var buf bytes.Buffer
 	err := generateList(cfg, false, &buf, formatText)
@@ -341,6 +347,7 @@ func TestUT_GenerateList_LocalWithBundles(t *testing.T) {
 
 	// Create a local generator
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "model"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "model", "gen.tmpl"), []byte("content"), 0o644))
 	// Create a local bundle
 	bundleDir := filepath.Join(dir, "_bundles", "full-stack")
 	require.NoError(t, os.MkdirAll(bundleDir, 0o750))
@@ -369,6 +376,7 @@ func TestUT_CollectGeneratorLists_LocalOnly(t *testing.T) {
 
 	// Create local generator
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ctrl"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ctrl", "gen.tmpl"), []byte("content"), 0o644))
 
 	lists := collectGeneratorLists(cfg)
 	assert.Empty(t, lists.templateName)
@@ -385,6 +393,7 @@ func TestUT_CollectGeneratorLists_WithLibrary(t *testing.T) {
 	libTagDir := filepath.Join(templateDir, types.TemplatesDir)
 	genDir := filepath.Join(libTagDir, "libgen")
 	require.NoError(t, os.MkdirAll(genDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "gen.tmpl"), []byte("content"), 0o644))
 
 	localDir := t.TempDir()
 	cfg := createTestConfigWithLib(t, localDir, templateName)

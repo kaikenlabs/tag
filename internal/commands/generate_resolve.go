@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/kaikenlabs/tag/internal/config"
+	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/pkg/app"
@@ -54,7 +55,7 @@ func resolveGeneratorPaths(cfg *config.Config, name string) (genDir, sharedDir s
 	// 2. Fall back to local .tag/
 	if cfg.Env.Path != "" {
 		candidate := filepath.Join(cfg.Env.Path, name)
-		if _, statErr := os.Stat(candidate); statErr == nil {
+		if _, statErr := os.Stat(candidate); statErr == nil && engine.HasTemplateFiles(candidate) {
 			sharedName := cfg.Env.SharedPath
 			if sharedName == "" {
 				sharedName = types.SharedDir
@@ -95,7 +96,7 @@ func resolveInLibraryTemplate(cfg *config.Config, relativePath string, wantDir b
 
 	for _, root := range libraryGeneratorRoots(templateDir) {
 		candidate = filepath.Join(root, relativePath)
-		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() == wantDir {
+		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() == wantDir && (!wantDir || engine.HasTemplateFiles(candidate)) {
 			return candidate, root, templateDir, true, nil
 		}
 	}

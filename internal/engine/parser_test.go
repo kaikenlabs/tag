@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -592,4 +593,146 @@ func TestUT_LoadTemplateFiles_SkipsTemplateConfigFile(t *testing.T) {
 		tos = append(tos, d.To)
 	}
 	assert.ElementsMatch(t, []string{"internal/user_service.go", "near_miss_suffix.go", "near_miss_prefix.go"}, tos)
+}
+
+// TestUT_HasTemplateFiles pins the predicate that distinguishes a real
+// generator directory from an empty (or config-only) directory that merely
+// shares a generator's name (#436).
+func TestUT_HasTemplateFiles(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, dir string)
+		want  bool
+	}{
+		{
+			name: "empty dir",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+			},
+			want: false,
+		},
+		{
+			name: "only tag.template.json",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, types.TemplateConfigFile), []byte(`{}`), 0o644))
+			},
+			want: false,
+		},
+		{
+			name: "only subdirectories",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "nested"), 0o750))
+			},
+			want: false,
+		},
+		{
+			name: "one template file",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "gen.tmpl"), []byte("---\nto: out.go\n---\nbody\n"), 0o644))
+			},
+			want: true,
+		},
+		{
+			name: "template plus config",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "gen.tmpl"), []byte("---\nto: out.go\n---\nbody\n"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, types.TemplateConfigFile), []byte(`{}`), 0o644))
+			},
+			want: true,
+		},
+		{
+			// Pins the deliberate out-of-scope decision: a dotfile is not
+			// specially skipped, so it counts as a template file. Hardening
+			// the loader to skip dotfiles is explicitly out of scope for #436.
+			name: "only a dotfile",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".DS_Store"), []byte("junk"), 0o644))
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.setup(t, dir)
+			assert.Equal(t, tt.want, HasTemplateFiles(dir))
+		})
+	}
+}
+
+// TestUT_HasTemplateFiles_UnreadableDirReportsTrue pins the fail-open choice
+// for both ways a directory can be unreadable: it does not exist, or it
+// exists but cannot be listed.
+func TestUT_HasTemplateFiles_UnreadableDirReportsTrue(t *testing.T) {
+	t.Run("nonexistent path", func(t *testing.T) {
+		assert.True(t, HasTemplateFiles(filepath.Join(t.TempDir(), "does-not-exist")))
+	})
+
+	t.Run("existing dir, unreadable", func(t *testing.T) {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			t.Skip("chmod-based permission denial is not meaningful on Windows or as root")
+		}
+
+		dir := t.TempDir()
+		require.NoError(t, os.Chmod(dir, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o750) })
+
+		_, readErr := os.ReadDir(dir)
+		require.Error(t, readErr, "fixture invariant: ReadDir must actually fail for this test to mean anything")
+
+		assert.True(t, HasTemplateFiles(dir))
+	})
+}
+
+// TestUT_HasTemplateFiles_AgreesWithLoadTemplateFiles is an anti-drift guard:
+// the two functions share one skip rule, so this invariant must hold over
+// every row above, including the unreadable and nonexistent ones.
+func TestUT_HasTemplateFiles_AgreesWithLoadTemplateFiles(t *testing.T) {
+	assertAgrees := func(t *testing.T, dir string) {
+		t.Helper()
+		loaded, loadErr := LoadTemplateFiles(dir)
+		want := loadErr != nil || len(loaded) > 0
+		assert.Equal(t, want, HasTemplateFiles(dir))
+	}
+
+	t.Run("empty dir", func(t *testing.T) {
+		assertAgrees(t, t.TempDir())
+	})
+
+	t.Run("only tag.template.json", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, types.TemplateConfigFile), []byte(`{}`), 0o644))
+		assertAgrees(t, dir)
+	})
+
+	t.Run("one template file", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "gen.tmpl"), []byte("body"), 0o644))
+		assertAgrees(t, dir)
+	})
+
+	t.Run("nonexistent path", func(t *testing.T) {
+		assertAgrees(t, filepath.Join(t.TempDir(), "does-not-exist"))
+	})
+
+	t.Run("existing dir, unreadable", func(t *testing.T) {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			t.Skip("chmod-based permission denial is not meaningful on Windows or as root")
+		}
+
+		dir := t.TempDir()
+		require.NoError(t, os.Chmod(dir, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o750) })
+
+		_, readErr := os.ReadDir(dir)
+		require.Error(t, readErr, "fixture invariant: ReadDir must actually fail for this test to mean anything")
+
+		assertAgrees(t, dir)
+	})
 }
