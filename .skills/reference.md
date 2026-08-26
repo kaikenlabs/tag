@@ -512,17 +512,24 @@ func {{ op.operationId | pascal }}() {}
 ### Library Management
 
 ```bash
-tag lib add gh:user/template           # Install
-tag lib add gh:user/template --as name # Custom name
+tag lib add gh:user/template           # Install; auto-derives "template-<12-hex-digest>"
+tag lib add gh:user/template --as name # Custom name, no digest — follow-on commands use "name"
 tag lib add --as name gh:user/template # Flags may come before or after the ref
-tag lib ls                             # List
+tag lib ls                             # List (NAME column is never truncated)
 tag lib ls --format json               # Machine-readable output
-tag lib edit my-template               # Open in editor
-tag lib edit my-template --editor vim  # Flags may come before or after the name too
-tag lib update my-template             # Re-fetch
+tag lib edit name                      # Open in editor
+tag lib edit name --editor vim         # Flags may come before or after the name too
+tag lib update name                    # Re-fetch
 tag lib update                         # Update all
-tag lib rm my-template                 # Remove
+tag lib rm name                        # Remove
 ```
+
+Without `--as`, the digest makes the name collision-free: two refs that share a basename (two
+orgs each publishing `service-template`) land in different slots. The digest excludes the
+version, so `repo@v1` and `repo@v2` derive the same name and `tag lib update` re-fetches that one
+slot in place — `--as` is how you keep two versions side by side. A local ref
+(`tag lib add ./my-template`) is unaffected: its name is still the bare directory basename. See
+[docs/commands/lib.md#library-naming](../docs/commands/lib.md#library-naming) for the full rule.
 
 Cookiecutter templates are auto-detected and converted when added.
 

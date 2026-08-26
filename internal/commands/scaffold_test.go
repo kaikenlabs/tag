@@ -3,10 +3,12 @@ package commands
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/remote"
@@ -343,6 +345,90 @@ func TestUT_ClassifyLibrarySlot(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestUT_PrepareLibrarySlot pins the slot -> opts mapping, which is the whole
+// of the #429 fix and the one piece neither classifyLibrarySlot nor
+// resolveLibrarySlot covers: they prove the verdict, this proves what the
+// verdict DOES. Without it, gutting prepareLibrarySlot's caller leaves every
+// unit test in this package green (measured).
+func TestUT_PrepareLibrarySlot(t *testing.T) {
+	newCtx := func(buf *bytes.Buffer) *cli.Context {
+		return cli.NewContext(&cli.App{Writer: buf}, flag.NewFlagSet("test", flag.ContinueOnError), nil)
+	}
+
+	t.Run("free slot records the name and skips the project copy", func(t *testing.T) {
+		// isolateLibrary mutates package-level var — do NOT use t.Parallel()
+		isolateLibrary(t)
+		const ref = "gh:acme/service-template@v1"
+
+		var buf bytes.Buffer
+		opts := scaffold.Options{}
+		shouldAdd := prepareLibrarySlot(newCtx(&buf), &opts, ref, false)
+
+		assert.True(t, shouldAdd, "a free slot must still be added after the scaffold")
+		assert.True(t, opts.SkipGeneratorCopy)
+		assert.Equal(t, remote.LibraryName(ref), opts.TemplateName)
+		assert.Empty(t, buf.String(), "a free slot reports nothing here; addToLibrary speaks after the run")
+	})
+
+	t.Run("same source behaves exactly like a free slot", func(t *testing.T) {
+		// setupFakeLibraryForRef mutates package-level var — do NOT use t.Parallel()
+		const ref = "gh:acme/service-template@v1"
+		setupFakeLibraryForRef(t, ref)
+
+		var buf bytes.Buffer
+		opts := scaffold.Options{}
+		shouldAdd := prepareLibrarySlot(newCtx(&buf), &opts, ref, false)
+
+		assert.True(t, shouldAdd)
+		assert.True(t, opts.SkipGeneratorCopy)
+		assert.Equal(t, remote.LibraryName(ref), opts.TemplateName)
+	})
+
+	t.Run("taken by another source keeps the generators and records no name", func(t *testing.T) {
+		// setupFakeLibraryForRef mutates package-level var — do NOT use t.Parallel()
+		const seededRef = "gh:acme/service-template@v1"
+		setupFakeLibraryForRef(t, seededRef)
+		const requestedRef = "gh:acme/service-template@v2"
+
+		var buf bytes.Buffer
+		opts := scaffold.Options{}
+		shouldAdd := prepareLibrarySlot(newCtx(&buf), &opts, requestedRef, false)
+
+		assert.False(t, shouldAdd, "a foreign occupant must not be overwritten")
+		assert.False(t, opts.SkipGeneratorCopy, "the project must keep its own generators")
+		assert.Empty(t, opts.TemplateName, "recording the name would resolve the WRONG template's generators")
+
+		out := buf.String()
+		assert.Contains(t, out, seededRef, "the message must name the occupying source")
+		assert.Contains(t, out, requestedRef, "the message must name this project's source")
+	})
+
+	t.Run("taken by another source stays silent under --format json", func(t *testing.T) {
+		// setupFakeLibraryForRef mutates package-level var — do NOT use t.Parallel()
+		setupFakeLibraryForRef(t, "gh:acme/service-template@v1")
+
+		var buf bytes.Buffer
+		opts := scaffold.Options{}
+		prepareLibrarySlot(newCtx(&buf), &opts, "gh:acme/service-template@v2", true)
+
+		assert.Empty(t, buf.String(), "stdout carries the JSON document; this message must not corrupt it")
+	})
+
+	t.Run("unavailable library fails safe", func(t *testing.T) {
+		// setupFakeLibraryError mutates package-level var — do NOT use t.Parallel()
+		setupFakeLibraryError(t)
+
+		var buf bytes.Buffer
+		opts := scaffold.Options{}
+		shouldAdd := prepareLibrarySlot(newCtx(&buf), &opts, "gh:acme/service-template@v1", false)
+
+		assert.False(t, shouldAdd)
+		assert.False(t, opts.SkipGeneratorCopy, "an unreadable library must not cost the project its generators")
+		assert.Empty(t, opts.TemplateName)
+		assert.Empty(t, buf.String(), "an unreadable library is a slog.Warn, not user-facing noise")
+	})
 }
 
 // TestUT_ResolveLibrarySlot exercises the impure wrapper end to end against

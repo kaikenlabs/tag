@@ -23,8 +23,15 @@ type GeneratorNotFoundError struct {
 
 func (e *GeneratorNotFoundError) Error() string {
 	if e.Template != "" {
+		// --as is not optional advice: since #430 a bare `tag lib add <source>`
+		// derives a collision-free name that will NOT match the name this
+		// project recorded, so the plain command silently fails to fix the
+		// very error it is suggested for. That applies both to a project
+		// scaffolded before #430 (short recorded name) and to one scaffolded
+		// after it whose library was rebuilt by an older tag.
 		return fmt.Sprintf("generator %q not found in template %q or local path.\n"+
-			"Ensure the template is in the library: tag lib add %s", e.Generator, e.Template, e.Source)
+			"Ensure the template is in the library: tag lib add %s --as %s",
+			e.Generator, e.Template, e.Source, e.Template)
 	}
 	return fmt.Sprintf("generator %q not found in %s", e.Generator, e.LocalPath)
 }

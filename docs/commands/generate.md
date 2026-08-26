@@ -489,9 +489,9 @@ A variable is considered "truthy" if it is a non-empty string, `true`, or a non-
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "generator not found in template ... or local path" | Generator not found in library template or local `.tag/` | Ensure the template is in the library (`tag lib add <ref>`) and the generator name is correct |
+| "generator not found in template ... or local path" | Generator not found in library template or local `.tag/` | Re-add under the exact name `.tagconfig.json` recorded: `tag lib add <ref> --as <name>` — a bare `tag lib add <ref>` now derives a different, digested name (see [Library Naming](lib.md#library-naming)) — and check the generator name is correct |
 | "generator not found in .tag" | Generator not found locally (no library template configured) | Create the generator in `.tag/` |
-| "template not found in library" | `.tagconfig.json` references a template that isn't installed | Run `tag lib add <ref>` to install the template |
+| "template not found in library" | `.tagconfig.json` references a template that isn't installed | Run `tag lib add <ref> --as <name>`, using the `template.name` value from `.tagconfig.json` as `<name>` |
 | "template version mismatch" | Library template version differs from scaffold-time version | Consider re-scaffolding or running `tag lib update <name>` |
 | "<kind> \"name\" requires the following variables to be enabled" | Prerequisites in `requires` not met by `.tagconfig.json` | Re-scaffold with the required variables enabled, or set them manually in `.tagconfig.json` |
 | "cannot open bundle file" | Bundle file not found | Verify bundle exists in `_bundles/` |

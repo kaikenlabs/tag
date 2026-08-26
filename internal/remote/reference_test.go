@@ -877,13 +877,28 @@ func TestUT_LibraryName_VersionExcluded(t *testing.T) {
 	}{
 		{"shorthand", "gh:a/b@v1", "gh:a/b@v2"},
 		// These three git URL syntaxes keep "@version" inside Reference.URL
-		// itself (verified by reading buildReference/parseGitURL/
-		// parseSSHStyle), unlike shorthand and zip URLs. Without stripping
-		// the version suffix from the URL before hashing, these three rows
-		// would fail while the others pass.
+		// itself (measured), unlike shorthand and zip URLs, so hashing URL
+		// alongside owner/repo leaked Version straight back into the
+		// identity. libraryDigest excludes URL for any ref that has an
+		// owner/repo, which is what makes these rows pass.
 		{"git URL", "git://example.com/a/b.git@v1", "git://example.com/a/b.git@v2"},
 		{"git+ssh URL", "git+ssh://git@example.com/a/b.git@v1", "git+ssh://git@example.com/a/b.git@v2"},
 		{"ssh-style", "git@github.com:a/b.git@v1", "git@github.com:a/b.git@v2"},
+		// A version AND a subpath together: URL ends with the SUBPATH, not
+		// the version, so the earlier "trim a trailing @version off URL"
+		// approach was a silent no-op here and these rows derived different
+		// names. Excluding URL entirely for owner/repo refs is what closes
+		// it by construction.
+		{"git URL with subpath", "git://example.com/a/b.git@v1/sub", "git://example.com/a/b.git@v2/sub"},
+		{"git+ssh URL with subpath", "git+ssh://git@example.com/a/b.git@v1/sub", "git+ssh://git@example.com/a/b.git@v2/sub"},
+		{"ssh-style with subpath", "git@github.com:a/b.git@v1/sub", "git@github.com:a/b.git@v2/sub"},
+		// A zip ref has no Repo, so DeriveName falls back to the RAW
+		// basename, which carries "@v1" with it. The digest halves already
+		// matched; it was the readable PREFIX that differed, so these rows
+		// fail unless libraryPrefix names an ownerless ref from the parsed
+		// (version-free) URL instead of the raw ref.
+		{"zip URL", "https://x.invalid/t.zip@v1", "https://x.invalid/t.zip@v2"},
+		{"zip URL nested path", "https://x.invalid/deep/t.zip@v1", "https://x.invalid/deep/t.zip@v2"},
 	}
 
 	for _, tt := range tests {
@@ -897,10 +912,31 @@ func TestUT_LibraryName_VersionExcluded(t *testing.T) {
 		"git://example.com/a/b.git":         "git://example.com/a/b.git@v1",
 		"git+ssh://git@example.com/a/b.git": "git+ssh://git@example.com/a/b.git@v1",
 		"git@github.com:a/b.git":            "git@github.com:a/b.git@v1",
+		"https://x.invalid/t.zip":           "https://x.invalid/t.zip@v1",
 	}
 	for bare, versioned := range unversioned {
 		t.Run("matches unversioned/"+bare, func(t *testing.T) {
 			assert.Equal(t, LibraryName(bare), LibraryName(versioned))
+		})
+	}
+}
+
+// TestUT_LibraryName_SpellingsOfOneRepoConverge pins the consequence of
+// excluding Reference.URL from the identity of an owner/repo ref: every way of
+// writing the same repository names the same library slot. Before that
+// exclusion, "git@github.com:a/b.git" and "git+ssh://git@github.com/a/b.git"
+// derived different names for one template, so scaffolding through the other
+// spelling was reported as a foreign occupant of the slot.
+func TestUT_LibraryName_SpellingsOfOneRepoConverge(t *testing.T) {
+	want := LibraryName("gh:a/b")
+	for _, ref := range []string{
+		"https://github.com/a/b.git",
+		"git@github.com:a/b.git",
+		"git+ssh://git@github.com/a/b.git",
+		"gh:a/b@v9",
+	} {
+		t.Run(ref, func(t *testing.T) {
+			assert.Equal(t, want, LibraryName(ref))
 		})
 	}
 }
@@ -954,12 +990,16 @@ func TestUT_LibraryName_DigestTuple(t *testing.T) {
 	parsed, err := Parse(ref)
 	require.NoError(t, err)
 
-	versionStrippedURL := parsed.URL
-	if parsed.Version != "" {
-		versionStrippedURL = strings.TrimSuffix(versionStrippedURL, "@"+parsed.Version)
+	// Recomputed independently of the production code so this pins the exact
+	// field order and the NUL separator, which the shape regex cannot. URL
+	// participates only for an ownerless ref; for gh:acme/api it must NOT,
+	// because URL carries "@version" for several git syntaxes.
+	ownerlessURL := ""
+	if parsed.Owner == "" && parsed.Repo == "" {
+		ownerlessURL = parsed.URL
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		string(parsed.Provider), parsed.Host, parsed.Owner, parsed.Repo, parsed.SubPath, versionStrippedURL,
+		string(parsed.Provider), parsed.Host, parsed.Owner, parsed.Repo, parsed.SubPath, ownerlessURL,
 	}, "\x00")))
 	wantSuffix := hex.EncodeToString(sum[:])[:12]
 
@@ -973,12 +1013,12 @@ func TestUT_LibraryName_LongPrefixTruncatesPrefixNotDigest(t *testing.T) {
 		t.Helper()
 		parsed, err := Parse(ref)
 		require.NoError(t, err)
-		versionStrippedURL := parsed.URL
-		if parsed.Version != "" {
-			versionStrippedURL = strings.TrimSuffix(versionStrippedURL, "@"+parsed.Version)
+		ownerlessURL := ""
+		if parsed.Owner == "" && parsed.Repo == "" {
+			ownerlessURL = parsed.URL
 		}
 		sum := sha256.Sum256([]byte(strings.Join([]string{
-			string(parsed.Provider), parsed.Host, parsed.Owner, parsed.Repo, parsed.SubPath, versionStrippedURL,
+			string(parsed.Provider), parsed.Host, parsed.Owner, parsed.Repo, parsed.SubPath, ownerlessURL,
 		}, "\x00")))
 		return hex.EncodeToString(sum[:])[:12]
 	}

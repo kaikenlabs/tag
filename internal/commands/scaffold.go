@@ -325,7 +325,7 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 	// suppresses that function's interactive "Add template to library?" prompt.
 	addToLib := !noLibrary && (isRemote || resolveAddToLib(c, templateDir, jsonMode))
 	if addToLib {
-		addToLib = prepareLibrarySlot(c, &opts, templateRef, isRemote, jsonMode)
+		addToLib = prepareLibrarySlot(c, &opts, templateRef, jsonMode)
 	}
 
 	// Verify template lockfile for remote templates.
@@ -354,25 +354,28 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 // and mutates opts accordingly, returning whether the caller should still
 // call addToLibrary after scaffolding.
 //
-// slotFree and slotSameSource reproduce the pre-#429 behaviour exactly:
-// generators are skipped from the project copy (they resolve from the
-// library instead), and — only for a remote ref, matching the previous
-// isRemote && !noLibrary condition — opts.TemplateName is recorded so
-// generate_resolve.go's library-first lookup can find them.
+// slotFree and slotSameSource skip the project generator copy and record
+// opts.TemplateName so generate_resolve.go's library-first lookup resolves
+// them from the library entry instead.
 //
 // slotTakenByOther and slotUnavailable are the #429 fix: recording a name
 // that resolves to an UNRELATED template's generators is worse than
 // recording no name at all, so neither mutates opts.TemplateName, and both
 // leave SkipGeneratorCopy false so the project keeps its own generators.
-func prepareLibrarySlot(c *cli.Context, opts *scaffold.Options, templateRef string, isRemote, jsonMode bool) bool {
+func prepareLibrarySlot(c *cli.Context, opts *scaffold.Options, templateRef string, jsonMode bool) bool {
 	slot, entry, libName := resolveLibrarySlot(templateRef)
 
 	switch slot {
 	case slotFree, slotSameSource:
+		// Recording the name is not optional once the copy is skipped: it is
+		// the only thing that lets generate_resolve.go find the generators
+		// again. Doing this for remote refs only (the pre-#429 behaviour) left
+		// `tag scaffold ./tpl proj --add-to-lib` with neither a library origin
+		// nor a local copy, so `tag generate` failed outright — reproduced
+		// against a build of main, so it predates #429 rather than regressing
+		// from it.
 		opts.SkipGeneratorCopy = true
-		if isRemote {
-			opts.TemplateName = libName
-		}
+		opts.TemplateName = libName
 		return true
 	case slotTakenByOther:
 		w := c.App.Writer
@@ -380,8 +383,9 @@ func prepareLibrarySlot(c *cli.Context, opts *scaffold.Options, templateRef stri
 			w = io.Discard
 		}
 		fmt.Fprintf(w, "Template %q is already in the library from %s.\n"+
-			"This project used %s; its generators were copied into the project instead.\n",
-			libName, entry.Source, templateRef)
+			"This project used %s; it keeps its own generators rather than resolving them\n"+
+			"from that entry. Run `tag lib add %s --as <name>` to add it under a name you choose.\n",
+			libName, entry.Source, templateRef, templateRef)
 		return false
 	default:
 		slog.Warn("could not check library before scaffold, leaving library untouched", "template", libName)
