@@ -57,6 +57,30 @@ tag lib add --as django gh:user/cookiecutter-django
 
 When adding a Cookiecutter template, TAG auto-detects `cookiecutter.json` and converts it to TAG format automatically.
 
+#### Library Naming
+
+Without `--as`, a **remote** ref's library name is `<basename>-<digest>`: a readable prefix (the
+repo name, `cookiecutter-` stripped) followed by a 12-character hex digest over the reference's
+provider, host, owner, repo and subpath. `tag lib add gh:user/go-api-template` lands as
+`go-api-template-056bdc99b152`, not `go-api-template`.
+
+The digest is what makes the name collision-free: `gh:orgA/service-template` and
+`gh:orgB/service-template` land in different slots instead of one overwriting the other. The
+digest excludes the version, so every spelling of one repository — `gh:user/repo`,
+`gh:user/repo@v1`, `https://github.com/user/repo.git`, `git@github.com:user/repo.git` — derives
+the *same* name and therefore the *same* slot; `tag lib update` re-fetches that slot in place
+rather than creating a new one per version. Pin two versions of the same template side by side
+with `--as`, once per version.
+
+`--as <name>` bypasses this entirely — the name you give is used verbatim, with no digest.
+
+A **local** directory (`tag lib add ./my-template`) is unaffected: its name is still the bare
+directory basename, since the ref you typed is already unambiguous.
+
+Once a template is in the library under a digested name, later commands (`tag lib edit`, `tag lib
+update`, `tag lib rm`, `tag scaffold <name>`) need that exact name — read it back with `tag lib
+ls` rather than guessing it from the ref.
+
 ---
 
 ### `tag lib ls`
@@ -76,12 +100,16 @@ Alias: `tag lib list`
 **Example output:**
 
 ```
-NAME                 SOURCE                         VERSION    DESCRIPTION
-----                 ------                         -------    -----------
-go-api               gh:user/go-api-template        v1.2.0     Go REST API template
-django               gh:user/cookiecutter-django     -          Django web app
-react-app            gl:org/react-starter           v3.0.0     React SPA template
+NAME                            SOURCE                         VERSION    DESCRIPTION
+----                            ------                         -------    -----------
+go-api-template-056bdc99b152    gh:user/go-api-template        v1.2.0     Go REST API template
+django                          gh:user/cookiecutter-django    -          Django web app
+my-local                        ./my-template                 -          Local template
 ```
+
+The first row is what `tag lib add gh:user/go-api-template` (no `--as`) actually produces — see
+[Library Naming](#library-naming) above. The NAME column is never truncated, so a digested name
+like that one prints in full.
 
 **Machine-readable output:**
 
@@ -92,7 +120,7 @@ tag lib ls --format json
 ```json
 {
   "templates": [
-    { "name": "go-api", "source": "gh:user/go-api-template", "version": "v1.2.0", "added_at": "...", "updated_at": "..." }
+    { "name": "go-api-template-056bdc99b152", "source": "gh:user/go-api-template", "version": "v1.2.0", "added_at": "...", "updated_at": "..." }
   ]
 }
 ```

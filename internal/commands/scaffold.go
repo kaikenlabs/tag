@@ -316,12 +316,6 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 	opts.TemplateRef = templateRef
 	opts.IsRemote = isRemote
 	noLibrary := c.Bool(flags.NoLibraryFlag)
-	// Recording a library name would defeat the flag: generator resolution is
-	// library-first on that name, so an unrelated template sharing the derived
-	// basename would win over the generators copied into this project.
-	if isRemote && !noLibrary {
-		opts.TemplateName = remote.DeriveName(templateRef)
-	}
 	if jsonMode {
 		opts.NoInput = true
 	}
@@ -331,7 +325,7 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 	// suppresses that function's interactive "Add template to library?" prompt.
 	addToLib := !noLibrary && (isRemote || resolveAddToLib(c, templateDir, jsonMode))
 	if addToLib {
-		opts.SkipGeneratorCopy = true
+		addToLib = prepareLibrarySlot(c, &opts, templateRef, jsonMode)
 	}
 
 	// Verify template lockfile for remote templates.
@@ -354,6 +348,49 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 	}
 
 	return nil
+}
+
+// prepareLibrarySlot classifies the library slot templateRef would occupy
+// and mutates opts accordingly, returning whether the caller should still
+// call addToLibrary after scaffolding.
+//
+// slotFree and slotSameSource skip the project generator copy and record
+// opts.TemplateName so generate_resolve.go's library-first lookup resolves
+// them from the library entry instead.
+//
+// slotTakenByOther and slotUnavailable are the #429 fix: recording a name
+// that resolves to an UNRELATED template's generators is worse than
+// recording no name at all, so neither mutates opts.TemplateName, and both
+// leave SkipGeneratorCopy false so the project keeps its own generators.
+func prepareLibrarySlot(c *cli.Context, opts *scaffold.Options, templateRef string, jsonMode bool) bool {
+	slot, entry, libName := resolveLibrarySlot(templateRef)
+
+	switch slot {
+	case slotFree, slotSameSource:
+		// Recording the name is not optional once the copy is skipped: it is
+		// the only thing that lets generate_resolve.go find the generators
+		// again. Doing this for remote refs only (the pre-#429 behaviour) left
+		// `tag scaffold ./tpl proj --add-to-lib` with neither a library origin
+		// nor a local copy, so `tag generate` failed outright — reproduced
+		// against a build of main, so it predates #429 rather than regressing
+		// from it.
+		opts.SkipGeneratorCopy = true
+		opts.TemplateName = libName
+		return true
+	case slotTakenByOther:
+		w := c.App.Writer
+		if jsonMode {
+			w = io.Discard
+		}
+		fmt.Fprintf(w, "Template %q is already in the library from %s.\n"+
+			"This project used %s; it keeps its own generators rather than resolving them\n"+
+			"from that entry. Run `tag lib add %s --as <name>` to add it under a name you choose.\n",
+			libName, entry.Source, templateRef, templateRef)
+		return false
+	default:
+		slog.Warn("could not check library before scaffold, leaving library untouched", "template", libName)
+		return false
+	}
 }
 
 // resolveAddToLib determines whether a local template should be added to the
@@ -381,6 +418,74 @@ func resolveAddToLib(c *cli.Context, templateDir string, jsonMode bool) bool {
 		return false
 	}
 	return add
+}
+
+// librarySlot classifies what a would-be library entry for a template ref
+// resolves to, so scaffoldFromRef can decide whether it is safe to record
+// opts.TemplateName and call addToLibrary after the scaffold succeeds.
+type librarySlot int
+
+const (
+	// slotFree means no entry occupies the derived name: adding is safe.
+	slotFree librarySlot = iota
+	// slotSameSource means the occupying entry came from the exact same ref:
+	// addToLibrary's own early return will report it, generators resolve
+	// from that entry as before.
+	slotSameSource
+	// slotTakenByOther means a DIFFERENT ref occupies the derived name.
+	// Recording it would point library-first generator resolution
+	// (generate_resolve.go) at the wrong template's generators.
+	slotTakenByOther
+	// slotUnavailable means the library could not be consulted at all
+	// (init failure, or a Get error other than "not found"). Treated the
+	// same as slotTakenByOther: fail safe, don't touch the library.
+	slotUnavailable
+)
+
+// classifyLibrarySlot is the pure decision at the center of #429: given what
+// a library lookup for templateRef's derived name returned, decide whether
+// recording that name and adding to the library is safe.
+//
+// getErr must be checked with errors.Is, not ==: the real Library.Get wraps
+// ErrTemplateNotFound in a *LibraryError, so an == comparison would pass
+// against the raw sentinel in a unit test and then never match in
+// production.
+//
+// entry.Source is compared to templateRef with an exact string match,
+// deliberately version-aware: Source records the full ref including
+// "@version", and generators fetched from "@v1" are not proof of the
+// generators in "@v2".
+func classifyLibrarySlot(entry *library.Entry, getErr, initErr error, templateRef string) librarySlot {
+	if initErr != nil {
+		return slotUnavailable
+	}
+	if getErr != nil {
+		if errors.Is(getErr, library.ErrTemplateNotFound) {
+			return slotFree
+		}
+		return slotUnavailable
+	}
+	if entry == nil {
+		return slotUnavailable
+	}
+	if entry.Source == templateRef {
+		return slotSameSource
+	}
+	return slotTakenByOther
+}
+
+// resolveLibrarySlot performs the library lookup classifyLibrarySlot needs
+// and returns its verdict along with the occupying entry (if any) and the
+// derived name, so the caller can print a message naming both sources
+// without repeating the lookup.
+func resolveLibrarySlot(templateRef string) (slot librarySlot, entry *library.Entry, libName string) {
+	libName = remote.LibraryName(templateRef)
+	lib, initErr := newLocalLibrary()
+	var getErr error
+	if initErr == nil {
+		entry, getErr = lib.Get(libName)
+	}
+	return classifyLibrarySlot(entry, getErr, initErr, templateRef), entry, libName
 }
 
 // looksLikeBareName returns true if ref is a simple name (no path separators,
@@ -580,7 +685,7 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string, jsonMode bool
 		return
 	}
 
-	name := remote.DeriveName(templateRef)
+	name := remote.LibraryName(templateRef)
 
 	// Skip if the template is already in the library.
 	if _, getErr := lib.Get(name); getErr == nil {

@@ -1,0 +1,3 @@
+NAME                 SOURCE                         VERSION    DESCRIPTION
+----                 ------                         -------    -----------
+acme-service-template-generator-a1b2c3d4e5f6 gh:acme/service-template       v1.0.0     

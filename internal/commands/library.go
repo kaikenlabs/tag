@@ -210,8 +210,12 @@ func printLibEntries(w io.Writer, entries []*library.Entry) {
 			version = "-"
 		}
 		desc := truncate(entry.Description, 40)
+		// entry.Name is never truncated: every `tag lib`/`tag scaffold` lookup
+		// is an exact match against it, and a #430 digested name routinely
+		// exceeds the old 20-byte cap — a truncated name is unusable, not
+		// just ugly. %-20s still pads short names to keep columns aligned.
 		fmt.Fprintf(w, "%-20s %-30s %-10s %s\n",
-			truncate(entry.Name, 20),
+			entry.Name,
 			truncate(entry.Source, 30),
 			truncate(version, 10),
 			desc,

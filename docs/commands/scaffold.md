@@ -410,22 +410,34 @@ Local templates always run hooks, since you control the template source.
 Templates must be added to the library before the interactive picker or name-based resolution can find them. See [tag lib](lib.md) for managing the library.
 
 ```bash
-# Add a template to the library
-tag lib add gh:user/go-api-template
+# Add a template to the library under a name you choose
+tag lib add gh:user/go-api-template --as go-api
 
 # List installed templates
 tag lib ls
 
 # Then scaffold (by name or picker)
-tag scaffold go-api-template my-project
+tag scaffold go-api my-project
 tag scaffold   # picker
 ```
 
-Scaffolding directly from a remote reference (rather than `tag lib add` followed by `tag scaffold <name>`) also adds the template to the library, so its generators resolve from there on later runs. A local template is added the same way when `--add-to-lib` is set, or interactively when the template has generators and you confirm the "Add template to library?" prompt.
+Without `--as`, the name above would be the longer, collision-free `go-api-template-<digest>` —
+see [Library Naming](lib.md#library-naming). Scaffolding directly from a remote reference (rather
+than `tag lib add` followed by `tag scaffold <name>`) also adds the template to the library under
+that same derived name, so its generators resolve from there on later runs. A local template is
+added the same way — including having its name recorded in the generated `.tagconfig.json` — when
+`--add-to-lib` is set, or interactively when the template has generators and you confirm the "Add
+template to library?" prompt.
+
+If the derived name is already held by a *different* source (a stale entry from an older TAG
+version, or a manual `tag lib add --as` that happened to reuse it), TAG leaves the library
+untouched, keeps the project's own generators instead of pointing at the other entry, and prints a
+message naming both sources. Add the new source under a name you choose with `tag lib add <ref>
+--as <name>` if you want it in the library too.
 
 ### Skipping the Library (--no-library)
 
-`--no-library` stops a scaffold run from touching the shared library. This matters for a process scaffolding on behalf of many callers — a CI job or a Backstage-style integration — where every remote template being added unconditionally accumulates entries nobody asked for, and where two unrelated templates can derive the same library name (for example, two organizations each publishing a `service-template`) and silently collide.
+`--no-library` stops a scaffold run from touching the shared library. This matters for a process scaffolding on behalf of many callers — a CI job or a Backstage-style integration — where every remote template being added unconditionally accumulates entries nobody asked for, and for a caller that wants the generated project self-contained rather than dependent on a shared library entry to resolve its generators.
 
 `--no-library` suppresses the remote add and the local `--add-to-lib` path, including its interactive prompt. It beats `--add-to-lib` when both are given — no error, no warning, the same precedence `--ignore-lock` has over `--update-lock`. Scaffolding by library name (`tag scaffold <name>`) is unaffected, since that path doesn't write to the library either way.
 

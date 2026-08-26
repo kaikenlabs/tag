@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/kaikenlabs/tag/internal/validate"
 )
@@ -576,4 +577,94 @@ func DeriveName(ref string) string {
 		return ref
 	}
 	return base
+}
+
+// libraryNameDigestLen is the number of hex characters kept from the SHA-256
+// sum in a digested library name's suffix.
+const libraryNameDigestLen = 12
+
+// LibraryName derives a library slot name from a remote reference, appending
+// a short identity digest to DeriveName's readable prefix so two references
+// that share a basename (a common repo name across orgs, or two subpaths of
+// one monorepo) get distinct library slots instead of colliding on name.
+//
+// Local refs are out of scope: a local path's name is already unambiguous to
+// the user who typed it, and --as is the existing escape hatch for a
+// deliberate rename, so LibraryName is DeriveName unchanged for them. An
+// unparseable ref has no identity tuple to hash, so it falls back the same way.
+func LibraryName(ref string) string {
+	if IsLocal(ref) {
+		return DeriveName(ref)
+	}
+
+	parsed, err := Parse(ref)
+	if err != nil {
+		return DeriveName(ref)
+	}
+
+	prefix := parsed.libraryPrefix(ref)
+	digest := parsed.libraryDigest()
+	maxPrefixLen := validate.MaxNameLen - 1 - libraryNameDigestLen
+	if len(prefix) > maxPrefixLen {
+		prefix = prefix[:maxPrefixLen]
+		for prefix != "" && !utf8.ValidString(prefix) {
+			prefix = prefix[:len(prefix)-1]
+		}
+	}
+	return prefix + "-" + digest
+}
+
+// libraryPrefix is the readable half of a library name. It is DeriveName for
+// anything that parsed to a Repo, but an OWNERLESS ref (a zip/archive URL)
+// must be named from the parsed URL instead of the raw input: DeriveName
+// falls back to the raw basename there, which carries "@version" with it, so
+// "t.zip@v1" and "t.zip@v2" would differ in the prefix even though
+// libraryDigest deliberately makes them share a digest. Parse strips the
+// version out of URL for those refs, so DeriveName over URL is version-free.
+func (r *Reference) libraryPrefix(ref string) string {
+	if r.Repo == "" && r.URL != "" {
+		return DeriveName(r.URL)
+	}
+	return DeriveName(ref)
+}
+
+// libraryDigest is a short digest over the exact components that distinguish
+// one LIBRARY SLOT from another. This is deliberately a different tuple than
+// identityDigest (used by CacheKey):
+//
+//   - Version is EXCLUDED. A library slot is one logical template that `tag
+//     lib update` re-fetches in place, keyed on Name — it never re-derives a
+//     name from a newer ref. Consequence: "repo@v1" and "repo@v2" cannot
+//     coexist as auto-derived library entries; --as is the escape hatch.
+//   - SubPath IS included, unlike identityDigest: a library slot stores the
+//     COPIED subdirectory (see storeToDir), so two subpaths of one monorepo
+//     are two different templates, not the same cached repo selected two
+//     ways.
+//   - URL is hashed ONLY for an ownerless ref. Provider+Host+Owner+Repo
+//     already identify a repository completely, and Reference.URL must not be
+//     hashed alongside them: the git://, git+ssh:// and git@host: syntaxes
+//     keep "@version" (and any subpath) inside URL, so hashing it leaks
+//     Version back into the identity and defeats the exclusion above. A
+//     trailing-"@version" trim does NOT fix that — measured, URL for
+//     "git@host:a/b.git@v1/sub" ends in "/sub", so the trim is a no-op and v1
+//     and v2 derive different names. Excluding URL closes it by construction.
+//     An ownerless ref (a zip/archive URL) has nothing else to be identified
+//     by, and Parse has already stripped its version out of URL.
+//
+// A consequence worth stating: every spelling of one repository — "gh:a/b",
+// "https://github.com/a/b.git", "git@github.com:a/b.git" — now derives the
+// SAME library name, which is correct (it is one template) and is why the
+// transport spelling may not participate in the identity.
+//
+// Type is deliberately not part of the tuple: it is a function of the ref's
+// shape, and the components above already differ whenever the shape does, so
+// including it would add an untestable component with no discriminating power.
+func (r *Reference) libraryDigest() string {
+	ownerlessURL := ""
+	if r.Owner == "" && r.Repo == "" {
+		ownerlessURL = r.URL
+	}
+	sum := sha256.Sum256([]byte(strings.Join(
+		[]string{string(r.Provider), r.Host, r.Owner, r.Repo, r.SubPath, ownerlessURL}, "\x00")))
+	return hex.EncodeToString(sum[:])[:libraryNameDigestLen]
 }

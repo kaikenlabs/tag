@@ -17,6 +17,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/library"
+	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
@@ -515,15 +516,17 @@ func TestUT_AddToLibrary_LibraryInitError(t *testing.T) {
 
 func TestUT_AddToLibrary_TemplateAlreadyExists_ShowsMessage(t *testing.T) {
 	// setupFakeLibraryWithConfig mutates package-level var — do NOT use t.Parallel()
-	setupFakeLibraryWithConfig(t, "dup-tmpl")
+	const ref = "gh:test/dup-tmpl"
+	setupFakeLibraryWithConfig(t, remote.LibraryName(ref))
 
 	var buf bytes.Buffer
 	cliApp := &cli.App{Writer: &buf}
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	// "dup-tmpl" is already in the library → should show "already in library"
-	addToLibrary(ctx, "gh:test/dup-tmpl", t.TempDir(), false)
+	// The entry is seeded under the same digested name addToLibrary derives
+	// from ref, so this must show "already in library".
+	addToLibrary(ctx, ref, t.TempDir(), false)
 
 	out := buf.String()
 	assert.Contains(t, out, "already in library")

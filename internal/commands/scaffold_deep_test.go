@@ -23,8 +23,8 @@ import (
 // --- addToLibrary ---
 
 func TestUT_AddToLibrary_DuplicateSkipped(t *testing.T) {
-	// setupFakeLibrary mutates package-level var — do NOT use t.Parallel()
-	setupFakeLibrary(t, "existing-tmpl")
+	// setupFakeLibraryForRef mutates package-level var — do NOT use t.Parallel()
+	setupFakeLibraryForRef(t, "gh:test/existing-tmpl")
 
 	var buf bytes.Buffer
 	cliApp := &cli.App{Writer: &buf}
