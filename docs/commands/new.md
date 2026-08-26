@@ -194,7 +194,7 @@ tag template new generator handler --lib
 tag template new bundle crud --lib
 ```
 
-The library template is resolved from `cfg.Template.Name` in `.tagconfig.json`, and the generator/bundle is created in that template's `.tag/` directory within the library.
+The library template is resolved from `cfg.Template.Name` in `.tagconfig.json`. The generator/bundle is created in whichever root the template already uses: its `.tag/` directory if that exists, otherwise its `_generators/` directory if that exists, otherwise TAG creates `.tag/`. This matches how `tag lib add` stores a template — verbatim, without rewriting `_generators/` to `.tag/` — so a new generator lands where [generator resolution](generate.md#generator-resolution) will actually find it.
 
 ## Examples
 

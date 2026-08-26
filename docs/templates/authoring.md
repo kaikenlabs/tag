@@ -289,7 +289,7 @@ my-template/
         └── model.go
 ```
 
-This becomes `.tag/` in the generated project, allowing users to run `tag generate` commands.
+This becomes `.tag/` in the generated project, allowing users to run `tag generate` commands — but only when the scaffold has no library origin (a local template scaffolded without `--add-to-lib`, or any scaffold run with `--no-library`). When the scaffold records a library origin in `.tagconfig.json` (the common case for a remote template, or a local one added with `--add-to-lib`), `_generators/` is left where `tag lib add` stored it and `tag generate` resolves generators from there instead — see [Generator Resolution](../commands/generate.md#generator-resolution).
 
 ## Excluding Files with .tagignore
 

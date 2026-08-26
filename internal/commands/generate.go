@@ -122,7 +122,7 @@ EXAMPLES
 			if c.NArg() > 0 {
 				return
 			}
-			completeGeneratorNames(cfg)
+			completeGeneratorNames(cfg, c.App.Writer)
 		},
 		Flags: generateFlags(),
 	}

@@ -315,3 +315,15 @@ func listTreeEntries(t *testing.T, root string) []string {
 	sort.Strings(entries)
 	return entries
 }
+
+func setupLibEntryRoots(t *testing.T, name string, files map[string]string) string {
+	t.Helper()
+
+	templateDir := setupFakeLibrary(t, name)
+	for relPath, content := range files {
+		full := filepath.Join(templateDir, relPath)
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o750))
+		require.NoError(t, os.WriteFile(full, []byte(content), 0o644))
+	}
+	return templateDir
+}

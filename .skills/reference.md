@@ -325,7 +325,12 @@ CLAUDE.md
 
 ### Bundled Generators
 
-Templates can include generators in `_generators/` — copied to scaffolded project's `.tag/`.
+Templates can include generators in `_generators/`. What happens to them at scaffold time depends on whether the scaffold recorded a library origin in `.tagconfig.json`:
+
+- **No library origin** (local template with no `--add-to-lib`, or `--no-library`): `_generators/` is copied into the scaffolded project's `.tag/`, so the project is self-contained.
+- **Library origin** (the common case — a remote scaffold, or `--add-to-lib`, records `template.name`): generators are NOT copied. `tag generate` resolves them directly from the library entry, which `tag lib add` stores verbatim (it never rewrites `_generators/` to `.tag/`). Resolution probes the library entry's `.tag/` directory first, then `_generators/`; `.tag/` wins a same-name collision between the two, and the `_shared/` templates directory is probed the same way, independently of which root the generator itself matched in. `tag template new generator --lib` / `tag template new bundle --lib` write into whichever of those two roots already exists (`.tag/` if present, else `_generators/`, else `.tag/` is created).
+
+See [Generator Resolution](../docs/commands/generate.md#generator-resolution) for the full library-vs-local precedence rules `tag generate` uses.
 
 ## OpenAPI input
 
