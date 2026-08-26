@@ -42,6 +42,8 @@ When a template name is given without a path prefix or remote shorthand, TAG fir
 | `--update` | `-u` | Force refresh of cached remote templates |
 | `--replay` | | Reuse saved values from a previous scaffold |
 | `--no-save` | | Don't save values for future replay |
+| `--add-to-lib` | | Add the template to the library after scaffolding (enables generator resolution from library) |
+| `--no-library` | | Never add the template to the shared library; generators are copied into the project instead. Beats `--add-to-lib` when both are given |
 | `--accept-hooks` | | Accept hooks without prompting (disabled by default for remote templates) |
 | `--dry-run` | `-d` | Preview which files would be written without creating the output directory |
 | `--update-lock` | | Update the lockfile with the current template version |
@@ -418,6 +420,18 @@ tag lib ls
 tag scaffold go-api-template my-project
 tag scaffold   # picker
 ```
+
+Scaffolding directly from a remote reference (rather than `tag lib add` followed by `tag scaffold <name>`) also adds the template to the library, so its generators resolve from there on later runs. A local template is added the same way when `--add-to-lib` is set, or interactively when the template has generators and you confirm the "Add template to library?" prompt.
+
+### Skipping the Library (--no-library)
+
+`--no-library` stops a scaffold run from touching the shared library. This matters for a process scaffolding on behalf of many callers — a CI job or a Backstage-style integration — where every remote template being added unconditionally accumulates entries nobody asked for, and where two unrelated templates can derive the same library name (for example, two organizations each publishing a `service-template`) and silently collide.
+
+`--no-library` suppresses the remote add and the local `--add-to-lib` path, including its interactive prompt. It beats `--add-to-lib` when both are given — no error, no warning, the same precedence `--ignore-lock` has over `--update-lock`. Scaffolding by library name (`tag scaffold <name>`) is unaffected, since that path doesn't write to the library either way.
+
+The trade-off: with no library entry to resolve generators from, `--no-library` copies the template's generators into the generated project's `.tag/` directory instead, so the project is self-contained. Without the flag, a template that gets added to the library does *not* get its generators copied — they resolve from the library entry instead. The generated `.tagconfig.json` also records no template name under `--no-library` (`template.name` is empty); recording one would let generator resolution fall back to an unrelated library template that happens to share the derived name. `template.source`, `template.ref` and `template.version` are still recorded, so `tag update` keeps working.
+
+`--no-library` doesn't affect the remote cache — `TAG_CACHE_DIR` is the cache isolation mechanism, see [Environment Variables](#environment-variables) — or replay files, which are gated by `--no-save` (see [Replay System](#replay-system) above). Combine `--no-save --no-library` for a run that writes nothing outside the output directory except `<cwd>/.tag/lock.json`, which every remote scaffold writes on first use for supply-chain integrity and which no flag suppresses.
 
 ## Error Handling
 

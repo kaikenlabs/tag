@@ -313,6 +313,7 @@ my-project/
 | `--values <file>` | scaffold | Load variables from JSON |
 | `--no-input` | scaffold | Skip prompts |
 | `--replay` | scaffold | Reuse saved inputs |
+| `--no-library` | scaffold | Never add the template to the shared library; generators copied into `.tag/` instead. Beats `--add-to-lib` |
 | `--accept-hooks` | scaffold | Run hooks without prompting |
 | `-l` / `--lib` | template new | Target library template |
 | `-B` / `--in-bundle` | template new generator | Create inside bundle |

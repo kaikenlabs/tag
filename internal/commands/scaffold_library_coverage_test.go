@@ -721,6 +721,7 @@ func TestUT_ScaffoldFlags_ContainsAllCommonFlags(t *testing.T) {
 		"output", "values", "meta", "no-input", "force", "replay",
 		"no-save", "accept-hooks", "allow-recursive-render", "update",
 		flags.UpdateLockFlag, flags.IgnoreLockFlag, flags.DryRunFlag, flags.AddToLibFlag,
+		flags.NoLibraryFlag,
 	}
 	for _, name := range expected {
 		assert.True(t, flagNames[name], "missing flag: %s", name)
