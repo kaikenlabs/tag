@@ -78,43 +78,54 @@ func resolveGeneratorPaths(cfg *config.Config, name string) (genDir, sharedDir s
 	})
 }
 
-// resolveFromLibrary attempts to find a generator in the library template.
-// Returns (genDir, sharedDir, found, error). When found is false and error is nil,
-// the caller should fall through to local resolution.
-// resolveInLibraryTemplate probes for a sub-path under the library template's .tag/ directory.
-// Returns (candidate, templateDir, true, nil) when the path exists on disk.
-// Returns ("", "", false, nil) when the library template is not cached or the path is absent.
-// Returns ("", "", false, err) on unexpected errors.
-func resolveInLibraryTemplate(cfg *config.Config, relativePath string) (candidate, templateDir string, found bool, err error) {
+func resolveInLibraryTemplate(cfg *config.Config, relativePath string) (candidate, genRoot, templateDir string, found bool, err error) {
 	lib, initErr := newLocalLibrary()
 	if initErr != nil {
-		return "", "", false, app.Errorf("failed to initialize library: %w", initErr)
+		return "", "", "", false, app.Errorf("failed to initialize library: %w", initErr)
 	}
 
 	templateDir, err = lib.TemplatePath(cfg.Template.Name)
 	if err != nil {
 		if !errors.Is(err, library.ErrTemplateNotFound) {
-			return "", "", false, app.Errorf("error accessing library template %q: %w", cfg.Template.Name, err)
+			return "", "", "", false, app.Errorf("error accessing library template %q: %w", cfg.Template.Name, err)
 		}
 		slog.Debug("library template not cached, falling back to local", "template", cfg.Template.Name)
-		return "", "", false, nil
+		return "", "", "", false, nil
 	}
 
-	candidate = filepath.Join(templateDir, types.TemplatesDir, relativePath)
-	if _, statErr := os.Stat(candidate); statErr == nil {
-		return candidate, templateDir, true, nil
+	for _, root := range libraryGeneratorRoots(templateDir) {
+		candidate = filepath.Join(root, relativePath)
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			return candidate, root, templateDir, true, nil
+		}
 	}
-	return "", "", false, nil
+	return "", "", "", false, nil
+}
+
+func libraryGeneratorRoots(templateDir string) []string {
+	return []string{
+		filepath.Join(templateDir, types.TemplatesDir),
+		filepath.Join(templateDir, types.GeneratorsDir),
+	}
 }
 
 func resolveFromLibrary(cfg *config.Config, name string) (string, string, bool, error) {
-	candidate, templateDir, found, err := resolveInLibraryTemplate(cfg, name)
+	candidate, genRoot, templateDir, found, err := resolveInLibraryTemplate(cfg, name)
 	if err != nil || !found {
 		return "", "", false, err
 	}
-	shared := filepath.Join(templateDir, types.TemplatesDir, types.SharedDir)
 	warnVersionMismatch(cfg, templateDir)
-	return candidate, shared, true, nil
+	return candidate, librarySharedDir(templateDir, genRoot), true, nil
+}
+
+func librarySharedDir(templateDir, genRoot string) string {
+	for _, root := range libraryGeneratorRoots(templateDir) {
+		shared := filepath.Join(root, types.SharedDir)
+		if _, err := os.Stat(shared); err == nil {
+			return shared
+		}
+	}
+	return filepath.Join(genRoot, types.SharedDir)
 }
 
 // warnVersionMismatch prints a warning if the library template version differs
@@ -162,7 +173,7 @@ func resolveBundlePath(cfg *config.Config, bundleName, bundleSubDir string) (str
 // resolveBundleFromLibrary attempts to find a bundle file in the library template.
 // Returns ("", nil) when the bundle is not found (caller should fall through to local).
 func resolveBundleFromLibrary(cfg *config.Config, bundleFile string) (string, error) {
-	candidate, _, found, err := resolveInLibraryTemplate(cfg, filepath.Join(types.BundlesDir, bundleFile))
+	candidate, _, _, found, err := resolveInLibraryTemplate(cfg, filepath.Join(types.BundlesDir, bundleFile))
 	if err != nil {
 		return "", err
 	}

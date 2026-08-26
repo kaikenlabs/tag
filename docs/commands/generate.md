@@ -19,9 +19,9 @@ TAG automatically determines whether the given name refers to a generator or a b
 
 Generators and bundles are resolved using a **library-first, local-fallback** strategy:
 
-1. **Library template**: If the project was scaffolded from a library template (recorded in `.tagconfig.json`), generators from that template's `.tag/` directory are checked first.
+1. **Library template**: If the project was scaffolded from a library template (recorded in `.tagconfig.json`), generators are checked first in that template's `.tag/` directory (the project-shaped layout a scaffold copies), then in its `_generators/` directory (the layout the template ships) — `.tag/` wins on a name collision between the two.
 2. **Local project**: Generators in the project's `.tag/` directory (configured via `TAG_PATH`) are used as a fallback.
-3. **Local wins on collision**: If both sources have a generator with the same name, the local version takes precedence.
+3. **Library wins on collision**: If the library template and the project both have a generator with the same name, the library version takes precedence — resolution stops as soon as the library template supplies a match.
 
 Generators can:
 - Create new files

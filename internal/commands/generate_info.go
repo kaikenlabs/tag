@@ -73,7 +73,7 @@ func generateInfoCommand(cfg *config.Config) *cli.Command {
 			if c.NArg() > 0 {
 				return
 			}
-			completeGeneratorNames(cfg)
+			completeGeneratorNames(cfg, c.App.Writer)
 		},
 	}
 }

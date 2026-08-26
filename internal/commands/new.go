@@ -155,22 +155,17 @@ func newAction(c *cli.Context, cfg *config.Config) error {
 	return nil
 }
 
-// resolveLibraryTagDir resolves the .tag directory inside a library template.
-// Creates the .tag directory if it doesn't exist.
-// resolveBasePath returns the base .tag directory for new template/bundle creation.
-// With --lib, it resolves the library template's .tag directory;
-// otherwise it returns cfg.Env.Path.
 func resolveBasePath(c *cli.Context, cfg *config.Config) (string, error) {
 	if c.Bool(flags.LibFlag) {
 		if !cfg.HasTemplateOrigin() {
 			return "", app.Errorf("no library template configured in %s", config.File)
 		}
-		return resolveLibraryTagDir(cfg.Template.Name)
+		return resolveLibraryGeneratorDir(cfg.Template.Name)
 	}
 	return cfg.Env.Path, nil
 }
 
-func resolveLibraryTagDir(libName string) (string, error) {
+func resolveLibraryGeneratorDir(libName string) (string, error) {
 	lib, err := newLocalLibrary()
 	if err != nil {
 		return "", app.Errorf("failed to initialize library: %w", err)
@@ -179,6 +174,12 @@ func resolveLibraryTagDir(libName string) (string, error) {
 	templatePath, err := lib.TemplatePath(libName)
 	if err != nil {
 		return "", asAppError(err)
+	}
+
+	for _, root := range libraryGeneratorRoots(templatePath) {
+		if info, statErr := os.Stat(root); statErr == nil && info.IsDir() {
+			return root, nil
+		}
 	}
 
 	tagDir := filepath.Join(templatePath, types.TemplatesDir)

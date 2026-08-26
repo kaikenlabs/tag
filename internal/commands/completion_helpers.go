@@ -2,16 +2,16 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/config"
-	"github.com/kaikenlabs/tag/internal/types"
 )
 
 // completeGeneratorNames prints available generator and bundle names for shell completion.
-func completeGeneratorNames(cfg *config.Config) {
+func completeGeneratorNames(cfg *config.Config, w io.Writer) {
 	if cfg == nil {
 		return
 	}
@@ -20,7 +20,7 @@ func completeGeneratorNames(cfg *config.Config) {
 	printUnique := func(infos []GeneratorInfo) {
 		for _, g := range infos {
 			if !seen[g.Name] {
-				fmt.Println(g.Name)
+				fmt.Fprintln(w, g.Name)
 				seen[g.Name] = true
 			}
 		}
@@ -28,8 +28,9 @@ func completeGeneratorNames(cfg *config.Config) {
 
 	// Collect from library template
 	if dir, ok := libraryTemplateDir(cfg); ok {
-		printUnique(scanGenerators(filepath.Join(dir, types.TemplatesDir)))
-		printUnique(scanBundles(filepath.Join(dir, types.TemplatesDir, types.BundlesDir)))
+		gens, bundles := libraryGeneratorsAndBundles(dir)
+		printUnique(gens)
+		printUnique(bundles)
 	}
 
 	// Collect from local .tag/

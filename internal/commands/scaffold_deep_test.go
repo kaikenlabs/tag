@@ -300,8 +300,7 @@ func TestUT_CompleteLibraryTemplateNames_SkipsWhenHasArgs(t *testing.T) {
 
 func TestUT_CompleteGeneratorNames_NilConfig(t *testing.T) {
 	t.Parallel()
-	// Should not panic.
-	completeGeneratorNames(nil)
+	completeGeneratorNames(nil, io.Discard)
 }
 
 func TestUT_CompleteGeneratorNames_WithLocalPath(t *testing.T) {
@@ -317,8 +316,9 @@ func TestUT_CompleteGeneratorNames_WithLocalPath(t *testing.T) {
 	))
 
 	cfg := createTestConfig(t, tmpDir)
-	// Should not panic; prints to stdout.
-	completeGeneratorNames(cfg)
+	var buf bytes.Buffer
+	completeGeneratorNames(cfg, &buf)
+	assert.Equal(t, "mygen\n", buf.String())
 }
 
 // Helper to create multiple fake library entries for testing.

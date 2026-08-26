@@ -101,8 +101,7 @@ func collectGeneratorLists(cfg *config.Config) generatorLists {
 		if lib, err := newLocalLibrary(); err != nil {
 			slog.Debug("library unavailable for listing", "error", err)
 		} else if templateDir, pathErr := lib.TemplatePath(lists.templateName); pathErr == nil {
-			lists.templateGens = scanGenerators(filepath.Join(templateDir, types.TemplatesDir))
-			lists.templateBundles = scanBundles(filepath.Join(templateDir, types.TemplatesDir, types.BundlesDir))
+			lists.templateGens, lists.templateBundles = libraryGeneratorsAndBundles(templateDir)
 		}
 	}
 	if cfg.Env.Path != "" {
@@ -110,6 +109,30 @@ func collectGeneratorLists(cfg *config.Config) generatorLists {
 		lists.localBundles = scanBundles(filepath.Join(cfg.Env.Path, cfg.Env.BundlePath))
 	}
 	return lists
+}
+
+func libraryGeneratorsAndBundles(templateDir string) (gens, bundles []GeneratorInfo) {
+	for _, root := range libraryGeneratorRoots(templateDir) {
+		gens = appendNewByName(gens, scanGenerators(root))
+		bundles = appendNewByName(bundles, scanBundles(filepath.Join(root, types.BundlesDir)))
+	}
+	return gens, bundles
+}
+
+func appendNewByName(dst, src []GeneratorInfo) []GeneratorInfo {
+	for _, item := range src {
+		exists := false
+		for _, d := range dst {
+			if d.Name == item.Name {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			dst = append(dst, item)
+		}
+	}
+	return dst
 }
 
 func generateList(cfg *config.Config, showAll bool, w io.Writer, format string) error {
