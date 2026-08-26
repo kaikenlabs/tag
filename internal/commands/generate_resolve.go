@@ -55,7 +55,7 @@ func resolveGeneratorPaths(cfg *config.Config, name string) (genDir, sharedDir s
 	// 2. Fall back to local .tag/
 	if cfg.Env.Path != "" {
 		candidate := filepath.Join(cfg.Env.Path, name)
-		if _, statErr := os.Stat(candidate); statErr == nil && engine.HasTemplateFiles(candidate) {
+		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() && engine.HasTemplateFiles(candidate) {
 			sharedName := cfg.Env.SharedPath
 			if sharedName == "" {
 				sharedName = types.SharedDir

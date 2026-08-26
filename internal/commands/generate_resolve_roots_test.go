@@ -315,11 +315,14 @@ func TestUT_ResolveGeneratorPaths_EmptyDirWithNoBundleIsNotFound(t *testing.T) {
 	require.ErrorAs(t, err, &notFound)
 }
 
-// TestUT_ResolveBundlePath_EmptyDirectoryUnaffected is a no-change guard:
-// bundle resolution (wantDir=false) must never consult HasTemplateFiles. It
-// fails only under the most likely wrong implementation of the site-1
-// predicate — applying `engine.HasTemplateFiles` unconditionally instead of
-// gating it with `!wantDir ||`.
+// TestUT_ResolveBundlePath_EmptyDirectoryUnaffected is a no-change guard: it
+// passes on both sides of the #436 fix, pinning that bundle resolution keeps
+// working while a same-named empty directory exists.
+//
+// It does NOT discriminate dropping the `!wantDir ||` gate: a bundle candidate
+// is a FILE, and HasTemplateFiles fails open on a file just as it does on an
+// unreadable directory, so the ungated form is behaviourally identical at
+// every call site that exists today. The gate is defensive, not load-bearing.
 func TestUT_ResolveBundlePath_EmptyDirectoryUnaffected(t *testing.T) {
 	templateDir := setupLibEntryRoots(t, "roots-t436-f", map[string]string{
 		filepath.Join(types.GeneratorsDir, types.BundlesDir, "foo", "foo.json"): `{"name":"foo"}`,
@@ -369,4 +372,30 @@ func TestUT_ResolveGenerateTarget_UnreadableDirStillBeatsBundle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, target)
 	assert.False(t, target.IsBundle, "an unreadable generator dir must still beat a same-named bundle so the loud read failure surfaces")
+}
+
+// TestUT_ResolveGenerateTarget_LocalRegularFileDoesNotBeatBundle pins that the
+// project-local fallback requires a DIRECTORY. HasTemplateFiles fails open on
+// a non-directory path, so without the IsDir guard a regular file named after
+// a bundle resolved as a generator and the run died reading a config inside a
+// file. The library path has carried this guard since #431.
+func TestUT_ResolveGenerateTarget_LocalRegularFileDoesNotBeatBundle(t *testing.T) {
+	localDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(localDir, "foo"), []byte("not a dir"), 0o644))
+
+	bundleDir := filepath.Join(localDir, types.BundlesDir, "foo")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "foo.json"), []byte(`{"name":"foo"}`), 0o644))
+
+	info, statErr := os.Stat(filepath.Join(localDir, "foo"))
+	require.NoError(t, statErr)
+	require.False(t, info.IsDir(), "fixture invariant: the candidate must be a regular file")
+
+	cfg := createTestConfig(t, localDir)
+
+	target, err := resolveGenerateTarget(cfg, "foo", types.BundlesDir)
+
+	require.NoError(t, err)
+	assert.True(t, target.IsBundle, "a regular file must not resolve as a generator")
+	assert.Equal(t, filepath.Join(bundleDir, "foo.json"), target.BundlePath)
 }

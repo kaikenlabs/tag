@@ -508,7 +508,7 @@ func generateBundle(c *cli.Context, cfg *config.Config, fac generatorFactories, 
 				bundleDir := filepath.Dir(bundlePath)
 				genDirPath = filepath.Join(bundleDir, generator.Name)
 				sharedPath = filepath.Join(bundleDir, types.SharedDir)
-				if _, statErr := os.Stat(genDirPath); statErr != nil {
+				if info, statErr := os.Stat(genDirPath); statErr != nil || !info.IsDir() || !engine.HasTemplateFiles(genDirPath) {
 					return total, app.Errorf("generator %q not found in self-contained bundle %q (expected at %s)",
 						generator.Name, generatorName, genDirPath)
 				}

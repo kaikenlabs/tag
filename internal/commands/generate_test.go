@@ -1151,12 +1151,15 @@ func TestUT_GenerateList_GeneratorWithDescription(t *testing.T) {
 	require.NoError(t, os.MkdirAll(genDir, 0o750))
 	configJSON := `{"description": "Create a React component"}`
 	require.NoError(t, os.WriteFile(filepath.Join(genDir, "tag.template.json"), []byte(configJSON), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "gen.tmpl"), []byte("content"), 0o644))
 
 	cfg := createTestConfig(t, tmpDir)
 
-	err := generateList(cfg, true, io.Discard, formatText)
+	var buf bytes.Buffer
+	err := generateList(cfg, true, &buf, formatText)
 
 	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "Create a React component")
 }
 
 func TestUT_GenerateList_WithBundles(t *testing.T) {
