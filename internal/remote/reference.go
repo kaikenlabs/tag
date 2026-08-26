@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/kaikenlabs/tag/internal/validate"
 )
@@ -576,4 +577,70 @@ func DeriveName(ref string) string {
 		return ref
 	}
 	return base
+}
+
+// libraryNameDigestLen is the number of hex characters kept from the SHA-256
+// sum in a digested library name's suffix.
+const libraryNameDigestLen = 12
+
+// LibraryName derives a library slot name from a remote reference, appending
+// a short identity digest to DeriveName's readable prefix so two references
+// that share a basename (a common repo name across orgs, or two subpaths of
+// one monorepo) get distinct library slots instead of colliding on name.
+//
+// Local refs are out of scope: a local path's name is already unambiguous to
+// the user who typed it, and --as is the existing escape hatch for a
+// deliberate rename, so LibraryName is DeriveName unchanged for them. An
+// unparseable ref has no identity tuple to hash, so it falls back the same way.
+func LibraryName(ref string) string {
+	if IsLocal(ref) {
+		return DeriveName(ref)
+	}
+
+	parsed, err := Parse(ref)
+	if err != nil {
+		return DeriveName(ref)
+	}
+
+	prefix := DeriveName(ref)
+	digest := parsed.libraryDigest()
+	maxPrefixLen := validate.MaxNameLen - 1 - libraryNameDigestLen
+	if len(prefix) > maxPrefixLen && maxPrefixLen >= 0 {
+		prefix = prefix[:maxPrefixLen]
+		for prefix != "" && !utf8.ValidString(prefix) {
+			prefix = prefix[:len(prefix)-1]
+		}
+	}
+	return prefix + "-" + digest
+}
+
+// libraryDigest is a short digest over the exact components that distinguish
+// one LIBRARY SLOT from another. This is deliberately a different tuple than
+// identityDigest (used by CacheKey):
+//
+//   - Version is EXCLUDED. A library slot is one logical template that `tag
+//     lib update` re-fetches in place, keyed on Name — it never re-derives a
+//     name from a newer ref. Consequence: "repo@v1" and "repo@v2" cannot
+//     coexist as auto-derived library entries; --as is the escape hatch.
+//   - The URL is hashed with any trailing "@"+Version stripped. Measured:
+//     the git://, git+ssh:// and git@host: syntaxes all retain "@version"
+//     inside Reference.URL itself (shorthand and zip URLs do not), so
+//     without stripping it here those three syntaxes would derive a
+//     different name per version and silently defeat the exclusion above.
+//   - SubPath IS included, unlike identityDigest: a library slot stores the
+//     COPIED subdirectory (see storeToDir), so two subpaths of one monorepo
+//     are two different templates, not the same cached repo selected two
+//     ways.
+//
+// Type is deliberately not part of the tuple: it is a function of the ref's
+// shape, and URL already differs whenever the shape does, so including it
+// would add an untestable component with no discriminating power.
+func (r *Reference) libraryDigest() string {
+	versionStrippedURL := r.URL
+	if r.Version != "" {
+		versionStrippedURL = strings.TrimSuffix(versionStrippedURL, "@"+r.Version)
+	}
+	sum := sha256.Sum256([]byte(strings.Join(
+		[]string{string(r.Provider), r.Host, r.Owner, r.Repo, r.SubPath, versionStrippedURL}, "\x00")))
+	return hex.EncodeToString(sum[:])[:libraryNameDigestLen]
 }

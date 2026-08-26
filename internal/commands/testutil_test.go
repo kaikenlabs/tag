@@ -17,6 +17,7 @@ import (
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/engine"
 	"github.com/kaikenlabs/tag/internal/library"
+	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/types/flags"
 )
 
@@ -216,6 +217,49 @@ func setupFakeLibrary(t *testing.T, templateName string) string {
 	}
 
 	return templateDir
+}
+
+// setupFakeLibraryForRef mirrors setupFakeLibrary, but seeds the registry
+// entry under the name addToLibrary actually derives for ref via
+// remote.LibraryName — the #430 digest suffix — rather than under a bare
+// name. Tests exercising addToLibrary's own "already in library" branch
+// must seed under this name, or the branch never matches and the test
+// silently starts exercising the "new template" path instead.
+// Restores the original newLocalLibrary when the test completes.
+//
+// WARNING: This mutates the package-level newLocalLibrary variable.
+// Tests using this helper must NOT call t.Parallel().
+func setupFakeLibraryForRef(t *testing.T, ref string) (name, templateDir string) {
+	t.Helper()
+
+	dataDir := isolateLibrary(t)
+	name = remote.LibraryName(ref)
+
+	templateDir = filepath.Join(dataDir, "templates", name)
+	if err := os.MkdirAll(templateDir, 0o750); err != nil {
+		t.Fatalf("failed to create template dir: %v", err)
+	}
+
+	reg := library.Registry{
+		Version: 1,
+		Entries: map[string]*library.Entry{
+			name: {
+				Name:      name,
+				Source:    ref,
+				AddedAt:   time.Now(),
+				UpdatedAt: time.Now(),
+			},
+		},
+	}
+	regData, err := json.Marshal(reg)
+	if err != nil {
+		t.Fatalf("failed to marshal registry: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "library.json"), regData, 0o644); err != nil {
+		t.Fatalf("failed to write registry: %v", err)
+	}
+
+	return name, templateDir
 }
 
 // isolateLibrary points newLocalLibrary at a fresh, empty library dir and

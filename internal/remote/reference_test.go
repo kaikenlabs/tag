@@ -1,14 +1,19 @@
 package remote
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaikenlabs/tag/internal/validate"
 )
 
 func TestUT_Parse_GitHubShorthand(t *testing.T) {
@@ -839,4 +844,174 @@ func TestUT_DeriveName(t *testing.T) {
 			assert.Equal(t, tt.expected, DeriveName(tt.ref))
 		})
 	}
+}
+
+var libraryNameDigestSuffix = regexp.MustCompile(`-[0-9a-f]{12}$`)
+
+func TestUT_LibraryName_DistinctIdentities(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b string
+	}{
+		{"owner differs", "gh:acme/api", "gh:other/api"},
+		{"provider differs", "gh:a/b", "gl:a/b"},
+		{"host differs", "https://git.one.invalid/a/b.git", "https://git.two.invalid/a/b.git"},
+		// subpath-in / version-out is a DELIBERATE divergence from
+		// identityDigest() (used by CacheKey): a library slot stores the
+		// copied subdirectory, so two subpaths of one repo are two
+		// different templates. Do not "align" this with the cache digest.
+		{"subpath differs", "gh:a/b/x", "gh:a/b/y"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NotEqual(t, LibraryName(tt.a), LibraryName(tt.b))
+		})
+	}
+}
+
+func TestUT_LibraryName_VersionExcluded(t *testing.T) {
+	tests := []struct {
+		name   string
+		v1, v2 string
+	}{
+		{"shorthand", "gh:a/b@v1", "gh:a/b@v2"},
+		// These three git URL syntaxes keep "@version" inside Reference.URL
+		// itself (verified by reading buildReference/parseGitURL/
+		// parseSSHStyle), unlike shorthand and zip URLs. Without stripping
+		// the version suffix from the URL before hashing, these three rows
+		// would fail while the others pass.
+		{"git URL", "git://example.com/a/b.git@v1", "git://example.com/a/b.git@v2"},
+		{"git+ssh URL", "git+ssh://git@example.com/a/b.git@v1", "git+ssh://git@example.com/a/b.git@v2"},
+		{"ssh-style", "git@github.com:a/b.git@v1", "git@github.com:a/b.git@v2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, LibraryName(tt.v1), LibraryName(tt.v2))
+		})
+	}
+
+	unversioned := map[string]string{
+		"gh:a/b":                            "gh:a/b@v1",
+		"git://example.com/a/b.git":         "git://example.com/a/b.git@v1",
+		"git+ssh://git@example.com/a/b.git": "git+ssh://git@example.com/a/b.git@v1",
+		"git@github.com:a/b.git":            "git@github.com:a/b.git@v1",
+	}
+	for bare, versioned := range unversioned {
+		t.Run("matches unversioned/"+bare, func(t *testing.T) {
+			assert.Equal(t, LibraryName(bare), LibraryName(versioned))
+		})
+	}
+}
+
+func TestUT_LibraryName_ZipURLsAreDistinct(t *testing.T) {
+	// Parsed zip refs have Host and URL but empty Owner/Repo, so a digest
+	// over owner/repo alone would collapse all three onto the same suffix.
+	names := []string{
+		LibraryName("https://a.invalid/x.zip"),
+		LibraryName("https://b.invalid/x.zip"),
+		LibraryName("https://a.invalid/y.zip"),
+	}
+	assert.NotEqual(t, names[0], names[1])
+	assert.NotEqual(t, names[0], names[2])
+	assert.NotEqual(t, names[1], names[2])
+}
+
+func TestUT_LibraryName_LocalRefsMatchDeriveName(t *testing.T) {
+	// No-change guard: local refs are out of scope for #430 (--as covers
+	// local disambiguation), so LibraryName must be byte-identical to
+	// DeriveName for them. This passes on both sides of the #430 change and
+	// exists to catch a future regression, not to prove the change works.
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "tpl")
+	require.NoError(t, os.Mkdir(sub, 0o755))
+
+	zipPath := filepath.Join(dir, "archive.zip")
+	require.NoError(t, os.WriteFile(zipPath, []byte("PK\x03\x04"), 0o600))
+
+	for _, ref := range []string{sub, zipPath} {
+		t.Run(ref, func(t *testing.T) {
+			require.True(t, IsLocal(ref))
+			assert.Equal(t, DeriveName(ref), LibraryName(ref))
+		})
+	}
+}
+
+func TestUT_LibraryName_StableAndWellFormed(t *testing.T) {
+	const ref = "gh:acme/service-template@v1.2.3/sub"
+
+	first := LibraryName(ref)
+	second := LibraryName(ref)
+	assert.Equal(t, first, second, "LibraryName must be deterministic")
+	assert.Regexp(t, libraryNameDigestSuffix, first)
+	assert.True(t, utf8.ValidString(first))
+}
+
+func TestUT_LibraryName_DigestTuple(t *testing.T) {
+	const ref = "gh:acme/api/subdir@v2.0.0"
+
+	parsed, err := Parse(ref)
+	require.NoError(t, err)
+
+	versionStrippedURL := parsed.URL
+	if parsed.Version != "" {
+		versionStrippedURL = strings.TrimSuffix(versionStrippedURL, "@"+parsed.Version)
+	}
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		string(parsed.Provider), parsed.Host, parsed.Owner, parsed.Repo, parsed.SubPath, versionStrippedURL,
+	}, "\x00")))
+	wantSuffix := hex.EncodeToString(sum[:])[:12]
+
+	got := LibraryName(ref)
+	assert.True(t, strings.HasSuffix(got, "-"+wantSuffix),
+		"LibraryName(%q) = %q, want suffix -%s", ref, got, wantSuffix)
+}
+
+func TestUT_LibraryName_LongPrefixTruncatesPrefixNotDigest(t *testing.T) {
+	recompute := func(t *testing.T, ref string) string {
+		t.Helper()
+		parsed, err := Parse(ref)
+		require.NoError(t, err)
+		versionStrippedURL := parsed.URL
+		if parsed.Version != "" {
+			versionStrippedURL = strings.TrimSuffix(versionStrippedURL, "@"+parsed.Version)
+		}
+		sum := sha256.Sum256([]byte(strings.Join([]string{
+			string(parsed.Provider), parsed.Host, parsed.Owner, parsed.Repo, parsed.SubPath, versionStrippedURL,
+		}, "\x00")))
+		return hex.EncodeToString(sum[:])[:12]
+	}
+
+	t.Run("very long prefix is truncated", func(t *testing.T) {
+		ref := "gh:acme/" + strings.Repeat("x", 300)
+		digest := recompute(t, ref)
+
+		got := LibraryName(ref)
+		assert.LessOrEqual(t, len(got), validate.MaxNameLen)
+		assert.True(t, utf8.ValidString(got))
+		assert.True(t, strings.HasSuffix(got, "-"+digest),
+			"truncation must shorten the prefix, never the digest: got %q", got)
+	})
+
+	t.Run("prefix exactly at the boundary is not truncated", func(t *testing.T) {
+		repo := strings.Repeat("y", validate.MaxNameLen-13)
+		ref := "gh:acme/" + repo
+		digest := recompute(t, ref)
+
+		got := LibraryName(ref)
+		assert.Equal(t, validate.MaxNameLen, len(got))
+		assert.Equal(t, repo+"-"+digest, got)
+	})
+
+	t.Run("multi-byte prefix truncates on a rune boundary", func(t *testing.T) {
+		repo := strings.Repeat("é", 300)
+		ref := "gh:acme/" + repo
+		digest := recompute(t, ref)
+
+		got := LibraryName(ref)
+		assert.LessOrEqual(t, len(got), validate.MaxNameLen)
+		assert.True(t, utf8.ValidString(got), "truncation must not split a multi-byte rune: got %q", got)
+		assert.True(t, strings.HasSuffix(got, "-"+digest))
+	})
 }

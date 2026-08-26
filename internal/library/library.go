@@ -58,7 +58,7 @@ func (l *Library) Add(ctx context.Context, opts AddOptions) (*AddResult, error) 
 	name := opts.Name
 	autoDerived := name == ""
 	if autoDerived {
-		name = remote.DeriveName(opts.Ref)
+		name = remote.LibraryName(opts.Ref)
 	}
 
 	if err := validateName(name); err != nil {

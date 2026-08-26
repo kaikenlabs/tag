@@ -404,6 +404,24 @@ func TestUT_TextGolden(t *testing.T) {
 		assertGolden(t, "lib-ls-entries", run.All())
 	})
 
+	// A digested #430 library name routinely exceeds the old 20-byte
+	// truncate() cap. The literal below is NOT derived via remote.LibraryName
+	// — deriving it would let a printer regression (truncate() creeping back
+	// in) hide behind a fixture that happens to be short enough to survive
+	// truncation.
+	t.Run("lib-ls-long-name", func(t *testing.T) {
+		seedHome(t)
+		seedLibrary(t,
+			&library.Entry{
+				Name: "acme-service-template-generator-a1b2c3d4e5f6", Source: "gh:acme/service-template",
+				Version: "v1.0.0", AddedAt: goldenTime, UpdatedAt: goldenTime,
+			},
+		)
+		run := runCLICapturingStdout(t, LibCommand(), "lib", "ls")
+		require.NoError(t, run.Err)
+		assertGolden(t, "lib-ls-long-name", run.All())
+	})
+
 	t.Run("lib-search-empty", func(t *testing.T) {
 		seedSearchServer(t, nil)
 		run := runCLICapturingStdout(t, LibCommand(), "lib", "search", "nothing")

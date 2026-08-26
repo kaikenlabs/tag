@@ -233,6 +233,119 @@ func TestUT_Add_AutoDeriveName(t *testing.T) {
 	assert.Equal(t, filepath.Base(templateSrc), result.Name)
 }
 
+func TestUT_Add_AutoDeriveName_UsesLibraryName(t *testing.T) {
+	dataDir := t.TempDir()
+	templateSrc := t.TempDir()
+	createTagTemplate(t, templateSrc, "test", "", "")
+
+	lib := newWithDir(dataDir, &localResolver{})
+
+	const ref = "gh:acme/service-template"
+	want := remote.LibraryName(ref)
+
+	result, err := lib.Add(context.Background(), AddOptions{Ref: ref, ResolvedDir: templateSrc})
+	require.NoError(t, err)
+
+	assert.Equal(t, want, result.Name)
+
+	entry, err := lib.Get(want)
+	require.NoError(t, err)
+	assert.Equal(t, ref, entry.Source)
+
+	path, err := lib.TemplatePath(want)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dataDir, templatesDir, want), path)
+}
+
+func TestUT_Add_CollidingDeriveNames_CoexistInRegistry(t *testing.T) {
+	dataDir := t.TempDir()
+	lib := newWithDir(dataDir, &localResolver{})
+
+	refA := "gh:orgA/service-template"
+	refB := "gh:orgB/service-template"
+	require.Equal(t, remote.DeriveName(refA), remote.DeriveName(refB),
+		"fixture invariant: the two refs must collide under DeriveName for this test to be meaningful")
+
+	srcA := t.TempDir()
+	createTagTemplate(t, srcA, "service-template", "", "")
+	require.NoError(t, os.WriteFile(filepath.Join(srcA, "MARKER.txt"), []byte("from-orgA"), 0o644))
+
+	srcB := t.TempDir()
+	createTagTemplate(t, srcB, "service-template", "", "")
+	require.NoError(t, os.WriteFile(filepath.Join(srcB, "MARKER.txt"), []byte("from-orgB"), 0o644))
+
+	resultA, err := lib.Add(context.Background(), AddOptions{Ref: refA, ResolvedDir: srcA})
+	require.NoError(t, err)
+	resultB, err := lib.Add(context.Background(), AddOptions{Ref: refB, ResolvedDir: srcB})
+	require.NoError(t, err)
+
+	require.NotEqual(t, resultA.Name, resultB.Name, "colliding DeriveName refs must land in distinct library slots")
+
+	pathA, err := lib.TemplatePath(resultA.Name)
+	require.NoError(t, err)
+	markerA, err := os.ReadFile(filepath.Join(pathA, "MARKER.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "from-orgA", string(markerA))
+
+	pathB, err := lib.TemplatePath(resultB.Name)
+	require.NoError(t, err)
+	markerB, err := os.ReadFile(filepath.Join(pathB, "MARKER.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "from-orgB", string(markerB))
+}
+
+func TestUT_Add_ExplicitNameNeverDigested(t *testing.T) {
+	// Positive control: TestUT_Add_AutoDeriveName_UsesLibraryName shows the
+	// same ref auto-derives to a digested name; --as (Name set explicitly)
+	// must bypass LibraryName entirely.
+	dataDir := t.TempDir()
+	templateSrc := t.TempDir()
+	createTagTemplate(t, templateSrc, "test", "", "")
+
+	lib := newWithDir(dataDir, &localResolver{})
+
+	result, err := lib.Add(context.Background(), AddOptions{
+		Ref:         "gh:acme/service-template",
+		Name:        "myname",
+		ResolvedDir: templateSrc,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "myname", result.Name)
+}
+
+func TestUT_Registry_PreChangeNamesStillResolve(t *testing.T) {
+	// We deliberately did not migrate existing library.json entries to the
+	// digested naming scheme when #430 landed. This guard passes on both
+	// sides of that change: a short legacy name written before #430 must
+	// keep resolving.
+	dataDir := t.TempDir()
+	templateDir := filepath.Join(dataDir, templatesDir, "go-api")
+	require.NoError(t, os.MkdirAll(templateDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "README.md"), []byte("legacy"), 0o644))
+
+	reg := Registry{
+		Version: registryVersion,
+		Entries: map[string]*Entry{
+			"go-api": {Name: "go-api", Source: "gh:acme/go-api"},
+		},
+	}
+	data, err := json.MarshalIndent(reg, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(dataDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "library.json"), data, 0o644))
+
+	lib := NewLocal(dataDir)
+
+	entry, err := lib.Get("go-api")
+	require.NoError(t, err)
+	assert.Equal(t, "gh:acme/go-api", entry.Source)
+
+	path, err := lib.TemplatePath("go-api")
+	require.NoError(t, err)
+	assert.Equal(t, templateDir, path)
+}
+
 func TestUT_Add_ForcePreservesAddedAt(t *testing.T) {
 	dataDir := t.TempDir()
 	templateSrc := t.TempDir()

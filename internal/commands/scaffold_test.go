@@ -2,10 +2,13 @@ package commands
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/kaikenlabs/tag/internal/library"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 )
@@ -260,4 +263,141 @@ func TestUT_DisplayScaffoldSummary_NoTemplateOrigin(t *testing.T) {
 	assert.Contains(t, output, "Scaffolding complete!")
 	assert.Contains(t, output, "Output: /tmp/local-project")
 	assert.NotContains(t, output, "Template:")
+}
+
+// TestUT_SuggestConvertedTemplateName_UsesDeriveName is a no-change guard:
+// suggestConvertedTemplateName (scaffold.go:607) suggests an OUTPUT
+// DIRECTORY name for `tag convert`, not a library name, and #430
+// deliberately left it on remote.DeriveName. This exists to fail loudly if
+// a future sweep migrates that call site to remote.LibraryName by mistake.
+func TestUT_SuggestConvertedTemplateName_UsesDeriveName(t *testing.T) {
+	const ref = "gh:acme/service-template"
+	assert.Equal(t, remote.DeriveName(ref)+"-tag", suggestConvertedTemplateName(ref))
+}
+
+func TestUT_ClassifyLibrarySlot(t *testing.T) {
+	notFoundErr := func(t *testing.T) error {
+		t.Helper()
+		lib := library.NewLocal(t.TempDir())
+		_, err := lib.Get("does-not-exist")
+		require.Error(t, err)
+		require.True(t, errors.Is(err, library.ErrTemplateNotFound))
+		return err
+	}
+
+	const ref = "gh:acme/api@v1"
+
+	tests := []struct {
+		name        string
+		entry       *library.Entry
+		getErr      func(t *testing.T) error
+		initErr     error
+		templateRef string
+		want        librarySlot
+	}{
+		{
+			name:        "not found wrapped in a real LibraryError is free",
+			getErr:      notFoundErr,
+			templateRef: ref,
+			want:        slotFree,
+		},
+		{
+			name:        "identical source is the same template",
+			entry:       &library.Entry{Name: "api", Source: ref},
+			templateRef: ref,
+			want:        slotSameSource,
+		},
+		{
+			name:        "same repo, different version is a different template",
+			entry:       &library.Entry{Name: "api", Source: "gh:acme/api@v2"},
+			templateRef: ref,
+			want:        slotTakenByOther,
+		},
+		{
+			name:        "different source entirely is taken by another template",
+			entry:       &library.Entry{Name: "api", Source: "gh:other/api@v1"},
+			templateRef: ref,
+			want:        slotTakenByOther,
+		},
+		{
+			name:        "library init failure is unavailable",
+			initErr:     errors.New("injected init error"),
+			templateRef: ref,
+			want:        slotUnavailable,
+		},
+		{
+			name:        "a get error that is not ErrTemplateNotFound is unavailable",
+			getErr:      func(*testing.T) error { return errors.New("disk exploded") },
+			templateRef: ref,
+			want:        slotUnavailable,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var getErr error
+			if tt.getErr != nil {
+				getErr = tt.getErr(t)
+			}
+			got := classifyLibrarySlot(tt.entry, getErr, tt.initErr, tt.templateRef)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestUT_ResolveLibrarySlot exercises the impure wrapper end to end against
+// a real (isolated) library, so classifyLibrarySlot's rules are proven
+// against what Library.Get actually returns, not just against hand-built
+// errors.
+func TestUT_ResolveLibrarySlot(t *testing.T) {
+	t.Run("free when nothing occupies the derived name", func(t *testing.T) {
+		// isolateLibrary mutates package-level var — do NOT use t.Parallel()
+		isolateLibrary(t)
+		const ref = "gh:acme/service-template@v1"
+
+		slot, entry, libName := resolveLibrarySlot(ref)
+
+		assert.Equal(t, slotFree, slot)
+		assert.Nil(t, entry)
+		assert.Equal(t, remote.LibraryName(ref), libName)
+	})
+
+	t.Run("same source when the occupying entry came from the identical ref", func(t *testing.T) {
+		// setupFakeLibraryForRef mutates package-level var — do NOT use t.Parallel()
+		const ref = "gh:acme/service-template@v1"
+		setupFakeLibraryForRef(t, ref)
+
+		slot, entry, libName := resolveLibrarySlot(ref)
+
+		assert.Equal(t, slotSameSource, slot)
+		require.NotNil(t, entry)
+		assert.Equal(t, ref, entry.Source)
+		assert.Equal(t, remote.LibraryName(ref), libName)
+	})
+
+	t.Run("taken by other when a different version occupies the same derived name", func(t *testing.T) {
+		// setupFakeLibraryForRef mutates package-level var — do NOT use t.Parallel()
+		const seededRef = "gh:acme/service-template@v1"
+		setupFakeLibraryForRef(t, seededRef)
+
+		const requestedRef = "gh:acme/service-template@v2"
+		require.Equal(t, remote.LibraryName(seededRef), remote.LibraryName(requestedRef),
+			"fixture invariant: version is deliberately excluded from the digest")
+
+		slot, entry, _ := resolveLibrarySlot(requestedRef)
+
+		assert.Equal(t, slotTakenByOther, slot)
+		require.NotNil(t, entry)
+		assert.Equal(t, seededRef, entry.Source)
+	})
+
+	t.Run("unavailable when the library cannot be initialized", func(t *testing.T) {
+		// setupFakeLibraryError mutates package-level var — do NOT use t.Parallel()
+		setupFakeLibraryError(t)
+
+		slot, entry, _ := resolveLibrarySlot("gh:acme/service-template")
+
+		assert.Equal(t, slotUnavailable, slot)
+		assert.Nil(t, entry)
+	})
 }

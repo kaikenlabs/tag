@@ -52,8 +52,10 @@ func noLibraryFixtureTemplate(t *testing.T) string {
 // run resolves it without any network access. httptest.NewServer cannot be
 // used here: internal/remote/zip.go rejects any http:// URL outright, and
 // ref is a pinned (non-empty version) reference so the resolver consults the
-// cache instead of skipping straight to a fetch. Returns the library name
-// the scaffold run will derive for this ref.
+// cache instead of skipping straight to a fetch. The returned name is
+// remote.DeriveName(ref), not what a scaffold run actually records or adds
+// to the library since #430 — that is remote.LibraryName(ref) — so callers
+// needing the library-facing name must derive it themselves.
 func seedRemoteCache(t *testing.T, cacheDir, ref, templateDir string) string {
 	t.Helper()
 
@@ -191,7 +193,7 @@ func TestIT_Scaffold_NoLibrary_LeavesGlobalStateAlone(t *testing.T) {
 	t.Run("B1 characterization guard: no flag adds to library and skips generator copy", func(t *testing.T) {
 		sandbox := newNoLibrarySandbox(t)
 		templateSrc := noLibraryFixtureTemplate(t)
-		name := seedRemoteCache(t, sandbox.cacheDir, noLibraryFixtureRef, templateSrc)
+		seedRemoteCache(t, sandbox.cacheDir, noLibraryFixtureRef, templateSrc)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -201,8 +203,12 @@ func TestIT_Scaffold_NoLibrary_LeavesGlobalStateAlone(t *testing.T) {
 			"scaffold", noLibraryFixtureRef, "generated", "--output", outDir, "--no-input")
 		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
 
+		// #430 switched the recorded/added name from remote.DeriveName to the
+		// collision-free remote.LibraryName; seedRemoteCache's return value
+		// still reports the former, so this must derive the latter directly
+		// rather than reuse it.
 		lib := library.NewLocal(sandbox.libraryDataDir())
-		_, getErr := lib.Get(name)
+		_, getErr := lib.Get(remote.LibraryName(noLibraryFixtureRef))
 		assert.NoError(t, getErr, "without the flag, the template must still be added to the library")
 
 		_, statErr := os.Stat(filepath.Join(outDir, ".tag", "nolibgen"))
