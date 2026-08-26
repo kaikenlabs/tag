@@ -182,7 +182,7 @@ func resolveLibraryGeneratorDir(libName string) (string, error) {
 		}
 	}
 
-	tagDir := filepath.Join(templatePath, types.TemplatesDir)
+	tagDir := libraryGeneratorRoots(templatePath)[0]
 	if err := os.MkdirAll(tagDir, types.DirModeRestricted); err != nil {
 		return "", app.Errorf("error creating directory %s: %w", tagDir, err)
 	}

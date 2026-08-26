@@ -70,3 +70,17 @@ func TestUT_ResolveBasePath_Lib_ChoosesExistingRoot(t *testing.T) {
 		assert.FileExists(t, filepath.Join(templateDir, types.GeneratorsDir, types.BundlesDir, "mybundle", "mybundle.json"))
 	})
 }
+
+func TestUT_ResolveBasePath_Lib_SkipsRootThatIsAFile(t *testing.T) {
+	templateDir := setupFakeLibrary(t, "basepath-tag-is-file")
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, types.TemplatesDir), []byte("not a directory"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(templateDir, types.GeneratorsDir), 0o750))
+
+	cfg := createTestConfigWithLib(t, t.TempDir(), "basepath-tag-is-file")
+	ctx := createTestCLIContext(t, nil, map[string]any{flags.LibFlag: true})
+
+	basePath, err := resolveBasePath(ctx, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(templateDir, types.GeneratorsDir), basePath)
+}

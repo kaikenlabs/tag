@@ -65,6 +65,19 @@ func resolveOutDir(t *testing.T, outDir string) string {
 	return resolved
 }
 
+func assertGeneratesExpectedBytes(t *testing.T, ctx context.Context, sandbox noLibrarySandbox, outDir, generatorName string) {
+	t.Helper()
+
+	resolvedOutDir := resolveOutDir(t, outDir)
+	stdout, stderr, err := runTagSubprocessEnv(t, ctx, resolvedOutDir, sandbox.env(),
+		"generate", generatorName, "widget")
+	require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
+
+	content, readErr := os.ReadFile(filepath.Join(resolvedOutDir, "widget.go"))
+	require.NoError(t, readErr)
+	assert.Equal(t, libGenRootsExpectedOutput, string(content))
+}
+
 func TestIT_LibraryGenerators_GeneratorsDirRoot(t *testing.T) {
 	t.Run("local lib add then generate renders bytes", func(t *testing.T) {
 		sandbox := newNoLibrarySandbox(t)
@@ -82,14 +95,7 @@ func TestIT_LibraryGenerators_GeneratorsDirRoot(t *testing.T) {
 			"scaffold", "libgenroots-local", "generated", "--output", outDir, "--no-input")
 		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
 
-		resolvedOutDir := resolveOutDir(t, outDir)
-		genStdout, genStderr, genErr := runTagSubprocessEnv(t, ctx, resolvedOutDir, sandbox.env(),
-			"generate", "mygen", "widget")
-		require.NoError(t, genErr, "stdout=%s stderr=%s", genStdout, genStderr)
-
-		content, readErr := os.ReadFile(filepath.Join(resolvedOutDir, "widget.go"))
-		require.NoError(t, readErr)
-		assert.Equal(t, libGenRootsExpectedOutput, string(content))
+		assertGeneratesExpectedBytes(t, ctx, sandbox, outDir, "mygen")
 	})
 
 	t.Run("remote scaffold then generate renders bytes", func(t *testing.T) {
@@ -110,14 +116,7 @@ func TestIT_LibraryGenerators_GeneratorsDirRoot(t *testing.T) {
 		assert.Equal(t, libName, tagConfigTemplate(t, outDir).Name,
 			"fixture invariant: a free slot must record the library name")
 
-		resolvedOutDir := resolveOutDir(t, outDir)
-		genStdout, genStderr, genErr := runTagSubprocessEnv(t, ctx, resolvedOutDir, sandbox.env(),
-			"generate", "mygen", "widget")
-		require.NoError(t, genErr, "stdout=%s stderr=%s", genStdout, genStderr)
-
-		content, readErr := os.ReadFile(filepath.Join(resolvedOutDir, "widget.go"))
-		require.NoError(t, readErr)
-		assert.Equal(t, libGenRootsExpectedOutput, string(content))
+		assertGeneratesExpectedBytes(t, ctx, sandbox, outDir, "mygen")
 	})
 
 	t.Run("--add-to-lib then generate renders bytes", func(t *testing.T) {
@@ -135,14 +134,7 @@ func TestIT_LibraryGenerators_GeneratorsDirRoot(t *testing.T) {
 		assert.NotEmpty(t, tagConfigTemplate(t, outDir).Name,
 			"fixture invariant: --add-to-lib must record a library name")
 
-		resolvedOutDir := resolveOutDir(t, outDir)
-		genStdout, genStderr, genErr := runTagSubprocessEnv(t, ctx, resolvedOutDir, sandbox.env(),
-			"generate", "mygen", "widget")
-		require.NoError(t, genErr, "stdout=%s stderr=%s", genStdout, genStderr)
-
-		content, readErr := os.ReadFile(filepath.Join(resolvedOutDir, "widget.go"))
-		require.NoError(t, readErr)
-		assert.Equal(t, libGenRootsExpectedOutput, string(content))
+		assertGeneratesExpectedBytes(t, ctx, sandbox, outDir, "mygen")
 	})
 
 	t.Run("bundle from generators dir renders bytes", func(t *testing.T) {
@@ -161,13 +153,6 @@ func TestIT_LibraryGenerators_GeneratorsDirRoot(t *testing.T) {
 			"scaffold", "libgenroots-bundle", "generated", "--output", outDir, "--no-input")
 		require.NoError(t, err, "stdout=%s stderr=%s", stdout, stderr)
 
-		resolvedOutDir := resolveOutDir(t, outDir)
-		genStdout, genStderr, genErr := runTagSubprocessEnv(t, ctx, resolvedOutDir, sandbox.env(),
-			"generate", "mybundle", "widget")
-		require.NoError(t, genErr, "stdout=%s stderr=%s", genStdout, genStderr)
-
-		content, readErr := os.ReadFile(filepath.Join(resolvedOutDir, "widget.go"))
-		require.NoError(t, readErr)
-		assert.Equal(t, libGenRootsExpectedOutput, string(content))
+		assertGeneratesExpectedBytes(t, ctx, sandbox, outDir, "mybundle")
 	})
 }

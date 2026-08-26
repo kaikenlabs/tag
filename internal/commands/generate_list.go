@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/kaikenlabs/tag/internal/chalk"
@@ -121,14 +122,7 @@ func libraryGeneratorsAndBundles(templateDir string) (gens, bundles []GeneratorI
 
 func appendNewByName(dst, src []GeneratorInfo) []GeneratorInfo {
 	for _, item := range src {
-		exists := false
-		for _, d := range dst {
-			if d.Name == item.Name {
-				exists = true
-				break
-			}
-		}
-		if !exists {
+		if !slices.ContainsFunc(dst, func(d GeneratorInfo) bool { return d.Name == item.Name }) {
 			dst = append(dst, item)
 		}
 	}

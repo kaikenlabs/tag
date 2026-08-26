@@ -127,3 +127,34 @@ func TestUT_ResolveGeneratorPaths_LibraryGeneratorsDirBeatsProjectLocal(t *testi
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(templateDir, types.GeneratorsDir, "foo"), genDir)
 }
+
+func TestUT_ResolveGeneratorPaths_LibraryFileDoesNotShadowProjectLocal(t *testing.T) {
+	setupLibEntryRoots(t, "roots-t11", map[string]string{
+		filepath.Join(types.GeneratorsDir, "foo"): "not a generator directory",
+	})
+	localDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(localDir, "foo"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(localDir, "foo", "generator.tmpl"), []byte("local"), 0o644))
+	cfg := createTestConfigWithLib(t, localDir, "roots-t11")
+
+	genDir, _, err := resolveGeneratorPaths(cfg, "foo")
+
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(localDir, "foo"), genDir)
+}
+
+func TestUT_ResolveBundlePath_LibraryDirectoryDoesNotShadowLocalBundle(t *testing.T) {
+	setupLibEntryRoots(t, "roots-t12", map[string]string{
+		filepath.Join(types.GeneratorsDir, types.BundlesDir, "foo", "foo.json", "placeholder"): "a directory, not a manifest",
+	})
+	localDir := t.TempDir()
+	localBundle := filepath.Join(localDir, types.BundlesDir, "foo")
+	require.NoError(t, os.MkdirAll(localBundle, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(localBundle, "foo.json"), []byte(`{"name":"foo"}`), 0o644))
+	cfg := createTestConfigWithLib(t, localDir, "roots-t12")
+
+	bundlePath, err := resolveBundlePath(cfg, "foo", types.BundlesDir)
+
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(localBundle, "foo.json"), bundlePath)
+}

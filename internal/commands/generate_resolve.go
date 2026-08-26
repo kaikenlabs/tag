@@ -78,7 +78,7 @@ func resolveGeneratorPaths(cfg *config.Config, name string) (genDir, sharedDir s
 	})
 }
 
-func resolveInLibraryTemplate(cfg *config.Config, relativePath string) (candidate, genRoot, templateDir string, found bool, err error) {
+func resolveInLibraryTemplate(cfg *config.Config, relativePath string, wantDir bool) (candidate, genRoot, templateDir string, found bool, err error) {
 	lib, initErr := newLocalLibrary()
 	if initErr != nil {
 		return "", "", "", false, app.Errorf("failed to initialize library: %w", initErr)
@@ -95,7 +95,7 @@ func resolveInLibraryTemplate(cfg *config.Config, relativePath string) (candidat
 
 	for _, root := range libraryGeneratorRoots(templateDir) {
 		candidate = filepath.Join(root, relativePath)
-		if _, statErr := os.Stat(candidate); statErr == nil {
+		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() == wantDir {
 			return candidate, root, templateDir, true, nil
 		}
 	}
@@ -110,7 +110,7 @@ func libraryGeneratorRoots(templateDir string) []string {
 }
 
 func resolveFromLibrary(cfg *config.Config, name string) (string, string, bool, error) {
-	candidate, genRoot, templateDir, found, err := resolveInLibraryTemplate(cfg, name)
+	candidate, genRoot, templateDir, found, err := resolveInLibraryTemplate(cfg, name, true)
 	if err != nil || !found {
 		return "", "", false, err
 	}
@@ -173,7 +173,7 @@ func resolveBundlePath(cfg *config.Config, bundleName, bundleSubDir string) (str
 // resolveBundleFromLibrary attempts to find a bundle file in the library template.
 // Returns ("", nil) when the bundle is not found (caller should fall through to local).
 func resolveBundleFromLibrary(cfg *config.Config, bundleFile string) (string, error) {
-	candidate, _, _, found, err := resolveInLibraryTemplate(cfg, filepath.Join(types.BundlesDir, bundleFile))
+	candidate, _, _, found, err := resolveInLibraryTemplate(cfg, filepath.Join(types.BundlesDir, bundleFile), false)
 	if err != nil {
 		return "", err
 	}
