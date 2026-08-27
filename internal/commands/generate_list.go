@@ -241,11 +241,15 @@ func scanDirEntries(dir string) []GeneratorInfo {
 		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") || name == types.HistoryDir {
 			continue
 		}
+		genDir := filepath.Join(dir, name)
+		if !engine.HasTemplateFiles(genDir) {
+			continue
+		}
 
 		info := GeneratorInfo{Name: name}
 
 		// Try tag.template.json first.
-		configPath := filepath.Join(dir, name, types.TemplateConfigFile)
+		configPath := filepath.Join(genDir, types.TemplateConfigFile)
 		data, readErr := os.ReadFile(configPath)
 		if readErr == nil {
 			if tc, parseErr := scaffold.ParseTemplateConfig(data); parseErr == nil {
@@ -256,7 +260,7 @@ func scanDirEntries(dir string) []GeneratorInfo {
 
 		// Fall back to frontmatter "desc" field from the first template file.
 		if info.Description == "" {
-			info.Description = readFrontmatterDesc(filepath.Join(dir, name))
+			info.Description = readFrontmatterDesc(genDir)
 		}
 
 		result = append(result, info)

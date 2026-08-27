@@ -22,6 +22,7 @@ Generators and bundles are resolved using a **library-first, local-fallback** st
 1. **Library template**: If the project was scaffolded from a library template (recorded in `.tagconfig.json`), generators are checked first in that template's `.tag/` directory (the project-shaped layout a scaffold copies), then in its `_generators/` directory (the layout the template ships) — `.tag/` wins on a name collision between the two.
 2. **Local project**: Generators in the project's `.tag/` directory (configured via `TAG_PATH`) are used as a fallback.
 3. **Library wins on collision**: If the library template and the project both have a generator with the same name, the library version takes precedence — resolution stops as soon as the library template supplies a match.
+4. **A directory only counts if it has templates**: a candidate directory resolves as a generator only when it contains at least one template file — any top-level file other than the reserved `tag.template.json` (subdirectories don't count; the check does not recurse). An empty or template-less directory is treated as if it didn't exist, so resolution moves on to the next candidate — falling through from `.tag/` to `_generators/`, from the library template to the local project, or from a generator to a same-named bundle. A directory that exists but can't be read (e.g. permissions) is still treated as a generator, so it fails with a read error rather than silently falling through.
 
 Generators can:
 - Create new files
@@ -33,7 +34,7 @@ Generators can:
 When you run `tag generate <name>`, TAG resolves the name automatically:
 
 1. Check if `<name>` matches a **bundle** in `_bundles/`
-2. Check if `<name>` matches a **generator** in `.tag/`
+2. Check if `<name>` matches a **generator** in `.tag/` — only a directory holding at least one template file counts (see [Generator Resolution](#generator-resolution)); an empty or template-less directory does not
 3. If both exist, the **generator** takes precedence
 
 This replaces the former `--bundle` flag, which has been removed.
