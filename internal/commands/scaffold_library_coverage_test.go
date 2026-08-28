@@ -334,6 +334,66 @@ func TestUT_ScaffoldFromRef_LocalDir_WithAddToLibFlag(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestUT_ScaffoldFromRef_DryRun_DoesNotAddToLibrary proves opts.DryRun
+// actually reaches addToLibrary through scaffoldFromRef, not just that the
+// addToLibrary helper honours the parameter in isolation (the #429 lesson: a
+// pure helper proves the verdict, nothing proves the mapping). --add-to-lib
+// is mandatory here: without it resolveAddToLib returns false for a local
+// template, addToLib is false, and the row would pass on the unfixed tree
+// for the wrong reason (addToLibrary never called at all).
+func TestUT_ScaffoldFromRef_DryRun_DoesNotAddToLibrary(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		dryRun bool
+	}{
+		{name: "dry run", dryRun: true},
+		{name: "real run", dryRun: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// setupFakeLibrary mutates package-level var — do NOT use t.Parallel()
+			setupFakeLibrary(t, "dummy-for-dryrun-mapping")
+
+			templateDir := t.TempDir()
+			createMinimalTemplate(t, templateDir, "{{ vars.project_name }}")
+
+			outputDir := t.TempDir()
+			outputPath := filepath.Join(outputDir, "dryrun-mapping-proj")
+
+			var buf bytes.Buffer
+			flagValues := map[string]string{
+				"no-input":         "true",
+				"output":           outputPath,
+				flags.AddToLibFlag: "true",
+			}
+			if tc.dryRun {
+				flagValues[flags.DryRunFlag] = "true"
+			}
+			ctx := newCoverageCLIContext(t, nil, flagValues, &buf)
+
+			err := scaffoldFromRef(ctx, []string{templateDir, "dryrun-mapping-proj"}, false, testVersion)
+			require.NoError(t, err)
+
+			out := buf.String()
+			ref := templateDir
+			name := remote.LibraryName(ref)
+			lib, libErr := newLocalLibrary()
+			require.NoError(t, libErr)
+
+			if tc.dryRun {
+				assert.Contains(t, out, "(dry-run) would add template to library as")
+				_, getErr := lib.Get(name)
+				require.Error(t, getErr)
+				assert.True(t, errors.Is(getErr, library.ErrTemplateNotFound))
+				return
+			}
+
+			assert.Contains(t, out, "Template added to library as")
+			_, getErr := lib.Get(name)
+			require.NoError(t, getErr)
+		})
+	}
+}
+
 func TestUT_ScaffoldFromRef_LocalDir_WithGenerators_NoInput(t *testing.T) {
 	// setupFakeLibrary mutates package-level var — do NOT use t.Parallel()
 	setupFakeLibrary(t, "dummy-gen")
@@ -508,7 +568,7 @@ func TestUT_AddToLibrary_LibraryInitError(t *testing.T) {
 	ctx := cli.NewContext(cliApp, set, nil)
 
 	// Should not panic; should log warning and return
-	addToLibrary(ctx, "gh:test/some-tmpl", t.TempDir(), false)
+	addToLibrary(ctx, "gh:test/some-tmpl", t.TempDir(), false, false)
 
 	// No output expected since it logs to slog, not app writer
 	assert.Empty(t, buf.String())
@@ -526,7 +586,7 @@ func TestUT_AddToLibrary_TemplateAlreadyExists_ShowsMessage(t *testing.T) {
 
 	// The entry is seeded under the same digested name addToLibrary derives
 	// from ref, so this must show "already in library".
-	addToLibrary(ctx, ref, t.TempDir(), false)
+	addToLibrary(ctx, ref, t.TempDir(), false, false)
 
 	out := buf.String()
 	assert.Contains(t, out, "already in library")
@@ -543,11 +603,89 @@ func TestUT_AddToLibrary_AddsNewTemplate(t *testing.T) {
 	ctx := cli.NewContext(cliApp, set, nil)
 
 	templateDir := t.TempDir()
-	addToLibrary(ctx, "gh:test/brand-new-tmpl", templateDir, false)
+	addToLibrary(ctx, "gh:test/brand-new-tmpl", templateDir, false, false)
 
 	out := buf.String()
 	assert.Contains(t, out, "Template added to library")
 	assert.Contains(t, out, "brand-new-tmpl")
+}
+
+// TestUT_AddToLibrary_DryRunSkipsTheWriteAndSaysSo pairs a dry-run call with
+// a positive control one flag apart. addToLibrary swallows every failure via
+// slog.Warn + return, so an absence oracle by itself would also pass on a
+// tree where dryRun was never wired to anything.
+func TestUT_AddToLibrary_DryRunSkipsTheWriteAndSaysSo(t *testing.T) {
+	t.Run("dry run", func(t *testing.T) {
+		// isolateLibrary mutates package-level var — do NOT use t.Parallel()
+		dataDir := isolateLibrary(t)
+		const ref = "gh:test/dryrun-tmpl"
+		name := remote.LibraryName(ref)
+		templateDir := t.TempDir()
+
+		before := listTreeEntries(t, dataDir)
+
+		var buf bytes.Buffer
+		ctx := cli.NewContext(&cli.App{Writer: &buf}, flag.NewFlagSet("test", flag.ContinueOnError), nil)
+		addToLibrary(ctx, ref, templateDir, false, true)
+
+		after := listTreeEntries(t, dataDir)
+		assert.Equal(t, before, after, "dry-run must not change the library tree")
+
+		require.NoDirExists(t, filepath.Join(dataDir, "templates", name))
+
+		lib := library.NewLocal(dataDir)
+		_, getErr := lib.Get(name)
+		require.Error(t, getErr)
+		assert.True(t, errors.Is(getErr, library.ErrTemplateNotFound))
+
+		out := buf.String()
+		assert.Contains(t, out, "(dry-run) would add template to library as")
+		assert.NotContains(t, out, "Template added to library as")
+	})
+
+	t.Run("positive control, one flag apart", func(t *testing.T) {
+		// isolateLibrary mutates package-level var — do NOT use t.Parallel()
+		dataDir := isolateLibrary(t)
+		const ref = "gh:test/dryrun-control"
+		name := remote.LibraryName(ref)
+		templateDir := t.TempDir()
+
+		before := listTreeEntries(t, dataDir)
+
+		var buf bytes.Buffer
+		ctx := cli.NewContext(&cli.App{Writer: &buf}, flag.NewFlagSet("test", flag.ContinueOnError), nil)
+		addToLibrary(ctx, ref, templateDir, false, false)
+
+		after := listTreeEntries(t, dataDir)
+		assert.NotEqual(t, before, after, "a real run must change the library tree")
+
+		lib := library.NewLocal(dataDir)
+		_, getErr := lib.Get(name)
+		require.NoError(t, getErr)
+
+		out := buf.String()
+		assert.Contains(t, out, "Template added to library as")
+	})
+}
+
+// TestUT_AddToLibrary_DryRunAlreadyPresentKeepsExistingMessage is a GUARD on
+// the fix's ordering: the dry-run branch sits AFTER the "already in library"
+// check, so a same-source slot that is already occupied keeps reporting
+// "already in library" rather than "would add". This does not compile against
+// the pre-fix addToLibrary signature, so it is not regression coverage for
+// the write itself — it pins the ordering the ticket calls load-bearing.
+func TestUT_AddToLibrary_DryRunAlreadyPresentKeepsExistingMessage(t *testing.T) {
+	// setupFakeLibraryForRef mutates package-level var — do NOT use t.Parallel()
+	const ref = "gh:test/dryrun-already-present"
+	_, templateDir := setupFakeLibraryForRef(t, ref)
+
+	var buf bytes.Buffer
+	ctx := cli.NewContext(&cli.App{Writer: &buf}, flag.NewFlagSet("test", flag.ContinueOnError), nil)
+	addToLibrary(ctx, ref, templateDir, false, true)
+
+	out := buf.String()
+	assert.Contains(t, out, "already in library")
+	assert.NotContains(t, out, "would add")
 }
 
 // --------------------------------------------------------------------------

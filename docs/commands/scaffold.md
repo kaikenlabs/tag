@@ -185,7 +185,7 @@ tag scaffold gh:user/template --update
 
 ### Dry Run Mode
 
-Use `--dry-run` to preview which files a scaffold would create without writing anything to disk or creating the output directory. Each file that would be written is printed as:
+Use `--dry-run` to preview which files a scaffold would create. It writes neither the project, the project's `.tagconfig.json`/`.tag/history.json`, nor an entry in the shared template library. Each file that would be written is printed as:
 
 ```
 (dry-run) would write: my-project/main.go
@@ -202,6 +202,19 @@ tag scaffold gh:user/template my-project --dry-run
 # Useful before scaffolding from an unfamiliar remote template
 tag scaffold gh:user/template --dry-run --no-input
 ```
+
+For a remote template, or a local template scaffolded with `--add-to-lib`, a real run would also
+add an entry to the shared library (see [Library Management](#library-management) below). A dry
+run skips that write and prints one more line instead:
+
+```
+(dry-run) would add template to library as "go-api"
+```
+
+If that derived name is already held by the same source, dry-run prints the existing `Template
+"<name>" already in library` message instead — the same message a real run would print — rather
+than the "would add" line. This announcement is text-mode only; see
+[Machine-Readable Output](#machine-readable-output) below for how `--format json` handles it.
 
 ## Machine-Readable Output
 
@@ -269,7 +282,11 @@ never prompts to convert a detected Cookiecutter template. A required variable w
 no `-m` override is an error rather than a blocked prompt. Hook output, the "Add template to
 library?" prompt, and the post-scaffold summary/README render are all suppressed or rerouted to
 stderr — stdout carries only the JSON document. `--dry-run --format json` does not create the
-output directory, same as `--dry-run` in text mode.
+output directory, same as `--dry-run` in text mode. It also skips the library write, but silently:
+neither the "Add template to library?" prompt nor the text-mode
+`(dry-run) would add template to library as "<name>"` line is printed, and the JSON document gains
+no field for it. A `--dry-run --format json` document cannot tell you whether a real run of the
+same command would have added a library entry.
 
 On failure, `--format json` writes a single JSON **error document** to stdout instead of the
 success document above (never a mix of the two), and the same human-readable message goes to

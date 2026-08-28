@@ -31,7 +31,7 @@ func TestUT_AddToLibrary_DuplicateSkipped(t *testing.T) {
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	addToLibrary(ctx, "gh:test/existing-tmpl", t.TempDir(), false)
+	addToLibrary(ctx, "gh:test/existing-tmpl", t.TempDir(), false, false)
 
 	out := buf.String()
 	assert.Contains(t, out, "already in library")
@@ -49,7 +49,7 @@ func TestUT_AddToLibrary_NewTemplate(t *testing.T) {
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	ctx := cli.NewContext(cliApp, set, nil)
 
-	addToLibrary(ctx, "gh:test/new-template", templateDir, false)
+	addToLibrary(ctx, "gh:test/new-template", templateDir, false, false)
 
 	out := buf.String()
 	assert.Contains(t, out, "Template added to library")
@@ -404,8 +404,10 @@ func TestUT_ScaffoldFlags_ContainsUpdateFlag(t *testing.T) {
 
 // TestUT_AddToLibrary_JSONModeWritesNothingToTheDocument pins the one path
 // that reaches addToLibrary under --format json: a remote template is added to
-// the library unconditionally, so these messages would otherwise land on
-// stdout beside the JSON document and break every consumer parsing it.
+// the library by default, so these messages would otherwise land on stdout
+// beside the JSON document and break every consumer parsing it. "By default",
+// not unconditionally — --no-library (#391) suppresses the add outright and
+// prepareLibrarySlot (#429) withdraws it for an occupied or unreadable slot.
 //
 // setupFakeLibrary mutates a package-level var — do NOT use t.Parallel().
 func TestUT_AddToLibrary_JSONModeWritesNothingToTheDocument(t *testing.T) {
@@ -415,18 +417,30 @@ func TestUT_AddToLibrary_JSONModeWritesNothingToTheDocument(t *testing.T) {
 		name     string
 		ref      string
 		jsonMode bool
+		dryRun   bool
 		wantOut  bool
 	}{
 		{name: "existing template, text mode", ref: "gh:test/existing-tmpl", jsonMode: false, wantOut: true},
 		{name: "existing template, json mode", ref: "gh:test/existing-tmpl", jsonMode: true, wantOut: false},
 		{name: "new template, text mode", ref: "gh:test/brand-new", jsonMode: false, wantOut: true},
 		{name: "new template, json mode", ref: "gh:test/brand-new", jsonMode: true, wantOut: false},
+		// A no-change guard: jsonMode routes w to io.Discard before the
+		// dryRun branch is reached, so this row passes with the guard present
+		// or absent. It is here only to pin that the dry-run announcement
+		// cannot leak onto stdout beside the JSON document. There is
+		// deliberately no text-mode sibling: this table's oracle is
+		// empty/non-empty, which cannot tell the dry-run notice apart from
+		// the real-add message, so such a row would look like coverage of the
+		// #432 guard while surviving its removal.
+		// TestUT_AddToLibrary_DryRunSkipsTheWriteAndSaysSo asserts the
+		// text-mode message and the untouched library tree instead.
+		{name: "dry run, json mode", ref: "gh:test/dryrun-json", jsonMode: true, dryRun: true, wantOut: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			ctx := cli.NewContext(&cli.App{Writer: &buf}, flag.NewFlagSet("test", flag.ContinueOnError), nil)
 
-			addToLibrary(ctx, tc.ref, t.TempDir(), tc.jsonMode)
+			addToLibrary(ctx, tc.ref, t.TempDir(), tc.jsonMode, tc.dryRun)
 
 			if tc.wantOut {
 				assert.NotEmpty(t, buf.String(), "text mode must keep reporting the library outcome")
