@@ -193,3 +193,36 @@ func TestUT_DoctorReport_EmptyChecksSerializeAsEmptyArray(t *testing.T) {
 	assert.Contains(t, out, `"sections": []`)
 	assert.NotContains(t, out, "null")
 }
+
+// TestUT_DoctorCheckTemplates_EmptyGeneratorDirWarns pins the propagation of
+// #439's empty-generator lint warning into doctor. doctorAction returns
+// doctorExitWarnings for any warn, so this flips doctor from exit 0 to exit 1
+// on a project that was otherwise clean. That is deliberate — reporting a
+// generator "tag generate" will not see is what doctor is for — and is recorded
+// as potentially breaking in CHANGELOG. The populated sibling is the positive
+// control: without it, a doctor that warns on everything would pass this test.
+func TestUT_DoctorCheckTemplates_EmptyGeneratorDirWarns(t *testing.T) {
+	dir := t.TempDir()
+	for _, tmpl := range []struct{ name, gen, file string }{
+		{"emptytpl", "emptygen", ""},
+		{"goodtpl", "goodgen", "model.tmpl"},
+	} {
+		genDir := filepath.Join(dir, ".tag", tmpl.name, "_generators", tmpl.gen)
+		require.NoError(t, os.MkdirAll(genDir, 0o750))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, ".tag", tmpl.name, "tag.template.json"),
+			[]byte(`{"name":"`+tmpl.name+`","version":"1.0.0"}`), 0o600))
+		if tmpl.file != "" {
+			require.NoError(t, os.WriteFile(filepath.Join(genDir, tmpl.file), []byte("package x\n"), 0o600))
+		}
+	}
+
+	byLabel := map[string]DoctorResult{}
+	for _, r := range doctorCheckTemplates(dir) {
+		byLabel[r.Label] = r
+	}
+	require.Len(t, byLabel, 2)
+	assert.Equal(t, doctorWarn, byLabel[`template "emptytpl"`].Status)
+	assert.Contains(t, byLabel[`template "emptytpl"`].Message, "1 warning(s)")
+	assert.Equal(t, doctorPass, byLabel[`template "goodtpl"`].Status)
+}
