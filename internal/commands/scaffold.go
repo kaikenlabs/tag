@@ -344,7 +344,7 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 
 	// Add the template to the library for generator resolution.
 	if addToLib {
-		addToLibrary(c, templateRef, templateDir, jsonMode)
+		addToLibrary(c, templateRef, templateDir, jsonMode, opts.DryRun)
 	}
 
 	return nil
@@ -673,7 +673,7 @@ func promptForProjectDir(prompter scaffold.Prompter, opts *scaffold.Options) err
 
 // addToLibrary adds a scaffolded remote template to the library (non-fatal on error).
 // If an entry with the same name already exists, it is left unchanged.
-func addToLibrary(c *cli.Context, templateRef, templateDir string, jsonMode bool) {
+func addToLibrary(c *cli.Context, templateRef, templateDir string, jsonMode, dryRun bool) {
 	w := c.App.Writer
 	if jsonMode {
 		w = io.Discard
@@ -690,6 +690,16 @@ func addToLibrary(c *cli.Context, templateRef, templateDir string, jsonMode bool
 	// Skip if the template is already in the library.
 	if _, getErr := lib.Get(name); getErr == nil {
 		fmt.Fprintf(w, "\nTemplate %q already in library. Run with: tag scaffold %s\n", name, name)
+		return
+	}
+
+	// This guard must sit after the "already in library" check above, not
+	// before it: prepareLibrarySlot's slotSameSource case deliberately
+	// leaves addToLib true so the caller still reports the existing entry,
+	// and a guard placed earlier would print "would add" for a slot that is
+	// already occupied.
+	if dryRun {
+		fmt.Fprintf(w, "\n(dry-run) would add template to library as %q\n", name)
 		return
 	}
 
