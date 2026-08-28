@@ -15,6 +15,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kaikenlabs/tag/internal/library"
+	"github.com/kaikenlabs/tag/internal/lockfile"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
 	"github.com/kaikenlabs/tag/internal/types/flags"
@@ -65,14 +66,14 @@ func TestUT_VerifyTemplateLock_WorksDirNoError(t *testing.T) {
 	// verifyTemplateLock should not fail — it just verifies or creates.
 	templateDir := t.TempDir()
 
-	err := verifyTemplateLock("gh:test/tmpl", templateDir, false, true)
+	err := verifyTemplateLock("gh:test/tmpl", templateDir, lockfile.VerifyOptions{IgnoreLock: true})
 	assert.NoError(t, err) // ignoreLock=true skips verification
 }
 
 func TestUT_VerifyTemplateLock_IgnoreLock(t *testing.T) {
 	t.Parallel()
 
-	err := verifyTemplateLock("gh:test/tmpl", t.TempDir(), false, true)
+	err := verifyTemplateLock("gh:test/tmpl", t.TempDir(), lockfile.VerifyOptions{IgnoreLock: true})
 	assert.NoError(t, err)
 }
 

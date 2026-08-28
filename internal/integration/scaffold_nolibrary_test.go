@@ -277,13 +277,16 @@ func TestIT_Scaffold_NoLibrary_LeavesGlobalStateAlone(t *testing.T) {
 		assert.Equal(t, []string{".tag", "project"}, dirEntryNames(t, sandbox.workDir),
 			"the only new top-level entries under workDir must be the project dir and .tag/")
 
-		// verifyTemplateLock's .tag/lock.json write is a KNOWN, PRE-EXISTING,
-		// OUT-OF-SCOPE side effect (scaffold.go's verifyTemplateLock ->
+		// verifyTemplateLock's .tag/lock.json write is documented, real-run
+		// behaviour (scaffold.go's verifyTemplateLock ->
 		// lockfile.VerifyAndMaybeUpdate) that fires on every remote scaffold's
-		// first use, independent of --no-library. If this assertion ever
-		// fails because MORE than lock.json appears here, that write moved
-		// and needs its own decision — do not silence this by adding
-		// --ignore-lock.
+		// first use, independent of --no-library. This subtest does not pass
+		// --dry-run, so the write firing here is expected and this assertion
+		// still holds; see TestIT_Scaffold_DryRun_LeavesWorkDirUntouched
+		// (scaffold_dryrun_lockfile_test.go) for the #442 dry-run case, where
+		// the write is suppressed. If this assertion ever fails because MORE
+		// than lock.json appears here, that write moved and needs its own
+		// decision — do not silence this by adding --ignore-lock.
 		assert.Equal(t, []string{"lock.json"}, dirEntryNames(t, filepath.Join(sandbox.workDir, ".tag")))
 
 		assert.Equal(t, libBefore, snapshotTree(t, sandbox.libraryDataDir()))

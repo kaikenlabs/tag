@@ -28,13 +28,15 @@ import (
 // (The local-template path, where --add-to-lib is what makes addToLib true,
 // is covered by TestUT_ScaffoldFromRef_DryRun_DoesNotAddToLibrary.)
 //
-// This test deliberately does NOT snapshot sandbox.workDir: a remote
-// scaffold's verifyTemplateLock writes .tag/lock.json even under --dry-run
-// (see scaffold_nolibrary_test.go's B4 subtest, which documents this as a
-// known, pre-existing, OUT-OF-SCOPE side effect independent of --no-library).
-// That is a real but separate defect being filed as a follow-up ticket;
-// widening this test's snapshot to workDir would fail it on a defect this
-// change does not fix.
+// This test deliberately does NOT snapshot sandbox.workDir: at the time it
+// was written, a remote scaffold's verifyTemplateLock wrote .tag/lock.json
+// even under --dry-run (see scaffold_nolibrary_test.go's B4 subtest, which
+// documented this as a known, pre-existing, out-of-scope side effect
+// independent of --no-library). That defect is fixed in #442, and
+// TestIT_Scaffold_DryRun_LeavesWorkDirUntouched (scaffold_dryrun_lockfile_test.go)
+// now covers workDir, including the lockfile write, directly. This test's
+// scope stays the library tree; it does not need widening to duplicate that
+// coverage.
 func TestIT_Scaffold_DryRun_LeavesLibraryUntouched(t *testing.T) {
 	t.Run("D1 --dry-run leaves the library tree unchanged", func(t *testing.T) {
 		sandbox := newNoLibrarySandbox(t)

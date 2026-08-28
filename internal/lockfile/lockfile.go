@@ -38,6 +38,9 @@ type VerifyOptions struct {
 	UpdateLock bool
 	// IgnoreLock skips all verification (a warning is still emitted).
 	IgnoreLock bool
+	// DryRun suppresses the create/refresh write while leaving verification
+	// intact — a mismatch still returns ErrChecksumMismatch.
+	DryRun bool
 }
 
 // ErrChecksumMismatch is returned when the computed hash does not match the
@@ -96,6 +99,9 @@ func Save(projectRoot string, lf *File) error {
 //   - If no entry exists: creates one (first use).
 //   - If an entry exists and opts.UpdateLock: refreshes it.
 //   - If an entry exists and hashes differ: returns ErrChecksumMismatch.
+//   - If opts.DryRun is true and the create/refresh branch above would fire,
+//     the write is skipped (a notice is printed to stderr instead); a
+//     mismatch is still reported as an error either way.
 func VerifyAndMaybeUpdate(projectRoot, ref, templateDir string, opts VerifyOptions) error {
 	if opts.IgnoreLock {
 		fmt.Fprintf(os.Stderr, "warning: lockfile verification skipped for %s (--ignore-lock)\n", ref)
@@ -116,6 +122,13 @@ func VerifyAndMaybeUpdate(projectRoot, ref, templateDir string, opts VerifyOptio
 
 	switch {
 	case !exists || opts.UpdateLock:
+		// Check DryRun before the in-memory assignment below: the mutation
+		// boundary is the write, not the decision, so a preview must not
+		// touch lf.Templates at all.
+		if opts.DryRun {
+			fmt.Fprintf(os.Stderr, "(dry-run) would pin %s in .tag/lock.json\n", ref)
+			return nil
+		}
 		// First use or forced refresh — pin the current hash.
 		lf.Templates[ref] = &Entry{
 			Ref:        ref,

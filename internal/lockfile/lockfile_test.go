@@ -2,6 +2,7 @@ package lockfile_test
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -230,4 +231,165 @@ func TestUT_LockFilePathNormalization(t *testing.T) {
 	assert.Equal(t, h1, h2)
 	assert.True(t, strings.HasPrefix(h1, ""), "hash should be non-empty hex string")
 	assert.Len(t, h1, 64, "SHA-256 hex is 64 chars")
+}
+
+// ---- #442 --dry-run tests ----
+
+func TestUT_VerifyAndMaybeUpdate_DryRunSkipsSave(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		dryRun     bool
+		wantTagDir bool
+	}{
+		{name: "dry run creates no .tag dir", dryRun: true, wantTagDir: false},
+		{name: "real run creates .tag dir", dryRun: false, wantTagDir: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tmplDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "file.go"), []byte("package x"), 0o644))
+
+			err := lockfile.VerifyAndMaybeUpdate(dir, "gh:org/repo", tmplDir, lockfile.VerifyOptions{DryRun: tc.dryRun})
+			require.NoError(t, err)
+
+			tagDir := filepath.Join(dir, ".tag")
+			if tc.wantTagDir {
+				assert.DirExists(t, tagDir)
+			} else {
+				assert.NoDirExists(t, tagDir)
+			}
+		})
+	}
+}
+
+// TestUT_VerifyAndMaybeUpdate_DryRunStillDetectsChecksumMismatch is a
+// NO-CHANGE GUARD: it passes on both sides of the #442 fix. It exists to
+// catch an over-broad fix that short-circuits the whole function with
+// `if opts.DryRun { return nil }` at the top, which would also silently
+// swallow a real checksum mismatch under --dry-run.
+func TestUT_VerifyAndMaybeUpdate_DryRunStillDetectsChecksumMismatch(t *testing.T) {
+	dir := t.TempDir()
+	tmplDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "file.go"), []byte("v1"), 0o644))
+	require.NoError(t, lockfile.VerifyAndMaybeUpdate(dir, "gh:org/repo", tmplDir, lockfile.VerifyOptions{}))
+
+	lockPath := filepath.Join(dir, ".tag", "lock.json")
+	before, err := os.ReadFile(lockPath)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "file.go"), []byte("v2 — tampered"), 0o644))
+
+	err = lockfile.VerifyAndMaybeUpdate(dir, "gh:org/repo", tmplDir, lockfile.VerifyOptions{DryRun: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, lockfile.ErrChecksumMismatch),
+		"a dry run must still detect a checksum mismatch, got: %v", err)
+
+	after, err := os.ReadFile(lockPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "the lockfile bytes must be unchanged after a dry-run mismatch check")
+}
+
+func TestUT_VerifyAndMaybeUpdate_DryRunUpdateLockDoesNotRewrite(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		dryRun      bool
+		wantRewrite bool
+	}{
+		{name: "dry run does not rewrite", dryRun: true, wantRewrite: false},
+		{name: "real run rewrites", dryRun: false, wantRewrite: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tmplDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "file.go"), []byte("v1"), 0o644))
+
+			seed := &lockfile.File{
+				Version: 1,
+				Templates: map[string]*lockfile.Entry{
+					"gh:org/repo": {
+						Ref:        "gh:org/repo",
+						Version:    "sentinel-v0",
+						SHA256:     "not-the-real-hash-so-this-is-a-mismatch",
+						ResolvedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+					},
+				},
+			}
+			require.NoError(t, lockfile.Save(dir, seed))
+
+			lockPath := filepath.Join(dir, ".tag", "lock.json")
+			before, err := os.ReadFile(lockPath)
+			require.NoError(t, err)
+
+			err = lockfile.VerifyAndMaybeUpdate(dir, "gh:org/repo", tmplDir,
+				lockfile.VerifyOptions{UpdateLock: true, DryRun: tc.dryRun})
+			require.NoError(t, err)
+
+			after, err := os.ReadFile(lockPath)
+			require.NoError(t, err)
+
+			if tc.wantRewrite {
+				assert.NotEqual(t, before, after, "a real --update-lock run must rewrite the entry")
+			} else {
+				assert.Equal(t, before, after, "a dry --update-lock run must leave the bytes byte-identical")
+			}
+		})
+	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	origStderr := os.Stderr
+	os.Stderr = w
+
+	fn()
+
+	os.Stderr = origStderr
+	require.NoError(t, w.Close())
+	captured, readErr := io.ReadAll(r)
+	require.NoError(t, readErr)
+	return string(captured)
+}
+
+// The notice is emitted only where a write was actually skipped. The silent
+// rows are the reason this is a table rather than a single positive
+// assertion: an announcement on an arm that would not have written anything
+// tells the user a real run does something it does not.
+func TestUT_VerifyAndMaybeUpdate_DryRunNoticeOnlyWhereAWriteWasSkipped(t *testing.T) {
+	const ref = "gh:org/repo"
+
+	for _, tc := range []struct {
+		name       string
+		seedEntry  bool
+		opts       lockfile.VerifyOptions
+		wantNotice bool
+	}{
+		{name: "no entry: the skipped create is announced", seedEntry: false, opts: lockfile.VerifyOptions{DryRun: true}, wantNotice: true},
+		{name: "matching entry: nothing was skipped, so nothing is said", seedEntry: true, opts: lockfile.VerifyOptions{DryRun: true}, wantNotice: false},
+		{name: "matching entry with --update-lock: the skipped refresh is announced", seedEntry: true, opts: lockfile.VerifyOptions{DryRun: true, UpdateLock: true}, wantNotice: true},
+		{name: "--ignore-lock returns before the dry-run branch is reached", seedEntry: false, opts: lockfile.VerifyOptions{DryRun: true, IgnoreLock: true}, wantNotice: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tmplDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "file.go"), []byte("package x"), 0o644))
+			if tc.seedEntry {
+				require.NoError(t, lockfile.VerifyAndMaybeUpdate(dir, ref, tmplDir, lockfile.VerifyOptions{}))
+			}
+
+			var verifyErr error
+			captured := captureStderr(t, func() {
+				verifyErr = lockfile.VerifyAndMaybeUpdate(dir, ref, tmplDir, tc.opts)
+			})
+			require.NoError(t, verifyErr)
+
+			notice := "(dry-run) would pin " + ref + " in .tag/lock.json"
+			if tc.wantNotice {
+				assert.Contains(t, captured, notice)
+			} else {
+				assert.NotContains(t, captured, "would pin")
+			}
+		})
+	}
 }

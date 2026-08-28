@@ -216,6 +216,45 @@ If that derived name is already held by the same source, dry-run prints the exis
 than the "would add" line. This announcement is text-mode only; see
 [Machine-Readable Output](#machine-readable-output) below for how `--format json` handles it.
 
+For a remote template, a real run also creates or refreshes an entry in `<cwd>/.tag/lock.json` for
+supply-chain integrity (see [Skipping the Library](#skipping-the-library---no-library) below). A
+dry run does not create or refresh that entry. Where a real run would have written one — a
+template's first use, or any run with `--update-lock` — the dry run prints one line to stderr
+instead:
+
+```
+(dry-run) would pin gh:user/template in .tag/lock.json
+```
+
+An entry that already exists and still matches is silent under `--dry-run`, because a real run
+would not have written anything there either.
+
+Verification itself is not skipped: if an existing `.tag/lock.json` entry's checksum no longer
+matches the resolved template, the run still fails with `template checksum mismatch`, exactly as a
+real run would — a dry run previews the write, not the check. `--update-lock --dry-run` against a
+mismatched entry reports success without rewriting the file, the same precedence `--update-lock`
+has over a mismatch on a real run.
+
+Resolving a remote reference — including under `--dry-run` — may fetch the template and replace
+its cache entry, and opportunistically deletes expired entries and stale staging directories. This
+is accepted: the cache is regenerable, and fetching the input is a precondition of previewing it at
+all. `TAG_CACHE_DIR` (see [Environment Variables](#environment-variables) below) is the isolation
+mechanism for a process that needs its dry runs not to touch a shared cache.
+
+A Cookiecutter template detected under `--dry-run` is refused rather than converted:
+
+```
+This appears to be a Cookiecutter template.
+Cannot convert during --dry-run.
+Convert it first, then scaffold the converted template:
+  tag convert cookiecutter gh:user/template
+```
+
+A preview can't convert-and-continue the way a real run does: conversion writes the converted
+template to disk, which is itself a write a dry run must not perform, and there is no destination
+left to hand off to a retried scaffold once that write is skipped. Convert with `tag convert
+cookiecutter` first, then preview (or run) the converted template instead.
+
 ## Machine-Readable Output
 
 ```bash
@@ -460,7 +499,7 @@ message naming both sources. Add the new source under a name you choose with `ta
 
 The trade-off: with no library entry to resolve generators from, `--no-library` copies the template's generators into the generated project's `.tag/` directory instead, so the project is self-contained. Without the flag, a template that gets added to the library does *not* get its generators copied — they resolve from the library entry instead. The generated `.tagconfig.json` also records no template name under `--no-library` (`template.name` is empty); recording one would let generator resolution fall back to an unrelated library template that happens to share the derived name. `template.source`, `template.ref` and `template.version` are still recorded, so `tag update` keeps working.
 
-`--no-library` doesn't affect the remote cache — `TAG_CACHE_DIR` is the cache isolation mechanism, see [Environment Variables](#environment-variables) — or replay files, which are gated by `--no-save` (see [Replay System](#replay-system) above). Combine `--no-save --no-library` for a run that writes nothing outside the output directory except `<cwd>/.tag/lock.json`, which every remote scaffold writes on first use for supply-chain integrity and which no flag suppresses.
+`--no-library` doesn't affect the remote cache — `TAG_CACHE_DIR` is the cache isolation mechanism, see [Environment Variables](#environment-variables) — or replay files, which are gated by `--no-save` (see [Replay System](#replay-system) above). Combine `--no-save --no-library` for a run that writes nothing outside the output directory except `<cwd>/.tag/lock.json`, which every remote scaffold writes on first use for supply-chain integrity. Two flags suppress that write: `--dry-run` (see [Dry Run Mode](#dry-run-mode) above), which still verifies an existing entry, and `--ignore-lock`, which skips verification as well.
 
 ## Error Handling
 
@@ -472,6 +511,7 @@ The trade-off: with no library entry to resolve generators from, `--no-library` 
 | "required variable missing" | Required variable has no value in `--no-input` mode | Error includes `--meta` and `--values` hints |
 | "output directory escapes working directory" | `project_name` contains path traversal (`../`) | Use a simple project name without path separators |
 | "This appears to be a Cookiecutter template" | Cookiecutter template in non-interactive mode | Use `tag convert cookiecutter` first |
+| "Cannot convert during --dry-run" | Cookiecutter template detected under `--dry-run` | Run `tag convert cookiecutter <ref>` first, then scaffold the converted template |
 
 This table describes the text-mode message. Under `--format json`, each of these failures is
 reported as a JSON error document on stdout (with the same message text and a stable `error.code`)
