@@ -725,3 +725,93 @@ func TestUT_LintBundleNames_ReservedGeneratorRef(t *testing.T) {
 	}
 	assert.True(t, found, "expected reserved-name issue for generator ref named 'info'")
 }
+
+// --- Empty Generator Directory Tests ---
+
+func TestUT_LintGeneratorDirs_EmptyGenerator(t *testing.T) {
+	tests := []struct {
+		name    string
+		files   map[string]string
+		subdirs []string
+		want    bool
+	}{
+		{name: "empty directory", want: true},
+		{
+			name:  "config only",
+			files: map[string]string{"tag.template.json": `{"to": "x.go"}`},
+			want:  true,
+		},
+		{
+			name:    "subdirectories only",
+			subdirs: []string{"nested"},
+			want:    true,
+		},
+		{
+			name:  "populated generator",
+			files: map[string]string{"model.tmpl": "package {{ name }}\n"},
+			want:  false,
+		},
+		{
+			name: "config plus template file",
+			files: map[string]string{
+				"tag.template.json": `{"to": "x.go"}`,
+				"model.tmpl":        "package {{ name }}\n",
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			createTemplate(t, dir, validConfig, nil)
+			genDir := filepath.Join(dir, "_generators", "mygen")
+			require.NoError(t, os.MkdirAll(genDir, 0o755))
+			for _, sub := range tt.subdirs {
+				require.NoError(t, os.MkdirAll(filepath.Join(genDir, sub), 0o755))
+			}
+			for name, content := range tt.files {
+				require.NoError(t, os.WriteFile(filepath.Join(genDir, name), []byte(content), 0o644))
+			}
+
+			linter, err := NewLinter(dir)
+			require.NoError(t, err)
+			result, err := linter.Run()
+			require.NoError(t, err)
+
+			var found *Issue
+			for i := range result.Issues {
+				if result.Issues[i].Rule == "empty-generator" {
+					found = &result.Issues[i]
+					break
+				}
+			}
+
+			if !tt.want {
+				assert.Nil(t, found, "unexpected empty-generator issue")
+				return
+			}
+			require.NotNil(t, found, "expected an empty-generator issue")
+			assert.Equal(t, SeverityWarning, found.Severity)
+			assert.Equal(t, filepath.Join("_generators", "mygen"), found.File)
+			assert.Contains(t, found.Message, "mygen")
+			assert.False(t, result.HasErrors(), "an empty generator is a warning, not an error")
+		})
+	}
+}
+
+func TestUT_LintGeneratorDirs_ReservedDirsAreNotEmptyGenerators(t *testing.T) {
+	dir := t.TempDir()
+	createTemplate(t, dir, validConfig, nil)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "_generators", "_bundles"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "_generators", "_shared"), 0o755))
+
+	linter, err := NewLinter(dir)
+	require.NoError(t, err)
+	result, err := linter.Run()
+	require.NoError(t, err)
+
+	for _, issue := range result.Issues {
+		assert.NotEqual(t, "empty-generator", issue.Rule, "unexpected issue: %s", issue.Message)
+	}
+}

@@ -308,12 +308,18 @@ func isSkippedEntry(relPath, name string) bool {
 
 // lintGeneratorNames checks generator and bundle names against reserved subcommand names.
 func (l *Linter) lintGeneratorNames() {
-	l.lintGeneratorDirNames()
+	l.lintGeneratorDirs()
 	l.lintBundleNames()
 }
 
 // lintGeneratorDirNames scans _generators/ for directories whose names conflict with subcommands.
-func (l *Linter) lintGeneratorDirNames() {
+// lintGeneratorDirs scans _generators/ for directories whose names conflict with
+// subcommands and for directories that hold nothing "tag generate" would run.
+//
+// Only _generators/ is scanned, not the .tag/ layout a template may also ship
+// (see #431): that keeps this check's scope identical to the reserved-name check
+// it shares a loop with, and widening it would change that shipped rule too.
+func (l *Linter) lintGeneratorDirs() {
 	genDir := filepath.Join(l.root, types.GeneratorsDir)
 	entries, err := os.ReadDir(genDir)
 	if err != nil {
@@ -327,12 +333,24 @@ func (l *Linter) lintGeneratorDirNames() {
 		if name == types.BundlesDir || name == types.SharedDir {
 			continue
 		}
+		relPath := filepath.Join(types.GeneratorsDir, name)
 		if err := validate.GeneratorName(name); err != nil {
 			l.result.Add(Issue{
-				File:     filepath.Join(types.GeneratorsDir, name),
+				File:     relPath,
 				Severity: SeverityError,
 				Message:  fmt.Sprintf("generator name %q conflicts with a \"tag generate\" subcommand", name),
 				Rule:     "reserved-name",
+			})
+		}
+		if !engine.HasTemplateFiles(filepath.Join(genDir, name)) {
+			l.result.Add(Issue{
+				File:     relPath,
+				Severity: SeverityWarning,
+				Message: fmt.Sprintf(
+					"generator %q holds no template files, so \"tag generate\" will not see it; %s and subdirectories do not count (template files are not loaded recursively)",
+					name, types.TemplateConfigFile,
+				),
+				Rule: "empty-generator",
 			})
 		}
 	}
