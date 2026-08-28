@@ -404,8 +404,10 @@ func TestUT_ScaffoldFlags_ContainsUpdateFlag(t *testing.T) {
 
 // TestUT_AddToLibrary_JSONModeWritesNothingToTheDocument pins the one path
 // that reaches addToLibrary under --format json: a remote template is added to
-// the library unconditionally, so these messages would otherwise land on
-// stdout beside the JSON document and break every consumer parsing it.
+// the library by default, so these messages would otherwise land on stdout
+// beside the JSON document and break every consumer parsing it. "By default",
+// not unconditionally — --no-library (#391) suppresses the add outright and
+// prepareLibrarySlot (#429) withdraws it for an occupied or unreadable slot.
 //
 // setupFakeLibrary mutates a package-level var — do NOT use t.Parallel().
 func TestUT_AddToLibrary_JSONModeWritesNothingToTheDocument(t *testing.T) {
@@ -422,10 +424,16 @@ func TestUT_AddToLibrary_JSONModeWritesNothingToTheDocument(t *testing.T) {
 		{name: "existing template, json mode", ref: "gh:test/existing-tmpl", jsonMode: true, wantOut: false},
 		{name: "new template, text mode", ref: "gh:test/brand-new", jsonMode: false, wantOut: true},
 		{name: "new template, json mode", ref: "gh:test/brand-new", jsonMode: true, wantOut: false},
-		// dryRun rows: json mode already routes w to io.Discard, so the json
-		// row here is a no-change guard rather than new coverage of dryRun
-		// itself — dryRun is only observable through the text row.
-		{name: "dry run, text mode", ref: "gh:test/dryrun-text", jsonMode: false, dryRun: true, wantOut: true},
+		// A no-change guard: jsonMode routes w to io.Discard before the
+		// dryRun branch is reached, so this row passes with the guard present
+		// or absent. It is here only to pin that the dry-run announcement
+		// cannot leak onto stdout beside the JSON document. There is
+		// deliberately no text-mode sibling: this table's oracle is
+		// empty/non-empty, which cannot tell the dry-run notice apart from
+		// the real-add message, so such a row would look like coverage of the
+		// #432 guard while surviving its removal.
+		// TestUT_AddToLibrary_DryRunSkipsTheWriteAndSaysSo asserts the
+		// text-mode message and the untouched library tree instead.
 		{name: "dry run, json mode", ref: "gh:test/dryrun-json", jsonMode: true, dryRun: true, wantOut: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

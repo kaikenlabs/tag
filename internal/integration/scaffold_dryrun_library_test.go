@@ -20,9 +20,11 @@ import (
 // drives the real binary against the real XDG layout with a pinned remote
 // ref and snapshots the full library tree before and after.
 //
-// Neither subtest passes --add-to-lib, deliberately: scaffoldFromRef sets
-// addToLib for EVERY remote scaffold that does not pass --no-library, so
-// this is the ticket's default path rather than a flagged variant of it.
+// Neither subtest passes --add-to-lib, deliberately: for a remote ref
+// scaffoldFromRef sets addToLib without any flag, so this is the ticket's
+// default path rather than a flagged variant of it. It is the free-slot
+// case specifically — prepareLibrarySlot clears addToLib again for
+// slotTakenByOther and slotUnavailable, which #429 covers and this does not.
 // (The local-template path, where --add-to-lib is what makes addToLib true,
 // is covered by TestUT_ScaffoldFromRef_DryRun_DoesNotAddToLibrary.)
 //

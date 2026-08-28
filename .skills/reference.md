@@ -913,7 +913,7 @@ mechanism that makes a trailing `--format json` work. Same rules apply to `-d`.
 **`--dry-run` behavior by command**:
 
 - **`tag generate --dry-run`**: Renders templates and displays a colored unified diff for each file (green `+` additions, red `-` deletions). On a TTY, each diff is followed by a `[y]es/[n]o/[a]ll/[q]uit` prompt. `y`/`n` advance to the next file; `a` skips remaining prompts; `q` exits immediately. Nothing is written regardless of input. Hooks are not executed.
-- **`tag scaffold --dry-run`**: Lists each file path that would be created as `(dry-run) would write: <path>`, including binary files. No output directory is created.
+- **`tag scaffold --dry-run`**: Lists each file path that would be created as `(dry-run) would write: <path>`, including binary files. No output directory is created. A remote scaffold (or a local one with `--add-to-lib`) that would otherwise add the template to the shared library instead prints `(dry-run) would add template to library as "<name>"` and writes no library entry — text mode only, see below.
 
 **`--on-existing` behavior**:
 
@@ -988,7 +988,10 @@ archiving `project_root` wholesale.
 `action` is always `"create"` — scaffold writes a fresh project tree, so it has no
 inject/append/overwrite cases. `files` is identical whether `--dry-run` is set or not
 (same paths, same action), because both paths record an entry at the same point right
-after a file is processed; only whether the file actually lands on disk differs.
+after a file is processed; only whether the file actually lands on disk differs. A dry
+run also skips the write to the shared template library (see the `--dry-run` behavior
+by command list above), but under `--format json` that skip is silent: no "would add"
+line, no field in the document.
 `--format json` forces `--no-input` (defaults and `-m` overrides apply, prompts never
 fire) and turns the no-template-argument interactive picker into a usage error (exit 2)
 instead. Hook output, the "Add template to library?" prompt/messages, and the
