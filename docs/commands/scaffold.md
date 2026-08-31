@@ -44,7 +44,7 @@ When a template name is given without a path prefix or remote shorthand, TAG fir
 | `--no-save` | | Don't save values for future replay |
 | `--add-to-lib` | | Add the template to the library after scaffolding (enables generator resolution from library) |
 | `--no-library` | | Never add the template to the shared library; generators are copied into the project instead. Beats `--add-to-lib` when both are given |
-| `--accept-hooks` | | Accept hooks without prompting (disabled by default for remote templates) |
+| `--accept-hooks` | | Run the template's hooks without prompting. Required to run hooks non-interactively, for local and remote templates alike (see [Hook Security](#hook-security)) |
 | `--dry-run` | `-d` | Preview which files would be written without creating the output directory |
 | `--update-lock` | | Update the lockfile with the current template version |
 | `--ignore-lock` | | Ignore the lockfile and scaffold from the current template state |
@@ -188,10 +188,13 @@ tag scaffold gh:user/template --update
 Use `--dry-run` to preview which files a scaffold would create. It writes neither the project, the project's `.tagconfig.json`/`.tag/history.json`, nor an entry in the shared template library. Each file that would be written is printed as:
 
 ```
-(dry-run) would write: my-project/main.go
-(dry-run) would write: my-project/go.mod
-(dry-run) would write: my-project/Dockerfile
+  (dry-run) would write: /home/you/work/my-project/main.go
+  (dry-run) would write: /home/you/work/my-project/go.mod
+  (dry-run) would write: /home/you/work/my-project/Dockerfile
 ```
+
+The path printed here is absolute. The `files[].path` values under `--format json` are
+relative to `output_dir` instead — see [Machine-Readable Output](#machine-readable-output).
 
 Binary files are listed the same way and are also skipped. No diff is shown for scaffold dry-run because these are new files with no existing content to compare against.
 
@@ -446,20 +449,47 @@ The template root's `.tagignore` file is always excluded from output, and its pa
 
 ## Hook Security
 
-For security, hooks defined in remote templates are **disabled by default**. A malicious remote template could use hooks to execute arbitrary commands on your machine.
+A template's `pre_scaffold` and `post_scaffold` hooks are commands that run on your machine. A
+malicious template — remote **or** local — could use them to execute arbitrary code, so TAG never
+runs them without your consent.
 
-When hooks are skipped, TAG displays a warning:
+The gate is **interactivity, not where the template came from**. TAG applies the same rule to a
+local directory, a library entry and a remote reference:
+
+| Situation | What happens |
+|-----------|--------------|
+| The template declares no hooks | Nothing to run |
+| `--accept-hooks` given | Hooks are accepted with no prompt (still not executed under `--dry-run`) |
+| Non-interactive (`--no-input`, which `--format json` implies) without `--accept-hooks` | All hooks are skipped, with a notice |
+| Otherwise | TAG lists the hooks and asks once for the whole set. With no TTY to answer on, it lists them and takes the `no` default |
+
+When hooks are skipped for non-interactivity, TAG prints:
 ```
-Warning: This remote template defines hooks that have been skipped for security.
-  To allow hooks, re-run with --accept-hooks
+Skipping hooks (use --accept-hooks to run them in non-interactive mode).
 ```
 
-To allow hooks for a trusted remote template:
+In text mode that notice goes to stdout; under `--format json` it goes to stderr, so stdout still
+carries exactly one JSON document.
+
+Declining the prompt prints `Hooks skipped by user choice.` instead. A run with no TTY on stdin —
+a pipe, or a CI job — reaches the same line without asking anything, unless `--no-input` or
+`--format json` sent it down the row above.
+
+To run hooks for a template you trust:
 ```bash
 tag scaffold gh:trusted-org/template --accept-hooks
 ```
 
-Local templates always run hooks, since you control the template source.
+**Hooks inherit your full process environment.** On top of the environment `tag` itself was
+started with — nothing is stripped — TAG appends `TAG_TEMPLATE_DIR`, `TAG_OUTPUT_DIR`, one
+`TAG_VAR_*` entry per resolved variable, and `TAG_PROJECT_NAME` when the template declares a
+`project_name`. An accepted hook can read `GITHUB_TOKEN`, `AWS_SECRET_ACCESS_KEY` and every other
+secret visible to your shell. Review the hook commands (`tag template info <template>` lists them)
+before accepting, and run untrusted templates from a shell with a minimal environment.
+
+`tag generate`'s `pre_generate`/`post_generate` hooks are a separate case: they come from the
+project's own `.tagconfig.json` and run with no prompt, unless `--no-hooks` is passed. See the
+[Hooks Guide](../templates/hooks.md#security).
 
 ## Library Management
 

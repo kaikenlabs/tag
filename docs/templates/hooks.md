@@ -321,16 +321,46 @@ For maximum compatibility:
    │   └── post-scaffold.bat   # Windows
    ```
 
-## Security: Remote Templates
+## Security
 
-For security, hooks are **disabled by default** when scaffolding from remote templates (e.g., `gh:user/repo`, Git URLs, zip URLs). This prevents untrusted templates from executing arbitrary commands on your machine.
+Hooks are commands running on the user's machine, so a malicious template could use them to
+execute arbitrary code.
 
-To allow hooks for a trusted remote template:
+### Scaffold hooks are confirmed
+
+`tag scaffold` never runs `pre_scaffold` or `post_scaffold` hooks without consent, and the gate is
+**interactivity, not where the template came from** — a local directory, a library entry and a
+remote reference are all treated identically:
+
+- No hooks declared → nothing to run.
+- `--accept-hooks` → hooks are accepted with no prompt. They still do not execute under
+  `--dry-run`, which previews the file writes only.
+- Non-interactive (`--no-input`, which `--format json` implies) without `--accept-hooks` → all
+  hooks are skipped, with `Skipping hooks (use --accept-hooks to run them in non-interactive
+  mode).` — on stdout in text mode, on stderr under `--format json`.
+- Otherwise → TAG lists the hooks and prompts once for the whole set. Declining prints
+  `Hooks skipped by user choice.` A run with no TTY on stdin (a pipe, or a CI job) reaches that
+  same line without asking anything, since there is nothing to answer with.
+
+To run hooks for a template you trust:
 ```bash
 tag scaffold gh:trusted-org/template --accept-hooks
 ```
 
-Local templates always run hooks since you control the template source.
+### Generate hooks are not confirmed
+
+`pre_generate` and `post_generate` hooks come from the project's own `.tagconfig.json`, which the
+user already scaffolded, so `tag generate` runs them with no prompt and no `--accept-hooks`. Pass
+`--no-hooks` to skip them. Treat a `.tagconfig.json` you did not write the same way you would
+treat a `Makefile` you did not write.
+
+### Hooks inherit the full environment
+
+On top of the environment `tag` was started with — nothing is stripped — TAG appends
+`TAG_TEMPLATE_DIR`, `TAG_OUTPUT_DIR`, one `TAG_VAR_*` entry per resolved variable, and
+`TAG_PROJECT_NAME` when a `project_name` variable exists. A hook that runs can read `GITHUB_TOKEN`
+and every other secret visible to the calling shell. Review the commands with
+`tag template info <template>` before accepting.
 
 ## Debugging Hooks
 
