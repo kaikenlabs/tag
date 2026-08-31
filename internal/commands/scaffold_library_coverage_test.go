@@ -17,6 +17,7 @@ import (
 
 	"github.com/kaikenlabs/tag/internal/config"
 	"github.com/kaikenlabs/tag/internal/library"
+	"github.com/kaikenlabs/tag/internal/lockfile"
 	"github.com/kaikenlabs/tag/internal/remote"
 	"github.com/kaikenlabs/tag/internal/scaffold"
 	"github.com/kaikenlabs/tag/internal/types"
@@ -825,7 +826,7 @@ func TestUT_RunScaffold_SuccessfulScaffold(t *testing.T) {
 func TestUT_VerifyTemplateLock_UpdateLock(t *testing.T) {
 	t.Parallel()
 
-	err := verifyTemplateLock("gh:test/tmpl", t.TempDir(), true, false)
+	err := verifyTemplateLock("gh:test/tmpl", t.TempDir(), lockfile.VerifyOptions{UpdateLock: true})
 	// updateLock=true should create/update the lock without error
 	assert.NoError(t, err)
 }

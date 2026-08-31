@@ -250,7 +250,7 @@ Enter value for project_name [my_project]: awesome-app
 ...
 ```
 
-This allows seamless use of Cookiecutter templates without a separate conversion step. In non-interactive mode (`--no-input`), auto-conversion is disabled and you must convert explicitly first.
+This allows seamless use of Cookiecutter templates without a separate conversion step. In non-interactive mode (`--no-input`), auto-conversion is disabled and you must convert explicitly first. Under `--dry-run`, auto-conversion is refused too, on every path including a TTY — see [Dry Run Mode](scaffold.md#dry-run-mode) — since a preview cannot write the converted template to disk; convert explicitly first.
 
 ## See Also
 

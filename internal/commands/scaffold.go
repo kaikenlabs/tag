@@ -330,7 +330,8 @@ func scaffoldFromRef(c *cli.Context, positional []string, jsonMode bool, version
 
 	// Verify template lockfile for remote templates.
 	if isRemote {
-		if lockErr := verifyTemplateLock(templateRef, templateDir, opts.UpdateLock, opts.IgnoreLock); lockErr != nil {
+		lockOpts := lockfile.VerifyOptions{UpdateLock: opts.UpdateLock, IgnoreLock: opts.IgnoreLock, DryRun: opts.DryRun}
+		if lockErr := verifyTemplateLock(templateRef, templateDir, lockOpts); lockErr != nil {
 			return app.Errorf("lockfile check failed: %w", lockErr)
 		}
 	}
@@ -569,6 +570,19 @@ func scaffoldFlags() []cli.Flag {
 func handleCookiecutterDetection(c *cli.Context, _ *scaffold.CookiecutterDetectedError,
 	templateRef, templateDir string, opts scaffold.Options, jsonMode bool, version string,
 ) error {
+	// This must run BEFORE the nonInteractive guard below: --dry-run --no-input
+	// and --dry-run --format json both imply nonInteractive, and they need the
+	// dry-run-specific advice rather than the misleading "Run without
+	// --no-input to convert interactively" — a preview cannot convert and
+	// retry, since the retry path writes opts.TemplateDir = result.Destination
+	// and re-scaffolds from it.
+	if opts.DryRun {
+		return app.Errorf("This appears to be a Cookiecutter template.\n"+
+			"Cannot convert during --dry-run.\n"+
+			"Convert it first, then scaffold the converted template:\n"+
+			"  tag convert cookiecutter %s", templateRef)
+	}
+
 	// In non-interactive mode, fail with helpful error
 	if nonInteractive(c, jsonMode) {
 		return app.Errorf("This appears to be a Cookiecutter template.\n"+
@@ -780,13 +794,10 @@ func hasSubdirScaffold(dir, subdir string) bool {
 
 // verifyTemplateLock checks or creates a lockfile entry for a remote template.
 // projectRoot is the current working directory where .tag/lock.json lives.
-func verifyTemplateLock(templateRef, templateDir string, updateLock, ignoreLock bool) error {
+func verifyTemplateLock(templateRef, templateDir string, opts lockfile.VerifyOptions) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("cannot determine working directory: %w", err)
 	}
-	return lockfile.VerifyAndMaybeUpdate(cwd, templateRef, templateDir, lockfile.VerifyOptions{
-		UpdateLock: updateLock,
-		IgnoreLock: ignoreLock,
-	})
+	return lockfile.VerifyAndMaybeUpdate(cwd, templateRef, templateDir, opts)
 }
