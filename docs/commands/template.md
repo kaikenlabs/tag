@@ -160,32 +160,41 @@ tag template info gh:user/awesome-template --update
 **Example output:**
 
 ```
-Name:        go-api
-Source:       gh:user/go-api-template
-Path:         /Users/you/.local/share/tag/templates/go-api
+Name:         go-api
 Version:      v1.2.0
 Description:  Go REST API template
 
 Variables:
-  author               (string)
+  _build_stamp         = {{ vars.author }}
+  author               (string)  — Author name
   license              (choice: [MIT Apache-2.0 GPL-3.0])
-  port                 = 8080
-  project_name         (string)
-  use_docker           (boolean)
+  port                 (number)
+  service_name         = {{ vars.author }}-svc
 
 Hooks:
   post_scaffold:
     - go mod tidy
     - git init
 
-Generators:
-  handler              Create a request handler
-  model                Create a data model
-  service              Create a service layer
+--- README ---
 
-Bundles:
-  crud                 Model + handler + service
+  # go-api
+
+  Scaffolds a Go REST API.
 ```
+
+Each variable shows one detail: its options for a `choice`, its type for any other non-string
+type, its default for a string that declares one, and `(string)` otherwise. A variable that
+declares a `prompt` has it appended after an em dash. Defaults print verbatim, so a derived
+variable shows its unrendered expression. A `README.md` or `HOWTO.md` in the template is rendered
+last, through glamour, so on a terminal it carries colour and wrapping this plain-text example
+cannot show.
+
+The text view reports only what the template declares. It prints no `Source:` or `Path:` — `tag
+lib list` shows a library template's registered source — and no `Generators:` or `Bundles:`; list
+those with `tag generate list`.
+
+The JSON example below describes this same template.
 
 **Example JSON output** (`--format json`):
 

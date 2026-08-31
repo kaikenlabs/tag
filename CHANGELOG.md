@@ -49,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A `{{ }}` / `{% %}` block spanning multiple lines is now scanned at all — previously invisible to the line-by-line scanner
 - Derived-variable defaults and path placeholders now go through the same scanner, so a `vars.*` mention inside a string literal there is no longer reported as an undefined reference (#337)
 
+### Documentation
+
+- Corrected three shipped documentation statements that described behaviour TAG does not have; no code changed. (1) **Security-relevant**: `docs/commands/scaffold.md` and `docs/templates/hooks.md` claimed hooks are "disabled by default for remote templates" and that "local templates always run hooks". Neither is true — `hooks.ConfirmHooks` has no remote-vs-local branch. The gate is interactivity: `--accept-hooks` accepts them without prompting, a non-interactive run (`--no-input`, which `--format json` implies) skips them all, and otherwise TAG prompts once for the whole set, taking the `no` default when there is no TTY to answer on. A reader trusting the old text would have believed a local template's hooks always ran and that a remote template's never did without `--accept-hooks`; both could mislead. The same sections now also record that hooks inherit the full process environment, so an accepted hook sees `GITHUB_TOKEN` and every other secret in the caller's shell; that the confirmation gate covers `pre_scaffold`/`post_scaffold` only, while `pre_generate`/`post_generate` run unprompted unless `--no-hooks` is passed; and that `--accept-hooks` under `--dry-run` still executes nothing. (2) `scaffold --dry-run`'s example showed a relative path; the binary prints an absolute one — `--format json`'s `files[].path` is the relative one. (3) `docs/commands/template.md`'s `tag template info` text example showed `Source:`, `Path:`, `Generators:` and `Bundles:` sections that `displayMetadata` has never printed. Every corrected statement was verified against a binary built from source (#398)
+
+
 ## [0.13.0] - 2026-03-03
 
 ### Changed

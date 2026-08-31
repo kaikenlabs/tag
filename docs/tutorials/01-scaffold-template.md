@@ -226,7 +226,7 @@ Hooks run shell commands after scaffolding. Add them to `tag.template.json`:
 }
 ```
 
-> **Note:** When scaffolding remote templates, TAG prompts the user before running hooks. Use `--accept-hooks` to skip the prompt, or `--no-hooks` to disable hooks entirely.
+> **Note:** TAG prompts before running hooks from any template, local or remote. Use `--accept-hooks` to skip the prompt. Non-interactive runs (`--no-input`, or `--format json`) skip hooks entirely unless `--accept-hooks` is given. See [Hooks: Security](../templates/hooks.md#security).
 
 ## 5. Lint the Template
 

@@ -468,7 +468,7 @@ func {{ op.operationId | pascal }}() {}
 |----------|-------------|
 | `TAG_TEMPLATE_DIR` | Absolute path to template directory |
 | `TAG_OUTPUT_DIR` | Absolute path to project root |
-| `TAG_PROJECT_NAME` | Value of `project_name` variable |
+| `TAG_PROJECT_NAME` | Value of `project_name` variable (omitted when the template declares none) |
 | `TAG_VAR_<NAME>` | Each variable as `TAG_VAR_` + UPPER_SNAKE |
 | `TAG_GENERATOR_NAME` | Generator or bundle name being run (generate hooks only) |
 | `TAG_TARGET_NAME` | Positional name argument (generate hooks only) |
@@ -484,9 +484,15 @@ func {{ op.operationId | pascal }}() {}
 
 ### Confirmation Behavior
 
-- Interactive: User prompted to confirm
-- `--accept-hooks`: Run without prompting
-- `--no-input` without `--accept-hooks`: Hooks skipped
+Applies to `pre_scaffold`/`post_scaffold` only, and keys on interactivity — not on whether the
+template is local or remote:
+
+- Interactive: user prompted once for the whole set; declining, or having no TTY, skips them
+- `--accept-hooks`: accepted without prompting (still not executed under `--dry-run`)
+- `--no-input` (implied by `--format json`) without `--accept-hooks`: hooks skipped
+
+`pre_generate`/`post_generate` are never confirmed — they come from the project's own
+`.tagconfig.json`. `tag generate` runs them unless `--no-hooks` is passed.
 
 ## Remote Templates
 
