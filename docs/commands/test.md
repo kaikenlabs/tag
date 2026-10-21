@@ -110,6 +110,28 @@ tag test ./my-template --accept-hooks
 tag test ./my-template --run "go build ./..." --run "go vet ./..."
 ```
 
+Each combination is reported as soon as it finishes, in completion order, with a running count. The closing summary repeats only the failed and errored combinations, with their details:
+
+```
+Template: ./my-template
+Boolean variables: [use_docker use_grpc]
+Test cases: 1 | Combinations: 4 | Parallel: 4
+
+  ✓  [1] use_docker=true use_grpc=false (4.2s)  1/4
+  ✓  [0] use_docker=false use_grpc=false (4.4s)  2/4
+  ✗  [3] use_docker=true use_grpc=true (5.1s)  3/4
+  ✓  [2] use_docker=false use_grpc=true (5.3s)  4/4
+
+  ✗  [3] use_docker=true use_grpc=true (5.1s)
+       Phase: validate: go build ./...
+       Error: command "go build ./...": exit status 1
+
+Results: 3 passed, 1 failed, 0 errored (of 4)
+Duration: 9.6s
+```
+
+With `--format json` nothing is printed until the run ends, and stdout holds only the JSON report.
+
 ### Reduce the Matrix
 
 ```bash
@@ -158,9 +180,10 @@ tag test ./my-template --accept-hooks --keep-failed --verbose
 
 Output for failures includes the preserved directory path:
 ```
-FAIL [2] use_docker=true use_grpc=false use_ci=true
-  Phase: validate:go build ./...
-  Kept:  /tmp/tag-test-abc123
+  ✗  [2] use_docker=true use_grpc=false use_ci=true (3.8s)
+       Phase: validate: go build ./...
+       Error: command "go build ./...": exit status 1
+       Kept:  /tmp/tag-test-2-abc123
 ```
 
 ### Override Safety Limit

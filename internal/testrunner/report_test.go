@@ -40,9 +40,8 @@ func TestUT_PrintTextReport_AllPassed(t *testing.T) {
 	testrunner.PrintTextReport(&buf, report, []string{"a"}, false)
 	output := buf.String()
 
-	assert.Contains(t, output, "✓")
-	assert.Contains(t, output, "[0]")
-	assert.Contains(t, output, "[1]")
+	assert.NotContains(t, output, "✓", "passing combinations are streamed live, not repeated")
+	assert.NotContains(t, output, "[0]")
 	assert.Contains(t, output, "2 passed, 0 failed, 0 errored")
 	assert.Contains(t, output, "All combinations passed.")
 }
@@ -149,17 +148,17 @@ func TestUT_PrintTextReport_SortsByIndex(t *testing.T) {
 			{
 				CaseName:    "default",
 				Combination: testrunner.Combination{Index: 2, Vars: map[string]string{"a": "true"}},
-				Status:      testrunner.CasePassed,
+				Status:      testrunner.CaseFailed,
 				Duration:    100 * time.Millisecond,
 			},
 			{
 				CaseName:    "default",
 				Combination: testrunner.Combination{Index: 0, Vars: map[string]string{"a": "false"}},
-				Status:      testrunner.CasePassed,
+				Status:      testrunner.CaseFailed,
 				Duration:    100 * time.Millisecond,
 			},
 		},
-		Passed:     2,
+		Failed:     2,
 		TotalCases: 2,
 		Duration:   200 * time.Millisecond,
 	}
@@ -243,7 +242,7 @@ func TestUT_PrintTextReport_MultipleCasesGrouped(t *testing.T) {
 			{
 				CaseName:    "build",
 				Combination: testrunner.Combination{Index: 0, Vars: map[string]string{"a": "false"}},
-				Status:      testrunner.CasePassed,
+				Status:      testrunner.CaseFailed,
 				Duration:    100 * time.Millisecond,
 			},
 			{
@@ -252,9 +251,17 @@ func TestUT_PrintTextReport_MultipleCasesGrouped(t *testing.T) {
 				Status:      testrunner.CasePassed,
 				Duration:    150 * time.Millisecond,
 			},
+			{
+				CaseName:    "vet",
+				Combination: testrunner.Combination{Index: 0, Vars: map[string]string{"a": "false"}},
+				Status:      testrunner.CaseErrored,
+				Duration:    150 * time.Millisecond,
+			},
 		},
-		Passed:     2,
-		TotalCases: 2,
+		Passed:     1,
+		Failed:     1,
+		Errored:    1,
+		TotalCases: 3,
 		Duration:   250 * time.Millisecond,
 	}
 
@@ -263,8 +270,9 @@ func TestUT_PrintTextReport_MultipleCasesGrouped(t *testing.T) {
 	output := buf.String()
 
 	assert.Contains(t, output, "── build ──")
-	assert.Contains(t, output, "── lint ──")
-	assert.Contains(t, output, "2 passed, 0 failed, 0 errored")
+	assert.Contains(t, output, "── vet ──")
+	assert.NotContains(t, output, "── lint ──", "a case with no problems gets no section")
+	assert.Contains(t, output, "1 passed, 1 failed, 1 errored")
 }
 
 func TestUT_PrintDryRun_MultipleCases(t *testing.T) {
@@ -296,4 +304,53 @@ func TestUT_PrintDryRun_MultipleCases(t *testing.T) {
 	assert.Contains(t, output, "3 total")
 	assert.Contains(t, output, "── build ──")
 	assert.Contains(t, output, "── lint ──")
+}
+
+func TestUT_PrintProgress(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		res  testrunner.CaseResult
+		want string
+	}{
+		{
+			name: "default case passed",
+			res: testrunner.CaseResult{
+				CaseName:    "default",
+				Combination: testrunner.Combination{Index: 1, Vars: map[string]string{"a": "true"}},
+				Status:      testrunner.CasePassed,
+				Duration:    1234 * time.Millisecond,
+			},
+			want: "  ✓  [1] a=true (1.2s)  2/4\n",
+		},
+		{
+			name: "named case failed",
+			res: testrunner.CaseResult{
+				CaseName:    "build",
+				Combination: testrunner.Combination{Index: 0, Vars: map[string]string{"a": "false"}},
+				Status:      testrunner.CaseFailed,
+				Duration:    100 * time.Millisecond,
+			},
+			want: "  ✗  [0] a=false (100ms)  (build)  2/4\n",
+		},
+		{
+			name: "errored",
+			res: testrunner.CaseResult{
+				CaseName:    "default",
+				Combination: testrunner.Combination{Index: 3, Vars: map[string]string{"a": "false"}},
+				Status:      testrunner.CaseErrored,
+			},
+			want: "  !  [3] a=false (0s)  2/4\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			testrunner.PrintProgress(&buf, tt.res, []string{"a"}, 2, 4)
+			assert.Equal(t, tt.want, buf.String())
+		})
+	}
 }

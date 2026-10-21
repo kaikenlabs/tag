@@ -2,8 +2,11 @@ package commands
 
 import (
 	"bytes"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -150,6 +153,36 @@ func TestUT_TestAction_WithRunCommands(t *testing.T) {
 
 	out := buf.String()
 	assert.Contains(t, out, "Template:")
+	assert.Contains(t, out, "  ✓  [0]  (", "each combination is reported as it finishes")
+	assert.Contains(t, out, "1/1")
+	assert.Equal(t, 1, strings.Count(out, "✓"), "passing lines are not repeated in the summary")
+}
+
+func TestUT_TestAction_JSONFormat_NoProgressLines(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, types.TemplateConfigFile),
+		[]byte(`{"name": "t", "vars": {"project_name": {"type": "string", "default": "p"}}}`),
+		0o644,
+	))
+	wrapperDir := filepath.Join(dir, "{{ vars.project_name }}")
+	require.NoError(t, os.MkdirAll(wrapperDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "f.txt"), []byte("x"), 0o644))
+
+	ctx := newTestCLIContext(t, nil, map[string]string{
+		"run":    "true",
+		"format": "json",
+	})
+
+	var buf bytes.Buffer
+	require.NoError(t, testAction(ctx, &buf, dir))
+
+	var doc map[string]any
+	dec := json.NewDecoder(&buf)
+	require.NoError(t, dec.Decode(&doc), "stdout must be exactly one JSON document")
+	require.ErrorIs(t, dec.Decode(&doc), io.EOF)
 }
 
 func TestUT_TestAction_NonExistentDir(t *testing.T) {

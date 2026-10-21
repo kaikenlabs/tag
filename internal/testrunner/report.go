@@ -9,7 +9,8 @@ import (
 	"time"
 )
 
-// PrintTextReport writes a human-readable test report to w.
+// PrintTextReport writes the end-of-run summary to w: details of every failed or
+// errored combination, then the totals. Passing combinations are left to PrintProgress.
 func PrintTextReport(w io.Writer, report Report, boolVars []string, verbose bool) {
 	// Group results by case name, preserving order.
 	type caseGroup struct {
@@ -31,42 +32,37 @@ func PrintTextReport(w io.Writer, report Report, boolVars []string, verbose bool
 	multiCase := len(groups) > 1
 
 	for _, g := range groups {
-		// Sort results by combination index for deterministic output.
 		sort.Slice(g.results, func(i, j int) bool {
 			return g.results[i].Combination.Index < g.results[j].Combination.Index
 		})
 
+		var problems []CaseResult
+		for _, c := range g.results {
+			if c.Status != CasePassed {
+				problems = append(problems, c)
+			}
+		}
+		if len(problems) == 0 {
+			continue
+		}
+
+		fmt.Fprintln(w)
 		if multiCase {
 			fmt.Fprintf(w, "── %s ──\n", g.name)
 		}
-
-		for _, c := range g.results {
-			label := ComboLabel(c.Combination, boolVars)
-			switch c.Status {
-			case CasePassed:
-				fmt.Fprintf(w, "  ✓  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
-			case CaseFailed:
-				fmt.Fprintf(w, "  ✗  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
-				fmt.Fprintf(w, "       Phase: %s\n", c.Phase)
-				fmt.Fprintf(w, "       Error: %s\n", c.Error)
-				if c.KeptDir != "" {
-					fmt.Fprintf(w, "       Kept:  %s\n", c.KeptDir)
-				}
-				if verbose && c.Output != "" {
-					fmt.Fprintf(w, "       Output:\n")
-					for line := range strings.SplitSeq(c.Output, "\n") {
-						fmt.Fprintf(w, "         %s\n", line)
-					}
-				}
-			case CaseErrored:
-				fmt.Fprintf(w, "  !  [%d] %s (%s)\n", c.Combination.Index, label, c.Duration.Round(100*time.Millisecond))
-				fmt.Fprintf(w, "       Phase: %s\n", c.Phase)
-				fmt.Fprintf(w, "       Error: %s\n", c.Error)
+		for _, c := range problems {
+			fmt.Fprintln(w, resultLine(c, boolVars))
+			fmt.Fprintf(w, "       Phase: %s\n", c.Phase)
+			fmt.Fprintf(w, "       Error: %s\n", c.Error)
+			if c.KeptDir != "" {
+				fmt.Fprintf(w, "       Kept:  %s\n", c.KeptDir)
 			}
-		}
-
-		if multiCase {
-			fmt.Fprintln(w)
+			if verbose && c.Status == CaseFailed && c.Output != "" {
+				fmt.Fprintf(w, "       Output:\n")
+				for line := range strings.SplitSeq(c.Output, "\n") {
+					fmt.Fprintf(w, "         %s\n", line)
+				}
+			}
 		}
 	}
 
@@ -78,6 +74,27 @@ func PrintTextReport(w io.Writer, report Report, boolVars []string, verbose bool
 	if report.ExitCode() == ExitOK && report.TotalCases > 0 {
 		fmt.Fprintln(w, "All combinations passed.")
 	}
+}
+
+// PrintProgress writes one line for a combination as soon as it finishes.
+func PrintProgress(w io.Writer, c CaseResult, boolVars []string, done, total int) {
+	line := resultLine(c, boolVars)
+	if c.CaseName != defaultCaseName {
+		line = fmt.Sprintf("%s  (%s)", line, c.CaseName)
+	}
+	fmt.Fprintf(w, "%s  %d/%d\n", line, done, total)
+}
+
+func resultLine(c CaseResult, boolVars []string) string {
+	mark := "✓"
+	switch c.Status {
+	case CaseFailed:
+		mark = "✗"
+	case CaseErrored:
+		mark = "!"
+	}
+	return fmt.Sprintf("  %s  [%d] %s (%s)", mark, c.Combination.Index,
+		ComboLabel(c.Combination, boolVars), c.Duration.Round(100*time.Millisecond))
 }
 
 // PrintJSONReport writes a JSON-formatted test report to w.

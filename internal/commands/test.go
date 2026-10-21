@@ -189,6 +189,9 @@ func testAction(c *cli.Context, w io.Writer, templateDir string) error {
 		fmt.Fprintf(w, "Boolean variables: %v\n", plan.BoolVars)
 		fmt.Fprintf(w, "Test cases: %d | Combinations: %d | Parallel: %d\n\n",
 			len(plan.Cases), totalCombos, cfg.Parallel)
+		cfg.OnResult = func(r testrunner.CaseResult, done, total int) {
+			testrunner.PrintProgress(w, r, plan.BoolVars, done, total)
+		}
 	}
 
 	if cfg.DryRun {

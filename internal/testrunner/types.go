@@ -32,7 +32,11 @@ type Config struct {
 	Verbose     bool              // Show full output on failures
 	AcceptHooks bool              // Opt-in hook and test command execution
 	Format      string            // Output format: "text" or "json"
+
+	OnResult func(r CaseResult, done, total int) // Called serially as each combination finishes
 }
+
+const defaultCaseName = "default"
 
 // TestPlan holds the resolved plan for a matrix test run.
 type TestPlan struct {

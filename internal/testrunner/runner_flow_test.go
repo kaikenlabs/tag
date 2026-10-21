@@ -159,3 +159,34 @@ func TestUT_Execute_NoCommands_ScaffoldOnly(t *testing.T) {
 	assert.Equal(t, 0, report.Failed)
 	assert.Equal(t, 0, report.Errored)
 }
+
+func TestUT_Execute_OnResultCalledOncePerCombination(t *testing.T) {
+	templateDir := setupTestTemplate(t, map[string]any{
+		"use_db":    map[string]any{"type": "boolean", "default": false},
+		"use_cache": map[string]any{"type": "boolean", "default": false},
+	})
+
+	var dones []int
+	var indexes []int
+	cfg := Config{
+		TemplateDir: templateDir,
+		RunCommands: []string{"true"},
+		AcceptHooks: true,
+		Parallel:    4,
+		MaxCases:    64,
+		OnResult: func(r CaseResult, done, total int) {
+			assert.Equal(t, 4, total)
+			dones = append(dones, done)
+			indexes = append(indexes, r.Combination.Index)
+		},
+	}
+
+	plan, err := Plan(cfg)
+	require.NoError(t, err)
+
+	report, err := Execute(context.Background(), plan, cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 4, report.Passed)
+	assert.Equal(t, []int{1, 2, 3, 4}, dones)
+	assert.ElementsMatch(t, []int{0, 1, 2, 3}, indexes)
+}
