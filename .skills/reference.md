@@ -1240,6 +1240,8 @@ tag test ./my-template --format json      # Flags may come before or after the p
 
 Discovers boolean variables in `tag.template.json`, generates all 2^N combinations, scaffolds each one in an isolated temp directory, and optionally runs validation commands. Useful for verifying templates work correctly with all boolean flag permutations before publishing.
 
+In text mode each combination prints one line (`✓`/`✗`/`!`, index, vars, duration, `done/total`) as soon as it finishes; the closing summary lists only failed and errored combinations with their details, then the totals. `--format json` prints nothing until the end.
+
 **Flags**:
 
 | Flag | Description |

@@ -70,7 +70,7 @@ func buildCasePlans(cfg Config, testCfg *tmplconfig.TestConfig, boolVars []strin
 	if len(cfg.RunCommands) > 0 {
 		// CLI override: single anonymous case with the provided commands.
 		templateCases = []tmplconfig.TestCase{
-			{Name: "default", Commands: cfg.RunCommands},
+			{Name: defaultCaseName, Commands: cfg.RunCommands},
 		}
 	} else if testCfg != nil && len(testCfg.Cases) > 0 {
 		templateCases = testCfg.Cases
@@ -88,7 +88,7 @@ func buildCasePlans(cfg Config, testCfg *tmplconfig.TestConfig, boolVars []strin
 		// No test cases defined — create a single case with no commands
 		// so combinations are still generated (scaffold-only validation).
 		templateCases = []tmplconfig.TestCase{
-			{Name: "default"},
+			{Name: defaultCaseName},
 		}
 	}
 
@@ -168,6 +168,18 @@ func Execute(ctx context.Context, plan *TestPlan, cfg Config) (Report, error) {
 		TemplateDir: plan.TemplateDir,
 	}
 
+	var mu sync.Mutex
+	done := 0
+	notify := func(r CaseResult) {
+		if cfg.OnResult == nil {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		done++
+		cfg.OnResult(r, done, totalCombos)
+	}
+
 	// Execute each test case.
 	for _, cp := range plan.Cases {
 		if ctx.Err() != nil {
@@ -179,7 +191,7 @@ func Execute(ctx context.Context, plan *TestPlan, cfg Config) (Report, error) {
 			continue
 		}
 
-		results := runWorkerPool(ctx, plan, cfg, cp, p)
+		results := runWorkerPool(ctx, plan, cfg, cp, p, notify)
 		for _, r := range results {
 			report.Cases = append(report.Cases, r)
 			switch r.Status {
@@ -203,7 +215,9 @@ func Execute(ctx context.Context, plan *TestPlan, cfg Config) (Report, error) {
 	return report, nil //nolint:nilerr // ctx.Err above is for early loop exit, not a returned error
 }
 
-func runWorkerPool(ctx context.Context, plan *TestPlan, cfg Config, cp TestCasePlan, parallel int) []CaseResult {
+func runWorkerPool(
+	ctx context.Context, plan *TestPlan, cfg Config, cp TestCasePlan, parallel int, notify func(CaseResult),
+) []CaseResult {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -223,6 +237,7 @@ func runWorkerPool(ctx context.Context, plan *TestPlan, cfg Config, cp TestCaseP
 					return
 				}
 				result := runSingleTest(ctx, plan, cfg, cp, combo)
+				notify(result)
 				resultCh <- result
 
 				if cfg.FailFast && result.Status != CasePassed {
