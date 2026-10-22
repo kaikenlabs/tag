@@ -592,7 +592,7 @@ tag test ./my-template --accept-hooks --format json
 **Pinning and skipping variables**:
 ```bash
 # Pin use_docker=true (not permuted), skip use_ci (uses default)
-tag test ./my-template --pin use_docker=true --skip use_ci --accept-hooks
+tag test ./my-template --pin use_docker=true --skip-var use_ci --accept-hooks
 
 # Run only combination #3
 tag test ./my-template --filter 3 --accept-hooks
