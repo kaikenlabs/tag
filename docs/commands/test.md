@@ -18,7 +18,7 @@ This is useful for template authors to ensure conditional file generation (`{% i
 
 Internally, `tag test` works in two phases:
 
-1. **Plan** — loads `tag.template.json`, identifies boolean variables, generates combinations (applying `--skip`, `--pin`, `--filter`), and checks the safety limit. No scaffolding happens yet.
+1. **Plan** — loads `tag.template.json`, identifies boolean variables, generates combinations (applying `--skip-var`, `--pin`, `--filter`), and checks the safety limit. No scaffolding happens yet.
 2. **Execute** — runs each combination through `tag scaffold` in a temporary directory, then executes validation commands if provided.
 
 The `--dry-run` flag stops after the Plan phase and prints the combination matrix.
@@ -42,7 +42,7 @@ Flags may appear before or after `template-dir`: `tag test ./my-template --forma
 | `--timeout <duration>` | | Per-command timeout (default: `5m`) |
 | `--max-cases <n>` | | Safety limit for total combinations (default: `64`, `0` = unlimited) |
 | `--run <cmd>` | | Validation command (repeatable, overrides template config) |
-| `--skip <var>` | | Boolean var to exclude from permutation (repeatable) |
+| `--skip-var <var>` | | Boolean var to exclude from permutation (repeatable) |
 | `--pin <key=value>` | | Fix a variable at a specific value (repeatable) |
 | `--filter <expr>` | | Run only matching combinations (index or `key=value` pairs) |
 | `--meta <key=value>` | `-m` | Required string variable override (repeatable) |
@@ -139,7 +139,7 @@ With `--format json` nothing is printed until the run ends, and stdout holds onl
 tag test ./my-template --pin use_docker=true
 
 # Skip a variable (uses its default value)
-tag test ./my-template --skip use_ci
+tag test ./my-template --skip-var use_ci
 
 # Run a single combination by index
 tag test ./my-template --filter 3
@@ -246,7 +246,7 @@ The `status` field is a string (`"passed"`, `"failed"`, or `"errored"`), not an 
 | Error | Cause | Solution |
 |-------|-------|----------|
 | "no boolean variables found" | Template has no boolean vars to permute | Add boolean variables to `tag.template.json` |
-| "exceeds safety limit of N" | 2^N combinations exceed `--max-cases` | Use `--skip`/`--pin` to reduce, or `--max-cases 0` to override |
+| "exceeds safety limit of N" | 2^N combinations exceed `--max-cases` | Use `--skip-var`/`--pin` to reduce, or `--max-cases 0` to override |
 | "template-defined test commands require --accept-hooks" | Commands in `test.commands` without opt-in | Add `--accept-hooks` flag |
 | "malformed filter expression" | Invalid `--filter` value | Use an integer index or `key=value` pairs |
 
