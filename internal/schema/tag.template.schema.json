@@ -65,14 +65,54 @@
           "type": "array",
           "description": "Commands to run before scaffolding",
           "items": {
-            "type": "string"
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "description": "Command with options",
+                "required": ["run"],
+                "additionalProperties": false,
+                "properties": {
+                  "run": {
+                    "type": "string",
+                    "description": "Command to run"
+                  },
+                  "skip_in_test": {
+                    "type": "boolean",
+                    "description": "Skip this hook during tag test"
+                  }
+                }
+              }
+            ]
           }
         },
         "post_scaffold": {
           "type": "array",
           "description": "Commands to run after scaffolding",
           "items": {
-            "type": "string"
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "description": "Command with options",
+                "required": ["run"],
+                "additionalProperties": false,
+                "properties": {
+                  "run": {
+                    "type": "string",
+                    "description": "Command to run"
+                  },
+                  "skip_in_test": {
+                    "type": "boolean",
+                    "description": "Skip this hook during tag test"
+                  }
+                }
+              }
+            ]
           }
         }
       }

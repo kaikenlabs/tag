@@ -438,3 +438,169 @@ func TestIT_Scaffold_NoHooksConfigured(t *testing.T) {
 	assert.DirExists(t, outputDir)
 	assert.FileExists(t, filepath.Join(outputDir, "test.txt"))
 }
+
+func runScaffoldWithConfig(t *testing.T, config string, testMode, wrapped bool, files map[string]string) (outputDir string, err error) {
+	t.Helper()
+	templateDir := t.TempDir()
+	outputDir = filepath.Join(t.TempDir(), "output")
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), []byte(config), 0o644))
+	for name, content := range files {
+		path := filepath.Join(templateDir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o755))
+	}
+	opts := Options{
+		TemplateDir: templateDir,
+		OutputDir:   outputDir,
+		NoInput:     true,
+		AcceptHooks: true,
+		TestMode:    testMode,
+	}
+	if wrapped {
+		t.Chdir(t.TempDir())
+		opts.OutputDir = ""
+	}
+	s, newErr := NewScaffold(opts)
+	require.NoError(t, newErr)
+	_, err = s.Run(opts)
+	return outputDir, err
+}
+
+func TestUT_Scaffold_TestModeSkipsMarkedHooks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	tests := []struct {
+		name     string
+		hooks    func(log string) string
+		testMode bool
+		want     string
+		wantErr  string
+	}{
+		{
+			name: "test mode drops marked pre and post hooks and keeps order",
+			hooks: func(log string) string {
+				return `{"pre_scaffold": [
+					"sh -c 'echo pre1 >> ` + log + `'",
+					{"run": "sh -c 'echo preSkipped >> ` + log + `'", "skip_in_test": true}
+				], "post_scaffold": [
+					"sh -c 'echo post1 >> ` + log + `'",
+					{"run": "sh -c 'echo postSkipped >> ` + log + `'", "skip_in_test": true},
+					{"run": "sh -c 'echo post2 >> ` + log + `'", "skip_in_test": false},
+					{"run": "sh -c 'echo post3 >> ` + log + `'"}
+				]}`
+			},
+			testMode: true,
+			want:     "pre1\npost1\npost2\npost3\n",
+		},
+		{
+			name: "scaffold mode runs every hook",
+			hooks: func(log string) string {
+				return `{"pre_scaffold": [
+					"sh -c 'echo pre1 >> ` + log + `'",
+					{"run": "sh -c 'echo preSkipped >> ` + log + `'", "skip_in_test": true}
+				], "post_scaffold": [
+					"sh -c 'echo post1 >> ` + log + `'",
+					{"run": "sh -c 'echo postSkipped >> ` + log + `'", "skip_in_test": true},
+					{"run": "sh -c 'echo post2 >> ` + log + `'", "skip_in_test": false},
+					{"run": "sh -c 'echo post3 >> ` + log + `'"}
+				]}`
+			},
+			testMode: false,
+			want:     "pre1\npreSkipped\npost1\npostSkipped\npost2\npost3\n",
+		},
+		{
+			name: "test mode does not render a skipped hook",
+			hooks: func(log string) string {
+				return `{"post_scaffold": [
+					{"run": "echo {{ vars.", "skip_in_test": true},
+					"sh -c 'echo kept >> ` + log + `'"
+				]}`
+			},
+			testMode: true,
+			want:     "kept\n",
+		},
+		{
+			name: "scaffold mode renders a skipped hook and fails on it",
+			hooks: func(log string) string {
+				return `{"post_scaffold": [
+					{"run": "echo {{ vars.", "skip_in_test": true},
+					"sh -c 'echo kept >> ` + log + `'"
+				]}`
+			},
+			testMode: false,
+			wantErr:  "hook",
+		},
+		{
+			name:     "test mode with no hooks key",
+			hooks:    func(string) string { return "" },
+			testMode: true,
+			want:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log := filepath.Join(t.TempDir(), "hooks.log")
+			config := `{"vars": {"project_name": "p"}}`
+			if h := tt.hooks(log); h != "" {
+				config = `{"vars": {"project_name": "p"}, "hooks": ` + h + `}`
+			}
+
+			_, err := runScaffoldWithConfig(t, config, tt.testMode, false, nil)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			got, readErr := os.ReadFile(log)
+			if tt.want == "" {
+				assert.True(t, os.IsNotExist(readErr))
+				return
+			}
+			require.NoError(t, readErr)
+			assert.Equal(t, tt.want, string(got))
+		})
+	}
+}
+
+// TestUT_Scaffold_ObjectHooksRenderAndResolve is a no-change guard: object hooks flow through the string-based paths.
+func TestUT_Scaffold_ObjectHooksRenderAndResolve(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	t.Run("object hook command is rendered", func(t *testing.T) {
+		log := filepath.Join(t.TempDir(), "hooks.log")
+		config := `{"vars": {"project_name": "p", "x": "rendered"}, "hooks": {"post_scaffold": [
+			{"run": "sh -c 'echo {{ vars.x }} >> ` + log + `'", "skip_in_test": true}
+		]}}`
+
+		_, err := runScaffoldWithConfig(t, config, false, false, nil)
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(log)
+		require.NoError(t, err)
+		assert.Equal(t, "rendered\n", string(got))
+	})
+
+	t.Run("object hook script path resolves against the template root when wrapped", func(t *testing.T) {
+		log := filepath.Join(t.TempDir(), "hooks.log")
+		config := `{"vars": {"project_name": "p"}, "hooks": {"post_scaffold": [{"run": "hooks/post.sh"}]}}`
+		files := map[string]string{
+			"{{ vars.project_name }}/README.md": "hello",
+			".tagignore":                        "hooks/\n",
+			"hooks/post.sh":                     "#!/bin/sh\necho ran >> " + log + "\n",
+		}
+
+		_, err := runScaffoldWithConfig(t, config, false, true, files)
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(log)
+		require.NoError(t, err)
+		assert.Equal(t, "ran\n", string(got))
+	})
+}

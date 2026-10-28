@@ -898,3 +898,47 @@ func TestUT_DisplayVariables_PromptIsNotAFormatString(t *testing.T) {
 	assert.Contains(t, buf.String(), "Cache hit rate (%d%%)")
 	assert.NotContains(t, buf.String(), "%!")
 }
+
+// TestUT_TemplateInfo_ObjectHooksShowCommand is a no-change guard: object hooks flow through the string-based paths.
+func TestUT_TemplateInfo_ObjectHooksShowCommand(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, types.TemplateConfigFile), []byte(`{
+  "name": "obj-hooks",
+  "hooks": {
+    "pre_scaffold": [{"run": "echo pre", "skip_in_test": true}],
+    "post_scaffold": ["go mod tidy", {"run": "go mod vendor", "skip_in_test": true}, {"run": "go build"}]
+  }
+}`), 0o644))
+
+	t.Run("text", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		require.NoError(t, displayTemplateInfo(&buf, dir))
+		out := buf.String()
+		for _, cmd := range []string{"echo pre", "go mod tidy", "go mod vendor", "go build"} {
+			assert.Contains(t, out, cmd)
+		}
+		assert.NotContains(t, out, "skip_in_test")
+		assert.NotContains(t, out, "map[")
+		assert.NotContains(t, out, `"run"`)
+	})
+
+	t.Run("json", func(t *testing.T) {
+		t.Parallel()
+		config, err := loadTemplateConfig(dir)
+		require.NoError(t, err)
+		data, err := json.Marshal(buildTemplateInfoJSON(config, false, false, "", testVersion))
+		require.NoError(t, err)
+
+		var doc struct {
+			Hooks struct {
+				PreScaffold  []string `json:"pre_scaffold"`
+				PostScaffold []string `json:"post_scaffold"`
+			} `json:"hooks"`
+		}
+		require.NoError(t, json.Unmarshal(data, &doc))
+		assert.Equal(t, []string{"echo pre"}, doc.Hooks.PreScaffold)
+		assert.Equal(t, []string{"go mod tidy", "go mod vendor", "go build"}, doc.Hooks.PostScaffold)
+	})
+}

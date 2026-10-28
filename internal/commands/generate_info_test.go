@@ -236,3 +236,28 @@ func TestUT_ConvertVariables_Nil(t *testing.T) {
 	t.Parallel()
 	assert.Nil(t, convertVariables(nil))
 }
+
+// TestUT_GenerateInfo_ObjectHooksShowCommand is a no-change guard: object hooks flow through the string-based paths.
+func TestUT_GenerateInfo_ObjectHooksShowCommand(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := setupTempDir(t)
+	genDir := filepath.Join(tmpDir, "objgen")
+	require.NoError(t, os.MkdirAll(genDir, 0o750))
+	tcJSON := `{"hooks": {"post_scaffold": ["go fmt ./...", {"run": "go vet ./...", "skip_in_test": true}]}}`
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, types.TemplateConfigFile), []byte(tcJSON), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "f.go"), []byte("---\nto: out/f.go\n---\npackage out\n"), 0o644))
+
+	cfg := createTestConfig(t, tmpDir)
+	var buf bytes.Buffer
+	require.NoError(t, generateInfo(cfg, "objgen", &buf))
+
+	var doc struct {
+		Hooks struct {
+			PostScaffold []string `json:"post_scaffold"`
+		} `json:"hooks"`
+	}
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &doc))
+	assert.Equal(t, []string{"go fmt ./...", "go vet ./..."}, doc.Hooks.PostScaffold)
+	assert.NotContains(t, buf.String(), "skip_in_test")
+}

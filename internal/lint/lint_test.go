@@ -815,3 +815,36 @@ func TestUT_LintGeneratorDirs_ReservedDirsAreNotEmptyGenerators(t *testing.T) {
 		assert.NotEqual(t, "empty-generator", issue.Rule, "unexpected issue: %s", issue.Message)
 	}
 }
+
+func TestUT_LintSchema_HookObjectForm(t *testing.T) {
+	tests := []struct {
+		name       string
+		hooks      string
+		wantErrors bool
+	}{
+		{"object hooks accepted", `{"pre_scaffold": [{"run": "true"}], "post_scaffold": ["true", {"run": "true", "skip_in_test": true}]}`, false},
+		{"missing run", `{"post_scaffold": [{"skip_in_test": true}]}`, true},
+		{"non-bool skip_in_test", `{"post_scaffold": [{"run": "true", "skip_in_test": "yes"}]}`, true},
+		{"unknown key", `{"post_scaffold": [{"run": "true", "bogus": 1}]}`, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			createTemplate(t, dir, `{"name": "t", "hooks": `+tt.hooks+`}`, nil)
+
+			linter, err := NewLinter(dir)
+			require.NoError(t, err)
+			result, err := linter.Run()
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantErrors, result.HasErrors(), "issues: %+v", result.Issues)
+			if tt.wantErrors {
+				rules := map[string]bool{}
+				for _, issue := range result.Issues {
+					rules[issue.Rule] = true
+				}
+				assert.True(t, rules["schema-validation"], "expected schema-validation issue, got %+v", result.Issues)
+			}
+		})
+	}
+}

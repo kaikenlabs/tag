@@ -142,3 +142,35 @@ func TestUT_FormatHookChanges(t *testing.T) {
 	assert.Contains(t, lines[0], "NEW")
 	assert.Contains(t, lines[0], "post_scaffold")
 }
+
+// TestUT_DetectHookChanges_SkipFlagOnlyIsNoChange is a no-change guard: only the command identifies a hook.
+func TestUT_DetectHookChanges_SkipFlagOnlyIsNoChange(t *testing.T) {
+	parse := func(t *testing.T, hooks string) *tmplconfig.TemplateConfig {
+		t.Helper()
+		cfg, err := tmplconfig.ParseTemplateConfig([]byte(`{"hooks": ` + hooks + `}`))
+		require.NoError(t, err)
+		return cfg
+	}
+	tests := []struct {
+		name     string
+		old, new string
+	}{
+		{"flag on", `{"post_scaffold": [{"run": "go mod vendor"}]}`, `{"post_scaffold": [{"run": "go mod vendor", "skip_in_test": true}]}`},
+		{"flag off", `{"post_scaffold": [{"run": "go mod vendor", "skip_in_test": true}]}`, `{"post_scaffold": [{"run": "go mod vendor", "skip_in_test": false}]}`},
+		{"string to object", `{"pre_scaffold": ["go mod vendor"]}`, `{"pre_scaffold": [{"run": "go mod vendor", "skip_in_test": true}]}`},
+		{"object to string", `{"post_scaffold": [{"run": "go mod vendor", "skip_in_test": true}]}`, `{"post_scaffold": ["go mod vendor"]}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Empty(t, DetectHookChanges(parse(t, tt.old), parse(t, tt.new)))
+		})
+	}
+
+	t.Run("changed command is still detected", func(t *testing.T) {
+		changes := DetectHookChanges(
+			parse(t, `{"post_scaffold": [{"run": "a", "skip_in_test": true}]}`),
+			parse(t, `{"post_scaffold": [{"run": "b", "skip_in_test": true}]}`),
+		)
+		require.NotEmpty(t, changes)
+	})
+}

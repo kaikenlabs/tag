@@ -125,6 +125,15 @@ func TestUT_SchemaValidator_ValidConfig(t *testing.T) {
 			}`,
 		},
 		{
+			name: "config with object hooks in both phases",
+			json: `{
+				"hooks": {
+					"pre_scaffold": [{"run": "echo a"}, "echo b", {"run": "echo c", "skip_in_test": false}],
+					"post_scaffold": ["go mod tidy", {"run": "go mod vendor", "skip_in_test": true}]
+				}
+			}`,
+		},
+		{
 			name: "full config",
 			json: `{
 				"name": "go-service",
@@ -189,6 +198,36 @@ func TestUT_SchemaValidator_InvalidConfig(t *testing.T) {
 		{
 			name:        "invalid hook command type",
 			json:        `{"hooks": {"pre_scaffold": "not an array"}}`,
+			errContains: "pre_scaffold",
+		},
+		{
+			name:        "object hook missing run",
+			json:        `{"hooks": {"post_scaffold": [{"skip_in_test": true}]}}`,
+			errContains: "post_scaffold",
+		},
+		{
+			name:        "object hook non-string run",
+			json:        `{"hooks": {"post_scaffold": [{"run": 5}]}}`,
+			errContains: "post_scaffold",
+		},
+		{
+			name:        "object hook non-bool skip_in_test",
+			json:        `{"hooks": {"pre_scaffold": [{"run": "x", "skip_in_test": "yes"}]}}`,
+			errContains: "pre_scaffold",
+		},
+		{
+			name:        "object hook unknown key",
+			json:        `{"hooks": {"post_scaffold": [{"run": "x", "extra": 1}]}}`,
+			errContains: "post_scaffold",
+		},
+		{
+			name:        "null hook entry",
+			json:        `{"hooks": {"post_scaffold": ["x", null]}}`,
+			errContains: "post_scaffold",
+		},
+		{
+			name:        "bool hook entry",
+			json:        `{"hooks": {"pre_scaffold": [true]}}`,
 			errContains: "pre_scaffold",
 		},
 	}
