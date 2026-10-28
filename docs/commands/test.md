@@ -74,7 +74,7 @@ Templates can define test-specific settings in `tag.template.json` under the `te
 | `test.project_name` | string | Fixed project name for test scaffolds (avoids prompt) |
 | `test.commands` | string[] | Validation commands run inside each scaffolded directory |
 
-Template-defined `test.commands` require `--accept-hooks` to execute (same security model as scaffold hooks). User-provided `--run` commands always execute and override template commands.
+Template-defined `test.commands` require `--accept-hooks` to execute (same security model as scaffold hooks). User-provided `--run` commands always execute and override template commands. Hooks declared as `{ "run": "...", "skip_in_test": true }` in `tag.template.json` are dropped under `tag test`, even with `--accept-hooks`; the other hooks run in their original order (see [Hooks Guide](../templates/hooks.md#object-form-and-skip_in_test)).
 
 ## Examples
 

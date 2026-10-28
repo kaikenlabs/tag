@@ -36,6 +36,7 @@ type Options struct {
 	NoSave               bool              // Don't save inputs for replay (--no-save flag)
 	TemplateRef          string            // Original template reference (for replay ID generation)
 	AcceptHooks          bool              // Accept hooks without prompting (--accept-hooks flag)
+	TestMode             bool              // Running under tag test: hooks marked skip_in_test are dropped
 	IsRemote             bool              // Whether the template source is remote
 	AllowRecursiveRender bool              // Allow recursive template rendering in variable values (--allow-recursive-render flag)
 	TemplateName         string            // Library name (set by tag scaffold)

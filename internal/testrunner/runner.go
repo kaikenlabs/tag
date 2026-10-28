@@ -297,6 +297,7 @@ func runSingleTest(ctx context.Context, plan *TestPlan, cfg Config, cp TestCaseP
 		Force:       true,
 		NoSave:      true,
 		AcceptHooks: cfg.AcceptHooks,
+		TestMode:    true,
 	}
 
 	s, err := scaffold.NewScaffold(opts, scaffold.WithOutput(io.Discard))

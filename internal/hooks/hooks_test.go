@@ -988,3 +988,25 @@ func TestUT_PrintHookResults_MultipleResults(t *testing.T) {
 	}, &buf)
 	assert.Equal(t, "step1 done\nstep3 done\n", buf.String())
 }
+
+func TestUT_ConfirmHooks_ObjectFormShowsCommand(t *testing.T) {
+	var h types.HooksConfig
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"pre_scaffold": [{"run": "echo pre", "skip_in_test": true}],
+		"post_scaffold": ["go mod tidy", {"run": "go mod vendor"}]
+	}`), &h))
+	confirmer := &MockConfirmer{ConfirmResult: true}
+	var buf strings.Builder
+
+	allowed, err := ConfirmHooks(&h, false, false, confirmer, "", &buf)
+
+	require.NoError(t, err)
+	assert.True(t, allowed)
+	out := buf.String()
+	for _, cmd := range []string{"echo pre", "go mod tidy", "go mod vendor"} {
+		assert.Contains(t, out, cmd)
+	}
+	assert.NotContains(t, out, `"run":`)
+	assert.NotContains(t, out, "skip_in_test")
+	assert.NotContains(t, out, "map[")
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -189,4 +190,39 @@ func TestUT_Execute_OnResultCalledOncePerCombination(t *testing.T) {
 	assert.Equal(t, 4, report.Passed)
 	assert.Equal(t, []int{1, 2, 3, 4}, dones)
 	assert.ElementsMatch(t, []int{0, 1, 2, 3}, indexes)
+}
+
+func TestUT_Runner_SkipsSkipInTestHooks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+	templateDir := setupTestTemplate(t, nil)
+	cfgData, err := json.Marshal(map[string]any{
+		"name": "test-tmpl",
+		"hooks": map[string]any{
+			"post_scaffold": []any{
+				"touch kept.txt",
+				map[string]any{"run": "touch skipped.txt", "skip_in_test": true},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), cfgData, 0o644))
+
+	cfg := Config{
+		TemplateDir: templateDir,
+		RunCommands: []string{"sh -c 'test -e kept.txt && test ! -e skipped.txt'"},
+		AcceptHooks: true,
+		Parallel:    1,
+		MaxCases:    64,
+	}
+	plan, err := Plan(cfg)
+	require.NoError(t, err)
+
+	report, err := Execute(context.Background(), plan, cfg)
+
+	require.NoError(t, err)
+	assert.Greater(t, report.Passed, 0)
+	assert.Equal(t, 0, report.Failed)
+	assert.Equal(t, 0, report.Errored)
 }

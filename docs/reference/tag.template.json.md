@@ -371,6 +371,23 @@ In non-TTY mode the expression is resolved silently, the same as a derived varia
 - Working directory: output directory
 - Failure is a **warning** (files are kept)
 
+### Object Form
+
+Each entry in either phase is a command string or an object. `run` is required; `skip_in_test` is optional and defaults to `false`. No other keys are allowed.
+
+```json
+{
+  "hooks": {
+    "post_scaffold": [
+      "go mod tidy",
+      { "run": "go mod vendor", "skip_in_test": true }
+    ]
+  }
+}
+```
+
+`tag test` drops hooks with `skip_in_test: true`; `tag scaffold` runs them.
+
 See [Hooks Guide](../templates/hooks.md) for complete documentation.
 
 ## Test Configuration

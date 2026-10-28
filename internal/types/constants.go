@@ -73,9 +73,3 @@ const (
 	InjectBefore InjectClause = "Before"
 	InjectAfter  InjectClause = "After"
 )
-
-// HooksConfig defines pre and post scaffold hooks.
-type HooksConfig struct {
-	PreScaffold  []string `json:"pre_scaffold,omitempty"`
-	PostScaffold []string `json:"post_scaffold,omitempty"`
-}

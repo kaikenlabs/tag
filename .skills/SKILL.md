@@ -241,7 +241,7 @@ tag dialect show postgres --format json # Bare {"name","description","types"}
 
 ## Scaffold Templates
 
-For full template syntax, variable types, hooks, and remote references, see [reference.md](reference.md).
+For full template syntax, variable types, hooks, and remote references, see [reference.md](reference.md). A hook entry may be `{"run": "<cmd>", "skip_in_test": true}` to leave it out of `tag test` runs.
 
 For real-world patterns (CRUD bundles, React components, inject patterns), see [recipes.md](recipes.md).
 
