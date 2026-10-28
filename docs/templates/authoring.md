@@ -372,6 +372,8 @@ Use cases:
 - Git initialization
 - Code formatting
 
+A hook can also be an object, `{ "run": "go mod vendor", "skip_in_test": true }`, to leave it out of `tag test` runs. Plain strings still work.
+
 See [Hooks Guide](hooks.md) for complete documentation.
 
 ## Best Practices

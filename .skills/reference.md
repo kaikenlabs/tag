@@ -462,6 +462,12 @@ func {{ op.operationId | pascal }}() {}
 | `pre_generate` | Project dir | Before codegen | Fatal |
 | `post_generate` | Project dir | After codegen | Warning only |
 
+A `pre_scaffold`/`post_scaffold` entry is a command string or `{"run": "<cmd>", "skip_in_test": <bool>}` (`run` required, `skip_in_test` optional and default `false`, no other keys). `tag test` drops `skip_in_test: true` hooks before confirmation and rendering; `tag scaffold` runs them. `template info` and `generate info` show only the command.
+
+```json
+"post_scaffold": ["go mod tidy", { "run": "go mod vendor", "skip_in_test": true }]
+```
+
 ### Environment Variables
 
 | Variable | Description |
@@ -1292,6 +1298,8 @@ In text mode each combination prints one line (`✓`/`✗`/`!`, index, vars, dur
   - `commands`: Validation commands run after each successful scaffold. Requires `--accept-hooks` to execute.
 - `project_name`: Project name for scaffold output (default: `test-scaffold`), shared across all cases.
 - `env`: Environment variables passed to validation commands, shared across all cases.
+
+Scaffold hooks written as `{"run": "...", "skip_in_test": true}` are dropped under `tag test`, even with `--accept-hooks`.
 
 Use `--run` to provide commands directly without `--accept-hooks`:
 

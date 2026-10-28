@@ -34,6 +34,23 @@ Define hooks in `tag.template.json`:
 }
 ```
 
+### Object form and `skip_in_test`
+
+An entry can be a command string or an object with a required `run` command and an optional `skip_in_test` boolean (default `false`). No other keys are allowed.
+
+```json
+{
+  "hooks": {
+    "post_scaffold": [
+      "go mod tidy",
+      { "run": "go mod vendor", "skip_in_test": true }
+    ]
+  }
+}
+```
+
+`tag test` drops hooks marked `skip_in_test: true` before the confirmation step, before rendering and before either phase runs, so a skipped hook is never rendered. The remaining hooks keep their order. `tag scaffold --accept-hooks` runs every hook. Use it for slow steps, such as `go mod vendor`, that add nothing to what a test matrix proves. Object hooks get the same `{{ vars.* }}` rendering and path resolution as string hooks.
+
 ## Hook Execution
 
 ### Template Variables in Hook Commands
