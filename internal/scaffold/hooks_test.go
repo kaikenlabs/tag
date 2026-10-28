@@ -1,7 +1,9 @@
 package scaffold
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -530,7 +532,7 @@ func TestUT_Scaffold_TestModeSkipsMarkedHooks(t *testing.T) {
 				]}`
 			},
 			testMode: false,
-			wantErr:  "hook",
+			wantErr:  "failed to render hook command",
 		},
 		{
 			name:     "test mode with no hooks key",
@@ -567,7 +569,6 @@ func TestUT_Scaffold_TestModeSkipsMarkedHooks(t *testing.T) {
 	}
 }
 
-// TestUT_Scaffold_ObjectHooksRenderAndResolve is a no-change guard: object hooks flow through the string-based paths.
 func TestUT_Scaffold_ObjectHooksRenderAndResolve(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-specific test")
@@ -603,4 +604,34 @@ func TestUT_Scaffold_ObjectHooksRenderAndResolve(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "ran\n", string(got))
 	})
+}
+
+func TestUT_Scaffold_TestModeConfirmationSeesFilteredHooks(t *testing.T) {
+	config := `{"vars": {"project_name": "p"}, "hooks": {"post_scaffold": [{"run": "go mod vendor", "skip_in_test": true}]}}`
+	for _, tt := range []struct {
+		testMode   bool
+		wantNotice bool
+	}{
+		{testMode: true, wantNotice: false},
+		{testMode: false, wantNotice: true},
+	} {
+		t.Run(fmt.Sprintf("test mode %v", tt.testMode), func(t *testing.T) {
+			templateDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(templateDir, "tag.template.json"), []byte(config), 0o644))
+			opts := Options{
+				TemplateDir: templateDir,
+				OutputDir:   filepath.Join(t.TempDir(), "output"),
+				NoInput:     true,
+				TestMode:    tt.testMode,
+			}
+			var out bytes.Buffer
+			s, err := NewScaffold(opts, WithOutput(&out))
+			require.NoError(t, err)
+
+			_, err = s.Run(opts)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantNotice, strings.Contains(out.String(), "Skipping hooks"), "output: %s", out.String())
+		})
+	}
 }

@@ -64,6 +64,12 @@ func TestUT_HooksConfig_UnmarshalJSON(t *testing.T) {
 			keptPre: []string{"a"},
 		},
 		{
+			name:     "null entry decodes as empty command",
+			in:       `{"post_scaffold":["a",null]}`,
+			wantPost: []string{"a", ""},
+			keptPost: []string{"a", ""},
+		},
+		{
 			name: "unknown phase key ignored",
 			in:   `{"other":["x"]}`,
 		},
@@ -76,10 +82,8 @@ func TestUT_HooksConfig_UnmarshalJSON(t *testing.T) {
 			assert.Equal(t, tt.wantPost, h.PostScaffold)
 			got := h.WithoutTestSkips()
 			require.NotNil(t, got)
-			assert.ElementsMatch(t, tt.keptPre, got.PreScaffold)
-			assert.ElementsMatch(t, tt.keptPost, got.PostScaffold)
-			assert.Equal(t, len(tt.keptPre), len(got.PreScaffold))
-			assert.Equal(t, len(tt.keptPost), len(got.PostScaffold))
+			assert.Equal(t, tt.keptPre, got.PreScaffold)
+			assert.Equal(t, tt.keptPost, got.PostScaffold)
 		})
 	}
 
@@ -93,7 +97,6 @@ func TestUT_HooksConfig_UnmarshalJSON(t *testing.T) {
 		{"run number", `{"pre_scaffold":[{"run":5}]}`, []string{"pre_scaffold[0]"}},
 		{"skip_in_test string", `{"post_scaffold":[{"run":"a","skip_in_test":"yes"}]}`, []string{"post_scaffold[0]"}},
 		{"unknown key", `{"post_scaffold":[{"run":"a","extra":1}]}`, []string{"post_scaffold[0]", "extra"}},
-		{"null entry", `{"post_scaffold":["a",null]}`, []string{"post_scaffold[1]"}},
 		{"number entry", `{"pre_scaffold":[1]}`, []string{"pre_scaffold[0]"}},
 		{"bool entry", `{"pre_scaffold":["a","b",true]}`, []string{"pre_scaffold[2]"}},
 		{"array entry", `{"post_scaffold":[["a"]]}`, []string{"post_scaffold[0]"}},
@@ -178,4 +181,26 @@ func TestUT_HooksConfig_MarshalStringOnlyUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, in, string(out))
 	assert.Equal(t, in, string(out))
+}
+
+func TestUT_HooksConfig_MarshalKeepsSkipInTest(t *testing.T) {
+	in := `{"pre_scaffold":["a",{"run":"b","skip_in_test":true}],"post_scaffold":[{"run":"c","skip_in_test":false},{"run":"d","skip_in_test":true}]}`
+	var h HooksConfig
+	require.NoError(t, json.Unmarshal([]byte(in), &h))
+
+	out, err := json.Marshal(h)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"pre_scaffold":["a",{"run":"b","skip_in_test":true}],"post_scaffold":["c",{"run":"d","skip_in_test":true}]}`, string(out))
+
+	var back HooksConfig
+	require.NoError(t, json.Unmarshal(out, &back))
+	assert.Equal(t, []string{"a"}, back.WithoutTestSkips().PreScaffold)
+	assert.Equal(t, []string{"c"}, back.WithoutTestSkips().PostScaffold)
+}
+
+func TestUT_HooksConfig_WithoutTestSkips_AppendedAfterDecode(t *testing.T) {
+	var h HooksConfig
+	require.NoError(t, json.Unmarshal([]byte(`{"post_scaffold":[{"run":"a","skip_in_test":true}]}`), &h))
+	h.PostScaffold = append(h.PostScaffold, "b")
+	assert.Equal(t, []string{"b"}, h.WithoutTestSkips().PostScaffold)
 }

@@ -65,54 +65,14 @@
           "type": "array",
           "description": "Commands to run before scaffolding",
           "items": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "object",
-                "description": "Command with options",
-                "required": ["run"],
-                "additionalProperties": false,
-                "properties": {
-                  "run": {
-                    "type": "string",
-                    "description": "Command to run"
-                  },
-                  "skip_in_test": {
-                    "type": "boolean",
-                    "description": "Skip this hook during tag test"
-                  }
-                }
-              }
-            ]
+            "$ref": "#/$defs/hookEntry"
           }
         },
         "post_scaffold": {
           "type": "array",
           "description": "Commands to run after scaffolding",
           "items": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "object",
-                "description": "Command with options",
-                "required": ["run"],
-                "additionalProperties": false,
-                "properties": {
-                  "run": {
-                    "type": "string",
-                    "description": "Command to run"
-                  },
-                  "skip_in_test": {
-                    "type": "boolean",
-                    "description": "Skip this hook during tag test"
-                  }
-                }
-              }
-            ]
+            "$ref": "#/$defs/hookEntry"
           }
         }
       }
@@ -168,6 +128,29 @@
     }
   },
   "$defs": {
+    "hookEntry": {
+      "description": "Hook command, as a string or as an object with options",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": ["run"],
+          "additionalProperties": false,
+          "properties": {
+            "run": {
+              "type": "string",
+              "description": "Command to run"
+            },
+            "skip_in_test": {
+              "type": "boolean",
+              "description": "Skip this hook during tag test"
+            }
+          }
+        }
+      ]
+    },
     "variableDefinition": {
       "type": "object",
       "description": "Long form variable definition",

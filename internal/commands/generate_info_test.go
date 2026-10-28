@@ -237,7 +237,6 @@ func TestUT_ConvertVariables_Nil(t *testing.T) {
 	assert.Nil(t, convertVariables(nil))
 }
 
-// TestUT_GenerateInfo_ObjectHooksShowCommand is a no-change guard: object hooks flow through the string-based paths.
 func TestUT_GenerateInfo_ObjectHooksShowCommand(t *testing.T) {
 	t.Parallel()
 

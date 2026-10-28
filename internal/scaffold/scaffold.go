@@ -181,7 +181,7 @@ func (s *Scaffold) loadConfig(ctx *runContext) error {
 	if err != nil {
 		return err
 	}
-	if ctx.opts.TestMode && config.Hooks != nil {
+	if ctx.opts.TestMode {
 		config.Hooks = config.Hooks.WithoutTestSkips()
 	}
 	ctx.config = config

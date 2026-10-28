@@ -899,7 +899,6 @@ func TestUT_DisplayVariables_PromptIsNotAFormatString(t *testing.T) {
 	assert.NotContains(t, buf.String(), "%!")
 }
 
-// TestUT_TemplateInfo_ObjectHooksShowCommand is a no-change guard: object hooks flow through the string-based paths.
 func TestUT_TemplateInfo_ObjectHooksShowCommand(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

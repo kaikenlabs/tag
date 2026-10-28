@@ -824,6 +824,7 @@ func TestUT_LintSchema_HookObjectForm(t *testing.T) {
 	}{
 		{"object hooks accepted", `{"pre_scaffold": [{"run": "true"}], "post_scaffold": ["true", {"run": "true", "skip_in_test": true}]}`, false},
 		{"missing run", `{"post_scaffold": [{"skip_in_test": true}]}`, true},
+		{"non-string run", `{"post_scaffold": [{"run": 5}]}`, true},
 		{"non-bool skip_in_test", `{"post_scaffold": [{"run": "true", "skip_in_test": "yes"}]}`, true},
 		{"unknown key", `{"post_scaffold": [{"run": "true", "bogus": 1}]}`, true},
 	}

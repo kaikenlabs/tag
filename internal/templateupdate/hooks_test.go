@@ -143,7 +143,6 @@ func TestUT_FormatHookChanges(t *testing.T) {
 	assert.Contains(t, lines[0], "post_scaffold")
 }
 
-// TestUT_DetectHookChanges_SkipFlagOnlyIsNoChange is a no-change guard: only the command identifies a hook.
 func TestUT_DetectHookChanges_SkipFlagOnlyIsNoChange(t *testing.T) {
 	parse := func(t *testing.T, hooks string) *tmplconfig.TemplateConfig {
 		t.Helper()
@@ -171,6 +170,8 @@ func TestUT_DetectHookChanges_SkipFlagOnlyIsNoChange(t *testing.T) {
 			parse(t, `{"post_scaffold": [{"run": "a", "skip_in_test": true}]}`),
 			parse(t, `{"post_scaffold": [{"run": "b", "skip_in_test": true}]}`),
 		)
-		require.NotEmpty(t, changes)
+		require.Len(t, changes, 1)
+		assert.Equal(t, "post_scaffold", changes[0].Phase)
+		assert.Equal(t, []string{"b"}, changes[0].NewHooks)
 	})
 }
